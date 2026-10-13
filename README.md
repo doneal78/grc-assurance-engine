@@ -4,9 +4,11 @@ A small Flask application for evidence-first vendor and AI-tool risk assessments
 
 ## Current status
 
-Phase 1, the application foundation, is in progress. What exists today is an application factory, a health-check endpoint, a dashboard page that shows an honest empty state, minimal styling, and a pytest suite.
+Phase 1, the application foundation, is complete: an application factory, a health-check endpoint, a dashboard page with an honest empty state, minimal styling, and tests.
 
-Intake, evidence review, requirement mapping, risk rules, remediation, and metrics are planned in `docs/BUILD_PLAN.md`. None of them are built yet.
+Phase 2, the risk evaluation engine, is built and tested. The engine in `app/services/risk_engine.py` evaluates an assessment against a versioned rule set in `app/data/risk_rules.json`, as described in `docs/risk-model.md`. It is not connected to the web interface yet, and the rule set is an illustrative draft, not a calibrated methodology.
+
+Evidence validation, demo scenarios, the risk register, remediation, and metrics are planned in `docs/BUILD_PLAN.md`. None of them are built yet.
 
 ## Requirements
 

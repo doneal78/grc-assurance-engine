@@ -1,0 +1,37 @@
+{
+    "rule_set_version": "0.1.0",
+    "status": "draft",
+    "description": "Illustrative rule set. Not an industry-standard methodology and not empirically calibrated. See docs/risk-model.md.",
+    "unknown_value": "unknown",
+    "inherent_factors": {
+      "data_sensitivity": {"rule_id": "INH-DATA", "points": {"public": 0, "internal": 10, "confidential": 25, "restricted": 35}},
+      "integration_permissions": {"rule_id": "INH-PERM", "points": {"none": 0, "read_only": 10, "read_write": 20, "admin": 30}},
+      "ai_use": {"rule_id": "INH-AI", "points": {"none": 0, "assistive": 10, "autonomous": 20}},
+      "model_training_on_customer_data": {"rule_id": "INH-TRAIN", "applies_when_ai_use_is_not": "none", "points": {"no": 0, "yes": 10}},
+      "external_exposure": {"rule_id": "INH-EXPO", "points": {"internal_only": 0, "customer_facing": 5}}
+    },
+    "retention_deletion_values": ["documented", "undocumented", "unknown"],
+    "tiers": [
+      {"name": "low", "min": 0, "max": 29},
+      {"name": "moderate", "min": 30, "max": 54},
+      {"name": "high", "min": 55, "max": 74},
+      {"name": "critical", "min": 75, "max": 100}
+    ],
+    "evidence_weights": {"verified": 1.0, "self_attested": 0.5, "expired": 0.25, "not_reviewed": 0.0, "missing": 0.0, "conflicting": 0.0},
+    "confidence_thresholds": {"high": 0.75, "medium": 0.40},
+    "residual": {"max_tier_reduction": 1},
+    "escalation_rules": [
+      {"rule_id": "ESC-001", "description": "Restricted data with read_write or admin permissions",
+       "all": [{"field": "data_sensitivity", "in": ["restricted"]}, {"field": "integration_permissions", "in": ["read_write", "admin"]}]},
+      {"rule_id": "ESC-002", "description": "Autonomous AI with confidential or restricted data",
+       "all": [{"field": "ai_use", "in": ["autonomous"]}, {"field": "data_sensitivity", "in": ["confidential", "restricted"]}]},
+      {"rule_id": "ESC-003", "description": "A claim has status conflicting",
+       "all": [{"claim_status": "conflicting"}]},
+      {"rule_id": "ESC-004", "description": "AI in use with confidential or restricted data, and model training is yes or unknown",
+       "all": [{"field": "ai_use", "in": ["assistive", "autonomous"]}, {"field": "data_sensitivity", "in": ["confidential", "restricted"]}, {"field": "model_training_on_customer_data", "in": ["yes", "unknown"]}]},
+      {"rule_id": "ESC-005", "description": "Data sensitivity, integration permissions, or AI use is unknown",
+       "any": [{"field": "data_sensitivity", "in": ["unknown"]}, {"field": "integration_permissions", "in": ["unknown"]}, {"field": "ai_use", "in": ["unknown"]}]},
+      {"rule_id": "ESC-006", "description": "Confidential or restricted data, and retention and deletion is undocumented or unknown",
+       "all": [{"field": "data_sensitivity", "in": ["confidential", "restricted"]}, {"field": "retention_deletion", "in": ["undocumented", "unknown"]}]}
+    ]
+  }
