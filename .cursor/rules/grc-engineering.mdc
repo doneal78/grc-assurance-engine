@@ -1,0 +1,209 @@
+GRC Engineering Development Rules
+
+General Approach
+
+Follow the instructions in the root AGENTS.md and the implementation plan in docs/BUILD_PLAN.md.
+
+Treat this as a GRC Engineering portfolio project that must demonstrate working logic, traceability, repeatable testing, and documented limitations.
+
+Keep changes small, focused, and reviewable.
+
+Before making substantial changes, inspect the relevant files and explain the proposed implementation.
+
+Do not implement future phases prematurely.
+
+Never claim a feature, test, validation, or deployment succeeded unless it actually did.
+
+Architecture
+
+Keep risk evaluation, evidence validation, control mapping, workflow metrics, and cost calculations separate from Flask route handlers.
+
+Keep database access separate from business logic wherever practical.
+
+Use Flask routes to validate requests, call application services, and return results.
+
+The dashboard must display results produced by the application services.
+
+Do not calculate or invent risk decisions independently in the frontend.
+
+Prefer readable, focused Python functions with clear inputs and outputs.
+
+Avoid introducing unnecessary frameworks, dependencies, services, or abstractions.
+
+Risk Evaluation
+
+Use deterministic, explicit rules for risk evaluation.
+
+Identical assessment inputs evaluated with the same rule-set version must produce identical outputs.
+
+Keep inherent risk, evidence confidence, and residual risk distinct.
+
+Explain every material risk factor and escalation.
+
+Keep weights, thresholds, and mandatory review conditions in version-controlled configuration.
+
+Record the rule-set version used for each assessment.
+
+Missing information must not silently count as evidence of a safeguard.
+
+Missing evidence alone does not prove that a control has failed.
+
+Distinguish unknown, self-attested, verified, conflicting, expired, and confirmed-failure conditions.
+
+A low aggregate score must never bypass a configured mandatory escalation.
+
+Do not automatically approve a vendor solely because its score is low.
+
+Do not use an external LLM to make unreviewed risk-scoring or approval decisions.
+
+Label the initial model as illustrative until validated against an approved organizational methodology.
+
+Evidence Validation
+
+Model a vendor claim separately from its evidence artifacts and validation result.
+
+A vendor assertion is not equivalent to independently verified evidence.
+
+Keep evidence status and assessment conclusions separate.
+
+Support verified, self-attested, missing, conflicting, expired, and not-yet-reviewed states where applicable.
+
+Apply evidence freshness rules by evidence type and documented policy.
+
+Do not assume that every evidence artifact expires after the same interval.
+
+A file hash may help identify changes but does not prove authenticity, accuracy, completeness, or sufficiency.
+
+Preserve the relationship among assessments, claims, evidence, findings, and control mappings.
+
+Control Mapping
+
+Do not invent framework identifiers, requirement wording, citations, or source references.
+
+Verify mappings against appropriate authoritative sources before marking them reviewed.
+
+Include framework name, version, requirement identifier, applicability, rationale, source reference, and review status.
+
+Label unverified mappings as draft or unverified.
+
+Distinguish direct requirements from interpretive cross-framework mappings.
+
+Do not imply that mapping a requirement proves equivalence, complete conformity, or certification.
+
+Do not imply the application certifies an organization or vendor.
+
+Keep mappings small and defensible rather than maximizing the number of controls listed.
+
+Risk Register and Remediation
+
+Make risks traceable to relevant assessments, claims, evidence gaps, and findings.
+
+Keep inherent risk and residual risk separate.
+
+Record meaningful explanations for risk dispositions and exceptions.
+
+Link remediation actions to the risks or findings they address.
+
+Track owners, due dates, status, and completion information where applicable.
+
+Record meaningful workflow events.
+
+Do not describe a local database event log as immutable or tamper-proof.
+
+Treat ServiceNow integration as simulated until a real integration is explicitly approved and implemented.
+
+Cost and Workflow Metrics
+
+Distinguish measured data from illustrative assumptions.
+
+Distinguish human handling time from elapsed cycle time.
+
+Distinguish labor capacity value from actual cash savings.
+
+Distinguish baseline effort from assisted-workflow effort.
+
+Do not claim cost savings unless supported by comparable measurements or explicitly labeled assumptions.
+
+Include rework and ongoing maintenance effort when supported by measurements or clearly disclosed model inputs.
+
+Do not monetize hypothetical avoided security incidents in the initial MVP.
+
+Make every financial figure traceable to a formula and its inputs.
+
+Do not hardcode convincing-looking dashboard metrics that are not derived from the application data or explicitly labeled demo data.
+
+Testing
+
+Write pytest tests for business logic independently of Flask routes and frontend behavior.
+
+Test normal, negative, boundary, missing-data, conflicting-data, and escalation cases as appropriate.
+
+Test the three defined demo scenarios against expected outcomes.
+
+Test cost arithmetic and relevant edge cases.
+
+Add or update tests whenever business logic changes.
+
+Never remove or weaken a test solely to make the suite pass.
+
+Run the relevant tests after implementation and the full suite before declaring a phase complete.
+
+Report actual test commands and outcomes.
+
+If a test fails, explain the failure and investigate it rather than concealing it.
+
+Security and Privacy
+
+Use synthetic demo data.
+
+Never add credentials, API keys, access tokens, passwords, production records, or private evidence to source control.
+
+Keep local databases, .env files, virtual environments, and generated runtime artifacts out of Git.
+
+Validate untrusted input at application boundaries.
+
+Use parameterized SQL queries or equivalent safe database APIs.
+
+Do not expose debug mode or development secrets in public deployment.
+
+Do not upload private evidence to an external AI service.
+
+Do not deploy, change DNS, create cloud resources, delete data, or make consequential external changes without approval.
+
+Do not equate passing basic application tests with production security.
+
+Documentation and Change Review
+
+Keep the README and relevant documents synchronized with implemented behavior.
+
+Document risk-model assumptions, control mapping methodology, cost formulas, data handling, and limitations.
+
+After each phase, report the files changed, tests executed and their actual results, known limitations, and the recommended next step.
+
+Review the Git diff before committing changes.
+
+Avoid unrelated rewrites and preserve working functionality.
+
+Do not claim that unimplemented future features already exist.
+
+Portfolio Quality
+
+A successful feature must be explainable to a technical reviewer.
+
+Be prepared to explain:
+
+What problem the feature addresses
+
+How the logic works
+
+Why the decision rules exist
+
+What evidence supports the output
+
+How the feature was tested
+
+What its limitations are
+
+What would need to change before production use
+
+The objective is trustworthy, repeatable GRC automation—not merely a polished dashboard.

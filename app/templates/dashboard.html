@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard | GRC Assurance Engine{% endblock %}
+
+{% block content %}
+<h1>Dashboard</h1>
+{% if assessments %}
+  <p>{{ assessments|length }} assessments loaded.</p>
+{% else %}
+  <section class="empty-state">
+    <h2>No assessments yet</h2>
+    <p>No vendor or AI-tool assessments have been imported, so there are no metrics to show.</p>
+    <p>Figures will appear here only after records are imported. Synthetic demo data will be labeled as synthetic.</p>
+  </section>
+{% endif %}
+{% endblock %}
