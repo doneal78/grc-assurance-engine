@@ -21,6 +21,8 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
         DEMO_USERNAME=os.environ.get("DEMO_USERNAME", ""),
         DEMO_PASSWORD=os.environ.get("DEMO_PASSWORD", ""),
         TESTING=False,
+        # Reject oversized form posts. The largest real form is well under 2 KB.
+        MAX_CONTENT_LENGTH=16 * 1024,
     )
 
     if test_config is not None:
@@ -35,10 +37,15 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     # The instance directory is excluded from Git.
     os.makedirs(app.instance_path, exist_ok=True)
 
+    # Pages anyone may open without the demo password. The public "Try it"
+    # pages run synthetic input through the real services and save nothing.
+    PUBLIC_ENDPOINTS = {"health.health", "static"}
+
     @app.before_request
     def require_demo_authentication():
         """Protect hosted demo pages with HTTP Basic authentication."""
-        if not app.config["REQUIRE_AUTH"] or request.endpoint == "health.health":
+        endpoint = request.endpoint or ""
+        if not app.config["REQUIRE_AUTH"] or endpoint in PUBLIC_ENDPOINTS or endpoint.startswith("try_demo."):
             return None
 
         credentials = request.authorization
@@ -84,12 +91,14 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     from app.routes.health import bp as health_bp
     from app.routes.methodology import bp as methodology_bp
     from app.routes.risks import bp as risks_bp
+    from app.routes.try_demo import bp as try_demo_bp
 
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(demos_bp)
     app.register_blueprint(health_bp)
     app.register_blueprint(methodology_bp)
     app.register_blueprint(risks_bp)
+    app.register_blueprint(try_demo_bp)
 
     from app.db import init_app as init_db_app
     init_db_app(app)

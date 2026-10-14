@@ -10,10 +10,13 @@
   <header class="site-header">
     <span class="brand">GRC Assurance Engine</span>
     <nav aria-label="Main">
+      {% block nav %}
       <a href="{{ url_for('dashboard.index') }}">Dashboard</a>
       <a href="{{ url_for('demos.index') }}">Demo scenarios</a>
       <a href="{{ url_for('risks.index') }}">Risk register</a>
       <a href="{{ url_for('methodology.index') }}">Methods</a>
+      <a href="{{ url_for('try_demo.index') }}">Public demo</a>
+      {% endblock %}
     </nav>
   </header>
   <main>

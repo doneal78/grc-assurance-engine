@@ -1,0 +1,137 @@
+"""Public demo tests: intake conversion, real-engine results, and access rules."""
+
+import base64
+from datetime import date
+
+import pytest
+
+from app import create_app
+from app.services.intake_builder import (
+    IntakeError, build_intake, remediation_payload, run_intake, workflow_events,
+)
+
+AS_OF = date(2026, 10, 14)
+SAME_ORIGIN = {"Origin": "http://localhost"}
+TOPICS = ("authentication", "integration_permissions", "transmission_security", "audit_logging")
+
+
+def form(**overrides):
+    """A low-risk vendor with independent, reviewed evidence for every claim."""
+    base = {"vendor_name": "Northwind Notes", "data_sensitivity": "internal",
+            "integration_permissions": "read_only", "ai_use": "none",
+            "model_training_on_customer_data": "no", "external_exposure": "internal_only",
+            "retention_deletion": "documented"}
+    base.update({f"evidence_{topic}": "independent_verified" for topic in TOPICS})
+    base.update(overrides)
+    return base
+
+
+def run(**overrides):
+    return run_intake(build_intake(form(**overrides), AS_OF), AS_OF)
+
+
+def status_of(result, topic):
+    return next(c for c in result["claims"] if c["topic"] == topic)["evidence_status"]
+
+
+def test_low_risk_intake_uses_real_engine_results():
+    r = run()
+    assert r["risk"]["inherent"]["score"] == 20 and r["risk"]["inherent"]["tier"] == "low"
+    assert r["risk"]["evidence_confidence"]["level"] == "high"
+    assert r["risk"]["review_path"] == "standard_review"
+    assert remediation_payload(r) is None
+    assert {m["control_id"] for m in r["mappings"]} == {"IA-2", "AC-6", "SC-8", "AU-2"}
+
+
+@pytest.mark.parametrize("option, expected", [
+    ("independent_verified", "verified"),
+    ("vendor_statement", "self_attested"),
+    ("not_reviewed", "not_reviewed"),
+    ("expired", "expired"),
+    ("contradicts", "conflicting"),
+    ("none", "missing"),
+])
+def test_each_evidence_option_maps_to_its_status(option, expected):
+    assert status_of(run(evidence_authentication=option), "authentication") == expected
+
+
+def test_contradicting_evidence_escalates_and_drafts_a_ticket():
+    r = run(evidence_integration_permissions="contradicts")
+    assert "ESC-003" in [e["rule_id"] for e in r["risk"]["escalations"]]
+    payload = remediation_payload(r)
+    assert payload["_demo_note"].startswith("Mock")
+    assert "C-INTEGRATION-PERMISSIONS" in [item["claim_id"] for item in payload["evidence_requests"]]
+
+
+def test_unknown_answers_are_undetermined_not_low():
+    r = run(data_sensitivity="unknown")
+    assert r["risk"]["inherent"]["tier"] == "undetermined"
+    assert remediation_payload(r)["priority"].endswith("(result undetermined)")
+
+
+def test_event_log_lists_steps_in_order():
+    titles = [e["title"] for e in workflow_events(run(evidence_audit_logging="none"))]
+    assert titles == ["Intake received", "Evidence validated", "Risk evaluated",
+                      "Escalation check", "Controls mapped", "Remediation ticket drafted"]
+
+
+@pytest.mark.parametrize("overrides, expected", [
+    ({"vendor_name": ""}, "name is required"),
+    ({"vendor_name": "x" * 81}, "80 characters"),
+    ({"data_sensitivity": "secret"}, "Data sensitivity"),
+    ({"evidence_authentication": "trust_me"}, "Evidence for authentication"),
+])
+def test_invalid_intake_is_rejected(overrides, expected):
+    with pytest.raises(IntakeError) as exc:
+        build_intake(form(**overrides), AS_OF)
+    assert any(expected in p for p in exc.value.problems)
+
+
+@pytest.fixture
+def gated_client(tmp_path):
+    app = create_app({"TESTING": True, "DATABASE": str(tmp_path / "public.sqlite3"),
+                      "REQUIRE_AUTH": True, "DEMO_USERNAME": "demo", "DEMO_PASSWORD": "pw"})
+    return app.test_client()
+
+
+def test_public_pages_open_without_login_but_full_demo_stays_locked(gated_client):
+    assert gated_client.get("/try/").status_code == 200
+    assert gated_client.get("/try/scenario/high-risk-ai").status_code == 200
+    assert gated_client.get("/static/css/styles.css").status_code == 200
+    assert gated_client.get("/").status_code == 401
+    assert gated_client.get("/risks").status_code == 401
+    assert gated_client.get("/demo/").status_code == 401
+
+
+def test_public_assessment_runs_and_saves_nothing(gated_client):
+    response = gated_client.post("/try/assess", data=form(), headers=SAME_ORIGIN)
+    assert response.status_code == 200
+    assert b"Northwind Notes" in response.data and b"Workflow event log" in response.data
+    login = {"Authorization": "Basic " + base64.b64encode(b"demo:pw").decode()}
+    assert b"Northwind Notes" not in gated_client.get("/risks", headers=login).data
+
+
+def test_public_form_errors_are_shown(gated_client):
+    response = gated_client.post("/try/assess", data=form(vendor_name=""), headers=SAME_ORIGIN)
+    assert response.status_code == 400 and b"Please fix these fields" in response.data
+
+
+def test_public_form_rejects_cross_site_posts(gated_client):
+    assert gated_client.post("/try/assess", data=form(), headers={"Origin": "https://evil.example"}).status_code == 403
+
+
+def test_vendor_name_is_escaped(gated_client):
+    response = gated_client.post("/try/assess", data=form(vendor_name="<script>x</script>",
+                                                          evidence_audit_logging="none"), headers=SAME_ORIGIN)
+    assert response.status_code == 200
+    assert b"<script>x</script>" not in response.data
+
+
+def test_oversized_post_is_rejected(gated_client):
+    big = form(vendor_name="ok")
+    big["padding"] = "x" * 20000
+    assert gated_client.post("/try/assess", data=big, headers=SAME_ORIGIN).status_code == 413
+
+
+def test_unknown_public_scenario_returns_404(gated_client):
+    assert gated_client.get("/try/scenario/not-real").status_code == 404
