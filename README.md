@@ -62,6 +62,8 @@ Runtime data belongs in the `instance/` folder, which Git ignores. The app initi
 
 Every provided record is synthetic. The cost-of-assurance panel is modeled from labeled assumptions and does not report observed performance or actual cash savings. Workflow timestamps are not handling-time measurements. Mapping a requirement to a control does not prove compliance, and no part of this project claims certification, production readiness, or proven risk reduction. The hosted demo has an optional shared-password gate; this does not make it production-ready.
 
-## Hosted demo preparation
+## Hosted demo
 
-`render.yaml` prepares a Render web service at `grc-assurance-engine.labs.davidoneal.dev`. It uses Gunicorn, a 1 GB persistent disk for SQLite, and required demo credentials. Render's free web services do not support persistent disks; a paid web service is required for saved records to survive restarts and deployments. The blueprint is configuration only: it does not create a Render service or change Cloudflare DNS. See [docs/deployment.md](docs/deployment.md) for the remaining setup steps.
+The hosted demo runs the Flask application on an AWS Lightsail Ubuntu instance provisioned by CloudFormation. Nginx and Gunicorn serve the responsive interface, SQLite stores synthetic saved risks on the instance, daily Lightsail snapshots provide a recovery point, and Cloudflare manages the custom-domain DNS and proxy. The instance starts in a closed setup state; the demo password gate must be configured before Nginx proxies requests to Flask. See [docs/deployment.md](docs/deployment.md) for the deployment and operating procedure.
+
+The AWS host is a small portfolio demo, not a production service. Its current Lightsail bundle is $7/month before snapshot storage or other account charges. SQLite is suitable for this single-instance synthetic demo only. All data must remain synthetic; the password gate is shared HTTP Basic authentication, not user management or MFA.
