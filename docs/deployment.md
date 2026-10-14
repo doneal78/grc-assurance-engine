@@ -2,17 +2,26 @@
 
 ## Hosting design
 
-The GRC app is a Flask application with writable SQLite state, so the portfolio's S3 + CloudFront static-site stack cannot run it by itself. This demo uses the same AWS account and infrastructure-as-code workflow, with an AWS CloudFormation-managed Lightsail instance instead. Nginx terminates HTTPS and proxies to Gunicorn on loopback. Cloudflare remains authoritative for `davidoneal.dev` and proxies the app subdomain.
+The GRC app is a Flask application with writable SQLite state, so the portfolio's S3 + CloudFront static-site stack cannot run it by itself. This demo uses the same AWS account and infrastructure-as-code workflow, with a CloudFormation-managed Lightsail instance instead. Nginx terminates HTTPS and proxies to Gunicorn on loopback. Cloudflare remains authoritative for `davidoneal.dev` and proxies the app subdomain.
 
-CloudFormation is in `infra/aws-lightsail.yaml`. It creates a Lightsail Ubuntu 24.04 instance using the 1 GB `micro_3_0` bundle, a static IPv4 address, an SSH rule restricted to the administrator's current `/32`, public HTTP/HTTPS rules, and daily automatic snapshots. At current listed pricing the instance bundle is $7/month. Snapshot storage and any other account usage can add charges; check the current AWS bill and Lightsail pricing. The instance's system disk contains the SQLite database. Snapshots provide recovery points, but this is not a highly available database or a guarantee against data loss.
+CloudFormation is in `infra/aws-lightsail.yaml`; the shell bootstrap is `infra/lightsail-bootstrap.sh`. It creates a Lightsail Ubuntu 24.04 instance using the 1 GB `micro_3_0` bundle, a static IPv4 address, an SSH rule restricted to the administrator's current `/32`, public HTTP/HTTPS rules, and daily automatic snapshots. At current listed pricing the instance bundle is $7/month. Snapshot storage and other account usage can add charges; check the current AWS bill and Lightsail pricing. The instance's system disk contains the SQLite database. Snapshots provide recovery points, but this is not a highly available database or a guarantee against data loss.
 
 ## Initial provisioning
 
-1. Validate the CloudFormation template and create stack `grc-assurance-engine-demo` in `us-east-2`. Supply `AdminCidr` as the public IPv4 address from which SSH will be administered, in `/32` notation. The template starts the instance in a closed setup state and does not contain the demo password.
-2. Wait for CloudFormation to complete and read the `PublicIp` stack output.
-3. In Cloudflare DNS, add an `A` record for `grc-assurance-engine.labs.davidoneal.dev` pointing to that static IP. Proxy it through Cloudflare. Do not change the existing `labs.davidoneal.dev` record or apex records.
-4. Connect to the Ubuntu instance using its Lightsail SSH key. Set `DEMO_USERNAME` and a unique, randomly generated `DEMO_PASSWORD` in `/etc/grc-assurance-engine.env`, with file permissions `0600`. Never put these values in Git, CloudFormation parameters, or terminal transcripts. Restart `grc-assurance-engine`.
-5. Replace the Nginx setup response with the reverse proxy configuration for the app domain, then issue a Let's Encrypt certificate with Certbot's Nginx plugin for `grc-assurance-engine.labs.davidoneal.dev` and enable HTTP-to-HTTPS redirection. Verify that the certificate renewal timer is enabled.
+The Lightsail SSH key pair must exist in `us-east-2` before CloudFormation creates the host. Keep its private key outside the repository with user-only file permissions. The stack's SSH firewall rule permits that key to be used only from `AdminCidr`.
+
+```powershell
+aws cloudformation validate-template --template-body file://infra/aws-lightsail.yaml --region us-east-2
+aws cloudformation create-stack --stack-name grc-assurance-engine-demo --template-body file://infra/aws-lightsail.yaml --parameters ParameterKey=AdminCidr,ParameterValue=<your-public-ip>/32 ParameterKey=SshKeyName,ParameterValue=<lightsail-key-name> --region us-east-2
+aws cloudformation wait stack-create-complete --stack-name grc-assurance-engine-demo --region us-east-2
+aws cloudformation describe-stacks --stack-name grc-assurance-engine-demo --region us-east-2 --query "Stacks[0].Outputs"
+```
+
+1. The bootstrap installs the app, Nginx, and Gunicorn, and leaves Nginx returning a setup response. It does not put the demo password into CloudFormation user data.
+2. In Cloudflare DNS, add an `A` record for `grc-assurance-engine.labs.davidoneal.dev` pointing to the `PublicIp` stack output. Proxy it through Cloudflare. Do not change the existing `labs.davidoneal.dev` record or apex records.
+3. Over SSH, put `DEMO_USERNAME` and a unique, randomly generated `DEMO_PASSWORD` in `/etc/grc-assurance-engine.env`, with root ownership and mode `0600`. Never put these values in Git, CloudFormation parameters, or terminal transcripts. Restart `grc-assurance-engine`.
+4. Copy `infra/nginx-site.conf` to `/etc/nginx/sites-available/grc-assurance-engine`, enable it, run `nginx -t`, and reload Nginx. This proxies to Gunicorn only on localhost.
+5. Install Certbot and its Nginx plugin, then issue a Let's Encrypt certificate for `grc-assurance-engine.labs.davidoneal.dev` using the Nginx plugin with HTTP-to-HTTPS redirection. Verify that the certificate renewal timer is enabled.
 6. Confirm `/health` returns the health JSON over HTTPS, unauthenticated page requests receive HTTP 401, and authenticated requests render the dashboard. Check phone-width layout and save a synthetic scenario to the risk register.
 
 The AWS CloudFormation template controls the Lightsail firewall. Do not expose Gunicorn's port 8000 publicly. SSH should remain limited to the administrator's current address. The app's Basic Auth gate protects every page except `/health`; use a unique demo password and synthetic data only.
