@@ -4,13 +4,13 @@ A small Flask application for evidence-first vendor and AI-tool risk assessments
 
 ## Current status
 
-Phase 1, the application foundation, is complete: an application factory, a health-check endpoint, a dashboard page with an honest empty state, minimal styling, and tests.
+The local Flask application has an app factory, a health-check endpoint, a responsive demo interface, and pytest coverage.
 
-Phase 2, the risk evaluation engine, is built and tested. The engine in `app/services/risk_engine.py` evaluates an assessment against a versioned rule set in `app/data/risk_rules.json`, as described in `docs/risk-model.md`. It is not connected to the web interface yet, and the rule set is an illustrative draft, not a calibrated methodology.
+The risk engine in `app/services/risk_engine.py` evaluates assessments against the versioned illustrative rules in `app/data/risk_rules.json`, and is used by the scenario walkthrough. It is a draft portfolio model, not a calibrated methodology.
 
-Phase 3 is in progress. The evidence validator in `app/services/evidence_validator.py` derives each claim's evidence status from evidence records, using freshness limits in `app/data/evidence_policy.json`, as described in `docs/evidence-model.md`. Control mappings are not built yet.
+Phase 3 is implemented as framework-independent services. The evidence validator in `app/services/evidence_validator.py` derives claim evidence status using configurable freshness limits in `app/data/evidence_policy.json`. The control mapper in `app/services/control_mapper.py` joins explicitly tagged claims to a small NIST SP 800-53 mapping library in `app/data/control_mappings.json`; the mappings are draft pending human review. See `docs/evidence-model.md` and `docs/control-mapping-methodology.md`.
 
-Demo scenarios, the risk register, remediation, and metrics are planned in `docs/BUILD_PLAN.md`. None of them are built yet.
+The local web interface includes three repeatable synthetic scenarios that run the same risk, evidence, and mapping services and show explanations and trace links. A scenario can be added to the local SQLite risk register with a follow-up action and workflow history. The dashboard includes a reproducible modeled labor-capacity example; it is not a measured saving. See `docs/BUILD_PLAN.md` for features that remain out of scope.
 
 ## Requirements
 
@@ -33,6 +33,15 @@ python run.py
 
 Then open http://127.0.0.1:5000/ in a browser. The app listens on 127.0.0.1 only, with debug mode off. Stop it with Ctrl+C. Do not expose the development server to the internet.
 
+## Demo walkthrough
+
+1. Open **Demo scenarios** and choose one of the three synthetic cases.
+2. Review the inherent score/tier, confidence, residual result, explanation, evidence statuses, escalations, and draft control prompts.
+3. For the high-risk or conflicting case, choose **Add to risk register**, assign an action owner/due date, and update its status. The risk record and local workflow events stay in the ignored SQLite database under `instance/`.
+4. Open **Methods** to review rule versions, mapping limitations, and the modeled cost formula.
+
+The demo does not require credentials, network services, or private evidence.
+
 ## Run the tests
 
 ```bash
@@ -47,8 +56,8 @@ python -m pytest
 
 The health endpoint lives in `app/routes/health.py`, a file not listed in the original build plan. It is kept separate from the dashboard because it is an operational endpoint, not a page.
 
-Runtime data belongs in the `instance/` folder, which Git ignores. No database is created yet. The configured database path is a placeholder for Phase 2.
+Runtime data belongs in the `instance/` folder, which Git ignores. The app initializes a local SQLite database for saved synthetic risks, remediation actions, and workflow events. Scenario fixtures and saved data are synthetic; delete the ignored local database manually if you want to reset your demo records.
 
 ## Data and limitations
 
-Every record in this project is synthetic. The dashboard only shows figures calculated from imported records, and it shows an empty state when there are none. Mapping a requirement to a control does not prove compliance, and no part of this project claims certification or production readiness.
+Every provided record is synthetic. The cost-of-assurance panel is modeled from labeled assumptions and does not report observed performance or actual cash savings. Workflow timestamps are not handling-time measurements. Mapping a requirement to a control does not prove compliance, and no part of this project claims certification, production readiness, or proven risk reduction. The application has no authentication and must remain a local prototype.

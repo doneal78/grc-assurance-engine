@@ -1,0 +1,58 @@
+{
+  "mapping_set_version": "0.1.0",
+  "source_note": "Control identifiers and titles were checked against NIST SP 800-53 Rev. 5, Release 5.2.0 catalog materials. Applicability and rationale are project mapping decisions and remain draft.",
+  "mappings": [
+    {
+      "mapping_id": "nist-800-53-ac-6-access-control",
+      "framework": "NIST SP 800-53",
+      "framework_version": "Revision 5, Release 5.2.0",
+      "control_id": "AC-6",
+      "title": "Least Privilege",
+      "applicability": "conditional",
+      "applicability_note": "Relevant when a vendor integration receives access to organizational systems or information.",
+      "rationale": "Use as a review prompt for whether vendor permissions are limited to the access needed for the service. This mapping does not assess implementation or effectiveness.",
+      "claim_topics": ["integration_permissions"],
+      "source_reference": "https://csrc.nist.gov/Projects/risk-management/sp800-53-controls/downloads",
+      "review_status": "draft"
+    },
+    {
+      "mapping_id": "nist-800-53-au-2-audit-accountability",
+      "framework": "NIST SP 800-53",
+      "framework_version": "Revision 5, Release 5.2.0",
+      "control_id": "AU-2",
+      "title": "Event Logging",
+      "applicability": "conditional",
+      "applicability_note": "Relevant when the service processes organizational information or performs actions whose activity needs to be reviewed.",
+      "rationale": "Use as a prompt to ask what security-relevant activity is logged and how the customer can obtain or review it. The mapping is not evidence that logging exists.",
+      "claim_topics": ["audit_logging"],
+      "source_reference": "https://csrc.nist.gov/Projects/risk-management/sp800-53-controls/downloads",
+      "review_status": "draft"
+    },
+    {
+      "mapping_id": "nist-800-53-ia-2-identification-authentication",
+      "framework": "NIST SP 800-53",
+      "framework_version": "Revision 5, Release 5.2.0",
+      "control_id": "IA-2",
+      "title": "Identification and Authentication (Organizational Users)",
+      "applicability": "conditional",
+      "applicability_note": "Relevant when organizational users authenticate to the vendor service.",
+      "rationale": "Use as a prompt to review how organizational users are identified and authenticated, including the authentication claims and related evidence provided for the service.",
+      "claim_topics": ["authentication"],
+      "source_reference": "https://csrc.nist.gov/Projects/risk-management/sp800-53-controls/downloads",
+      "review_status": "draft"
+    },
+    {
+      "mapping_id": "nist-800-53-sc-8-transmission-security",
+      "framework": "NIST SP 800-53",
+      "framework_version": "Revision 5, Release 5.2.0",
+      "control_id": "SC-8",
+      "title": "Transmission Confidentiality and Integrity",
+      "applicability": "conditional",
+      "applicability_note": "Relevant when information is transmitted to, from, or through the vendor service.",
+      "rationale": "Use as a prompt to review protections for information in transit. The mapping does not establish that a particular protection is implemented or sufficient.",
+      "claim_topics": ["transmission_security"],
+      "source_reference": "https://csrc.nist.gov/Projects/risk-management/sp800-53-controls/downloads",
+      "review_status": "draft"
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "model_version": "0.1.0",
+  "status": "illustrative",
+  "source_note": "Illustrative assumptions from the project build plan. These are not observed measurements.",
+  "assessments_per_month": 20,
+  "baseline_handling_hours_per_assessment": 2.0,
+  "assisted_handling_hours_per_assessment": 1.5,
+  "review_hours_per_assessment": 0.25,
+  "monthly_maintenance_hours": 2.0,
+  "loaded_hourly_labor_rate": 60.0,
+  "one_time_development_cost": null,
+  "cash_savings": null
+}

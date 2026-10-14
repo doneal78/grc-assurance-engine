@@ -1,12 +1,13 @@
 """Dashboard routes."""
 
 from flask import Blueprint, render_template
+from app.services.cost_model import calculate_cost
+from app.services.scenario_runner import list_scenarios
 
 bp = Blueprint("dashboard", __name__)
 
 
 @bp.get("/")
 def index():
-    """Render the dashboard with an honest empty state."""
-    # No storage exists yet, so there are no assessments to show.
-    return render_template("dashboard.html", assessments=[])
+    """Render the local portfolio demo landing page."""
+    return render_template("dashboard.html", scenarios=list_scenarios(), cost=calculate_cost())

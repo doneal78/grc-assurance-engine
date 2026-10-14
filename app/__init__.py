@@ -26,9 +26,18 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     # Register route blueprints. Imported here, inside the factory,
     # so route modules can safely import from the app package later.
     from app.routes.dashboard import bp as dashboard_bp
+    from app.routes.demos import bp as demos_bp
     from app.routes.health import bp as health_bp
+    from app.routes.methodology import bp as methodology_bp
+    from app.routes.risks import bp as risks_bp
 
     app.register_blueprint(dashboard_bp)
+    app.register_blueprint(demos_bp)
     app.register_blueprint(health_bp)
+    app.register_blueprint(methodology_bp)
+    app.register_blueprint(risks_bp)
+
+    from app.db import init_app as init_db_app
+    init_db_app(app)
 
     return app

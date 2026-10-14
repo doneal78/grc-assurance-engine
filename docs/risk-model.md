@@ -40,7 +40,7 @@ Tiers: low 0 to 29, moderate 30 to 54, high 55 to 74, critical 75 to 100.
 | missing | 0 | No evidence was provided for the claim |
 | conflicting | 0 | Another source contradicts the claim |
 
-A report on file is not enough for verified. In this rule set, the engine relies on the status a reviewer assigns. Phase 3 adds the fields that support that judgment.
+A report on file is not enough for verified. The evidence validator derives claim statuses from evidence records and reviewer checks; the risk engine consumes those resulting statuses. See `docs/evidence-model.md` for the derivation rules.
 
 Confidence is the average weight across all claims: high at 0.75 or above, medium at 0.40 or above, low below 0.40, and none when there are no claims.
 
@@ -68,7 +68,7 @@ Any rule that fires sets the review path to escalated review, regardless of the 
 | All core answers unknown, no claims | 0, undetermined | none | undetermined | ESC-005 | escalated_review |
 | Internal data, read_only, no AI, all claims verified | 20, low | high | low | none | standard_review |
 | Restricted data, admin, assistive AI, customer facing, all verified | 80, critical | high | critical | ESC-001 | escalated_review |
-| Confidential data, questionnaire says read_only, integration shows admin | 55, high | low | high | ESC-003 | escalated_review |
+| Confidential data, questionnaire says read_only, integration shows admin | 70, high | low | high | ESC-003 | escalated_review |
 
 ## Outputs
 

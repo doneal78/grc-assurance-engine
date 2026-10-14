@@ -1,0 +1,70 @@
+{
+  "scenario_set_version": "0.1.0",
+  "synthetic_data": true,
+  "as_of": "2026-10-14",
+  "scenarios": [
+    {
+      "scenario_id": "evidence-supported",
+      "name": "Evidence-supported collaboration tool",
+      "summary": "A limited integration processes internal data, with current independently reviewed evidence for authentication, permissions, and transmission safeguards.",
+      "assessment": {
+        "data_sensitivity": "internal",
+        "integration_permissions": "read_only",
+        "ai_use": "none",
+        "model_training_on_customer_data": "no",
+        "external_exposure": "customer_facing",
+        "retention_deletion": "documented"
+      },
+      "claims": [
+        {"claim_id": "C-AUTH", "topic": "authentication", "statement": "Organizational users authenticate to the service."},
+        {"claim_id": "C-PERM", "topic": "integration_permissions", "statement": "The integration is limited to read-only access."},
+        {"claim_id": "C-TRANSIT", "topic": "transmission_security", "statement": "Data is protected during transmission."}
+      ],
+      "evidence": [
+        {"evidence_id": "E-AUTH", "claim_id": "C-AUTH", "artifact_name": "Independent SOC 2 Type II report", "artifact_type": "soc2_type2_report", "source": "independent_auditor", "collection_date": "2026-03-28", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-01", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}},
+        {"evidence_id": "E-PERM", "claim_id": "C-PERM", "artifact_name": "Integration permission export", "artifact_type": "configuration_export", "source": "internal_observation", "collection_date": "2026-10-01", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-02", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}},
+        {"evidence_id": "E-TRANSIT", "claim_id": "C-TRANSIT", "artifact_name": "Independent SOC 2 Type II report", "artifact_type": "soc2_type2_report", "source": "independent_auditor", "collection_date": "2026-03-28", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-01", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}}
+      ]
+    },
+    {
+      "scenario_id": "high-risk-ai",
+      "name": "AI service with sensitive data and broad access",
+      "summary": "An autonomous AI service handles restricted information with administrative access, unclear retention, and no evidence for key safeguards.",
+      "assessment": {
+        "data_sensitivity": "restricted",
+        "integration_permissions": "admin",
+        "ai_use": "autonomous",
+        "model_training_on_customer_data": "unknown",
+        "external_exposure": "customer_facing",
+        "retention_deletion": "unknown"
+      },
+      "claims": [
+        {"claim_id": "C-AUTH", "topic": "authentication", "statement": "Organizational users authenticate to the service."},
+        {"claim_id": "C-PERM", "topic": "integration_permissions", "statement": "The integration uses only necessary permissions."},
+        {"claim_id": "C-LOG", "topic": "audit_logging", "statement": "Security-relevant events are logged."}
+      ],
+      "evidence": []
+    },
+    {
+      "scenario_id": "conflicting-claims",
+      "name": "Conflicting permissions claim",
+      "summary": "The vendor questionnaire claims read-only access, while an internal integration export shows administrative permissions.",
+      "assessment": {
+        "data_sensitivity": "confidential",
+        "integration_permissions": "admin",
+        "ai_use": "assistive",
+        "model_training_on_customer_data": "no",
+        "external_exposure": "customer_facing",
+        "retention_deletion": "documented"
+      },
+      "claims": [
+        {"claim_id": "C-PERM", "topic": "integration_permissions", "statement": "The integration is limited to read-only access."},
+        {"claim_id": "C-AUTH", "topic": "authentication", "statement": "Organizational users authenticate to the service."}
+      ],
+      "evidence": [
+        {"evidence_id": "E-QUESTIONNAIRE", "claim_id": "C-PERM", "artifact_name": "Vendor questionnaire response", "artifact_type": "vendor_questionnaire_answer", "source": "vendor", "collection_date": "2026-10-01", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-02", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}},
+        {"evidence_id": "E-INTEGRATION", "claim_id": "C-PERM", "artifact_name": "Internal integration permission export", "artifact_type": "configuration_export", "source": "internal_observation", "collection_date": "2026-10-03", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-03", "relevant": true, "in_scope": true, "supports_claim": false, "contradicts_claim": true}}
+      ]
+    }
+  ]
+}

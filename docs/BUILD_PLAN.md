@@ -1,6 +1,6 @@
 # GRC Assurance Engine — Build Plan
 
-**Project status:** Initial setup  
+**Project status:** Phases 1–7 initial demo slice implemented; general intake and observed metrics remain out of scope
 **Project type:** GRC Engineering portfolio application  
 **Development approach:** Local-first, phased implementation, test-driven business logic  
 **Primary IDE:** Cursor  
@@ -268,6 +268,8 @@ Automated tests cover:
 
 ## 8. Phase 3 — Evidence Validation and Control Mapping
 
+**Status:** Evidence validation and the initial NIST mapping service are implemented. The mapping set is intentionally small and all applicability/rationale decisions remain draft. Mapping results are not connected to the web interface yet.
+
 ### Objective
 
 Make the relationship between vendor claims, evidence, controls, and assessment results explicit and traceable.
@@ -337,6 +339,8 @@ Do not use cross-framework mappings to claim that frameworks or requirements are
 
 ## 9. Phase 4 — Repeatable Demonstration Scenarios
 
+**Status:** Three fixed-date synthetic scenarios are implemented and displayed under `/demo`. Each calls the existing risk engine, evidence validator, and control mapper; no assessment records are persisted yet.
+
 Create deterministic synthetic fixtures in `app/data/demo_scenarios.json` or an equivalently appropriate fixture structure.
 
 ### Scenario A: Evidence-supported lower-risk vendor
@@ -395,6 +399,8 @@ Each scenario must define:
 - Synthetic data is clearly identified.
 
 ## 10. Phase 5 — Risk Register and Remediation
+
+**Status:** Scenario-derived risks, related follow-up actions, status updates, and local workflow events persist in SQLite. The initial workflow is intentionally limited to the three synthetic scenarios; general-purpose intake and finding authoring are not implemented.
 
 ### Objective
 
@@ -464,6 +470,8 @@ Do not connect to a live ServiceNow instance or require credentials for the MVP.
 
 ## 11. Phase 6 — Workflow Metrics and Cost of Assurance
 
+**Status:** An independent cost service and dashboard/methodology example calculate illustrative labor capacity, including added review and ongoing maintenance assumptions. No observed handling-time or cycle-time measurement is implemented; the model does not claim cash savings. One-time development cost is excluded because no source input is available.
+
 ### Objective
 
 Measure operational effort and make cost assumptions explicit.
@@ -528,6 +536,8 @@ Do not monetize hypothetical avoided security incidents in the MVP.
 - Unit tests cover arithmetic and relevant edge cases.
 
 ## 12. Phase 7 — Dashboard and User Experience
+
+**Status:** Local demo landing, scenario detail, risk register, remediation, and methods pages are implemented for the synthetic fixtures. General-purpose assessment intake, observed workflow metrics, and full dashboard reporting remain unimplemented.
 
 ### Objective
 

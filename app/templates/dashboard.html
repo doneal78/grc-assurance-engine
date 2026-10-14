@@ -3,14 +3,27 @@
 {% block title %}Dashboard | GRC Assurance Engine{% endblock %}
 
 {% block content %}
-<h1>Dashboard</h1>
-{% if assessments %}
-  <p>{{ assessments|length }} assessments loaded.</p>
-{% else %}
-  <section class="empty-state">
-    <h2>No assessments yet</h2>
-    <p>No vendor or AI-tool assessments have been imported, so there are no metrics to show.</p>
-    <p>Figures will appear here only after records are imported. Synthetic demo data will be labeled as synthetic.</p>
-  </section>
-{% endif %}
+<p class="eyebrow">LOCAL PORTFOLIO PROTOTYPE</p>
+<h1>Vendor and AI risk, with a visible evidence trail.</h1>
+<p class="lead">A small, rules-based workflow for turning assessment inputs and evidence into reviewable results.</p>
+<section class="notice">
+  <strong>Illustrative model · Synthetic scenarios · Human review required</strong>
+  <p>Risk rules and mappings are draft portfolio examples. Results are not approvals, certifications, or proof of control effectiveness.</p>
+</section>
+<section class="section-heading">
+  <div><p class="eyebrow">WALKTHROUGH</p><h2>Three repeatable scenarios</h2></div>
+  <a class="button-link" href="{{ url_for('demos.index') }}">View all scenarios</a>
+</section>
+<div class="scenario-grid">
+{% for scenario in scenarios %}
+  <article class="scenario-card">
+    <p class="eyebrow">SYNTHETIC EXAMPLE</p>
+    <h3><a href="{{ url_for('demos.detail', scenario_id=scenario.scenario_id) }}">{{ scenario.name }}</a></h3>
+    <p>{{ scenario.summary }}</p>
+  </article>
+{% endfor %}
+</div>
+<section class="section-heading"><div><p class="eyebrow">FOLLOW-UP</p><h2>Risk register and remediation</h2></div><a class="text-link" href="{{ url_for('risks.index') }}">Open register →</a></section>
+<section class="content-section cost-panel"><p class="eyebrow">MODELED EXAMPLE · VERSION {{ cost.model_version }}</p><h2>Cost of assurance</h2><div class="result-grid"><article class="result-card"><p class="eyebrow">GROSS CAPACITY</p><strong>{{ cost.gross_capacity_hours }} hours</strong><p>${{ '%.2f'|format(cost.gross_capacity_value) }} modeled value / month</p></article><article class="result-card"><p class="eyebrow">AFTER REVIEW + MAINTENANCE</p><strong>{{ cost.net_capacity_hours }} hours</strong><p>${{ '%.2f'|format(cost.net_capacity_value) }} modeled value / month</p></article></div><p class="muted">Assumptions: {{ cost.assumptions.assessments_per_month|int }} assessments/month, {{ cost.assumptions.baseline_handling_hours_per_assessment }} baseline hours, {{ cost.assumptions.assisted_handling_hours_per_assessment }} assisted hours, {{ cost.assumptions.review_hours_per_assessment }} review hours per assessment, {{ cost.assumptions.monthly_maintenance_hours }} monthly maintenance hours, and ${{ cost.assumptions.loaded_hourly_labor_rate }}/hour. This estimates labor capacity only. Cash savings are not measured. One-time development cost is unknown and excluded. <a href="{{ url_for('methodology.index') }}">See formulas and limitations</a>.</p></section>
+<p class="muted">Risk register records and remediation actions are local SQLite data. Workflow-event timestamps are not human handling-time measurements. Broader intake and observed operational metrics are not implemented.</p>
 {% endblock %}
