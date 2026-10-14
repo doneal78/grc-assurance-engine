@@ -50,3 +50,6 @@ desktop.ini
 *.swp
 *.swo
 *~
+
+# Local handoff notes, not for the public repo
+docs/CLAUDE_HANDOFF.md

@@ -68,4 +68,4 @@ Outputs:
   InstanceName:
     Value: !Ref DemoInstance
   Domain:
-    Value: grc-assurance-engine.labs.davidoneal.dev
+    Value: grc-assurance.davidoneal.dev

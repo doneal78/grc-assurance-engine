@@ -41,23 +41,30 @@ PrivateTmp=true
 WantedBy=multi-user.target
 UNIT
 
-cat > /etc/nginx/sites-available/grc-assurance-engine <<'NGINX'
+# Write the closed setup placeholder only on first install. On a re-run,
+# keep whatever site config is already live so the demo is not taken offline.
+SITE=/etc/nginx/sites-available/grc-assurance-engine
+if [[ ! -e "$SITE" ]]; then
+    cat > "$SITE" <<'NGINX'
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
-    server_name grc-assurance-engine.labs.davidoneal.dev;
+    server_name grc-assurance.davidoneal.dev;
     location / {
         add_header Retry-After 60 always;
         return 503 "Demo setup in progress. Please try again shortly.\n";
     }
 }
 NGINX
+fi
 rm -f /etc/nginx/sites-enabled/default
-ln -sfn /etc/nginx/sites-available/grc-assurance-engine /etc/nginx/sites-enabled/grc-assurance-engine
+ln -sfn "$SITE" /etc/nginx/sites-enabled/grc-assurance-engine
 nginx -t
 systemctl enable nginx
-systemctl restart nginx
+systemctl reload-or-restart nginx
 systemctl daemon-reload
 systemctl enable grc-assurance-engine
+# On first boot the demo credentials are not set yet, so the app is expected
+# to refuse to start (fail closed) while Nginx serves the placeholder.
 systemctl restart grc-assurance-engine || true
 touch /var/lib/grc-assurance/bootstrap-complete
