@@ -12,6 +12,34 @@ def test_factory_applies_test_config(app):
     assert app.config["DATABASE"].endswith("test.sqlite3")
 
 
+def test_auth_is_disabled_by_default(app):
+    assert app.config["REQUIRE_AUTH"] is False
+
+
+def test_required_auth_fails_closed_without_credentials():
+    import pytest
+
+    with pytest.raises(ValueError, match="DEMO_USERNAME and DEMO_PASSWORD"):
+        create_app({"REQUIRE_AUTH": True})
+
+
+def test_required_auth_protects_pages_and_allows_health_check(tmp_path):
+    app = create_app({
+        "TESTING": True,
+        "DATABASE": str(tmp_path / "auth.sqlite3"),
+        "REQUIRE_AUTH": True,
+        "DEMO_USERNAME": "demo",
+        "DEMO_PASSWORD": "correct horse battery staple",
+    })
+    client = app.test_client()
+
+    assert client.get("/").status_code == 401
+    assert client.get("/").headers["WWW-Authenticate"].startswith("Basic ")
+    assert client.get("/health").status_code == 200
+    assert client.get("/", auth=("demo", "wrong password")).status_code == 401
+    assert client.get("/", auth=("demo", "correct horse battery staple")).status_code == 200
+
+
 def test_health_returns_documented_response(client):
     response = client.get("/health")
     assert response.status_code == 200

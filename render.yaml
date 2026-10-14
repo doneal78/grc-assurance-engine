@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: grc-assurance-engine-demo
+    runtime: python
+    region: ohio
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn run:app --bind 0.0.0.0:$PORT
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    domains:
+      - grc-assurance-engine.labs.davidoneal.dev
+    renderSubdomainPolicy: disabled
+    disk:
+      name: demo-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_PATH
+        value: /var/data/grc_assurance.sqlite3
+      - key: REQUIRE_AUTH
+        value: "true"
+      - key: DEMO_USERNAME
+        sync: false
+      - key: DEMO_PASSWORD
+        sync: false

@@ -40,7 +40,7 @@ Then open http://127.0.0.1:5000/ in a browser. The app listens on 127.0.0.1 only
 3. For the high-risk or conflicting case, choose **Add to risk register**, assign an action owner/due date, and update its status. The risk record and local workflow events stay in the ignored SQLite database under `instance/`.
 4. Open **Methods** to review rule versions, mapping limitations, and the modeled cost formula.
 
-The demo does not require credentials, network services, or private evidence.
+The local demo does not require credentials, network services, or private evidence. The hosted demo requires HTTP Basic credentials before any application page is served.
 
 ## Run the tests
 
@@ -60,4 +60,8 @@ Runtime data belongs in the `instance/` folder, which Git ignores. The app initi
 
 ## Data and limitations
 
-Every provided record is synthetic. The cost-of-assurance panel is modeled from labeled assumptions and does not report observed performance or actual cash savings. Workflow timestamps are not handling-time measurements. Mapping a requirement to a control does not prove compliance, and no part of this project claims certification, production readiness, or proven risk reduction. The application has no authentication and must remain a local prototype.
+Every provided record is synthetic. The cost-of-assurance panel is modeled from labeled assumptions and does not report observed performance or actual cash savings. Workflow timestamps are not handling-time measurements. Mapping a requirement to a control does not prove compliance, and no part of this project claims certification, production readiness, or proven risk reduction. The hosted demo has an optional shared-password gate; this does not make it production-ready.
+
+## Hosted demo preparation
+
+`render.yaml` prepares a Render web service at `grc-assurance-engine.labs.davidoneal.dev`. It uses Gunicorn, a 1 GB persistent disk for SQLite, and required demo credentials. Render's free web services do not support persistent disks; a paid web service is required for saved records to survive restarts and deployments. The blueprint is configuration only: it does not create a Render service or change Cloudflare DNS. See [docs/deployment.md](docs/deployment.md) for the remaining setup steps.

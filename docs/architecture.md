@@ -8,7 +8,7 @@ The application uses the Flask factory in `app/__init__.py` to register web blue
 | --- | --- | --- |
 | HTTP routes | `app/routes/` | Health, dashboard, and synthetic scenario pages. |
 | Business logic | `app/services/` | Risk evaluation, evidence validation, control mapping, scenario orchestration, local workflow persistence, and cost calculations. |
-| Database | `app/db.py`, `app/schema.sql` | Local SQLite schema and request-scoped connections for risks, remediation actions, and workflow events. |
+| Database | `app/db.py`, `app/schema.sql` | SQLite schema and request-scoped connections for risks, remediation actions, and workflow events. `DATABASE_PATH` can place the file on a persistent host volume. |
 | Versioned rules/data | `app/data/` | Risk rules, evidence freshness policy, mappings, and fixed-date demo scenarios. |
 | Presentation | `app/templates/`, `app/static/` | Server-rendered HTML and responsive CSS. |
 | Automated checks | `tests/` | pytest tests include service-level business logic and Flask route behavior. |
@@ -18,7 +18,7 @@ The scenario runner composes evidence validation, risk evaluation, and mapping i
 
 ## Current limitations
 
-Scenario runs are deterministic examples, not vendor records. There is no real assessment intake, general-purpose finding management, metrics, authentication, or external integration. The local workflow log can be modified by someone with access to the database and is not tamper-proof. The local Flask development server must not be exposed publicly.
+Scenario runs are deterministic examples, not vendor records. There is no real assessment intake, general-purpose finding management, metrics, or external integration. The optional HTTP Basic gate is a shared-password barrier for the hosted synthetic demo; it is not an identity system or production access-control design. The workflow log can be modified by someone with access to the database and is not tamper-proof. The local Flask development server must not be exposed publicly.
 
 ## Design choices
 
