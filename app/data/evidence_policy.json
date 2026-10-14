@@ -1,0 +1,15 @@
+{
+    "evidence_policy_version": "0.1.0",
+    "status": "draft",
+    "description": "Illustrative freshness limits. See docs/evidence-model.md.",
+    "sources": ["vendor", "independent_auditor", "internal_observation"],
+    "max_age_days": {
+      "soc2_type2_report": 365,
+      "penetration_test": 365,
+      "policy_document": 365,
+      "vendor_questionnaire_answer": 365,
+      "vendor_statement": 365,
+      "configuration_export": 90
+    }
+  }
+  
