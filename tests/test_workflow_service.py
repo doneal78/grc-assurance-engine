@@ -59,6 +59,8 @@ def test_action_status_and_notes_are_persisted_with_event(db):
     ("open", "", "2026-12-01", ""),
     ("open", "Owner", "next month", ""),
     ("open", "Owner", "", "x" * 1001),
+    ("completed", "Owner", "", ""),
+    ("completed", "Owner", "", "   "),
 ])
 def test_invalid_action_updates_are_rejected(db, status, owner, due_date, notes):
     risk_id = register_scenario(db, run_scenario("high-risk-ai"))

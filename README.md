@@ -14,7 +14,7 @@ The local web interface includes three repeatable synthetic scenarios that run t
 
 ## Requirements
 
-Windows with Git Bash, Python 3.14, and Git.
+Windows with Git Bash and Git, plus Python 3.12 or newer. Development uses Python 3.14; the hosted server runs Ubuntu 24.04's Python 3.12, and the test suite runs on both.
 
 ## Setup (Git Bash)
 

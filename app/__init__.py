@@ -3,6 +3,7 @@
 import os
 import secrets
 from collections.abc import Mapping
+from urllib.parse import urlparse
 
 from flask import Flask, Response, request
 
@@ -43,8 +44,13 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
         credentials = request.authorization
         username = credentials.username if credentials else ""
         password = credentials.password if credentials else ""
-        valid_username = secrets.compare_digest(username, app.config["DEMO_USERNAME"])
-        valid_password = secrets.compare_digest(password, app.config["DEMO_PASSWORD"])
+        # Compare as UTF-8 bytes: compare_digest rejects non-ASCII str input.
+        valid_username = secrets.compare_digest(
+            username.encode("utf-8"), app.config["DEMO_USERNAME"].encode("utf-8")
+        )
+        valid_password = secrets.compare_digest(
+            password.encode("utf-8"), app.config["DEMO_PASSWORD"].encode("utf-8")
+        )
         if valid_username and valid_password:
             return None
 
@@ -52,6 +58,24 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
             "Authentication required", 401,
             {"WWW-Authenticate": 'Basic realm="GRC Assurance Engine demo"'},
         )
+
+    @app.before_request
+    def reject_cross_site_writes():
+        """Reject state-changing requests that do not come from this site.
+
+        Browsers resend HTTP Basic credentials automatically, so a form on
+        another site could otherwise submit changes on a signed-in user's
+        behalf. Browsers attach an Origin header (or at least a Referer) to
+        form posts, and other sites cannot forge either one.
+        """
+        if request.method in ("GET", "HEAD", "OPTIONS"):
+            return None
+        if request.routing_exception is not None:
+            return None  # Let Flask return its normal 404 or 405.
+        source = request.headers.get("Origin") or request.headers.get("Referer")
+        if source and urlparse(source).netloc == request.host:
+            return None
+        return Response("Cross-site request rejected", 403)
 
     # Register route blueprints. Imported here, inside the factory,
     # so route modules can safely import from the app package later.

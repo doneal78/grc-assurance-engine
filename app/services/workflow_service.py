@@ -108,6 +108,8 @@ def update_action(db, action_id, status, owner, due_date, completion_notes):
             problems.append("due date must use YYYY-MM-DD")
     if not isinstance(completion_notes, str) or len(completion_notes) > 1000:
         problems.append("completion notes must be 1000 characters or fewer")
+    elif status == "completed" and not completion_notes.strip():
+        problems.append("completion notes are required to mark an action completed")
     if problems:
         raise WorkflowInputError("; ".join(problems))
 

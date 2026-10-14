@@ -2,6 +2,8 @@
 
 from app import create_app
 
+SAME_ORIGIN = {"Origin": "http://localhost"}
+
 
 def test_factory_defaults_to_not_testing():
     assert create_app().testing is False
@@ -75,7 +77,7 @@ def test_unknown_demo_scenario_returns_404(client):
 
 
 def test_scenario_can_be_added_to_register(client):
-    response = client.post("/demo/high-risk-ai/register")
+    response = client.post("/demo/high-risk-ai/register", headers=SAME_ORIGIN)
     assert response.status_code == 302
     detail = client.get(response.headers["Location"])
     assert detail.status_code == 200
@@ -85,7 +87,7 @@ def test_scenario_can_be_added_to_register(client):
 
 
 def test_remediation_form_validates_and_saves(client, app):
-    response = client.post("/demo/high-risk-ai/register")
+    response = client.post("/demo/high-risk-ai/register", headers=SAME_ORIGIN)
     risk_id = response.headers["Location"].rsplit("/", 1)[-1]
     from app.db import get_db
     from app.services.workflow_service import get_risk
@@ -93,12 +95,12 @@ def test_remediation_form_validates_and_saves(client, app):
         action = get_risk(get_db(), risk_id)["actions"][0]
     invalid = client.post(f"/remediation/{action['action_id']}", data={
         "risk_id": risk_id, "status": "done", "owner": "Reviewer", "due_date": "", "completion_notes": ""
-    })
+    }, headers=SAME_ORIGIN)
     assert invalid.status_code == 400
     assert b"INPUT NOT SAVED" in invalid.data
     updated = client.post(f"/remediation/{action['action_id']}", data={
         "risk_id": risk_id, "status": "in_progress", "owner": "Reviewer", "due_date": "2026-11-01", "completion_notes": ""
-    })
+    }, headers=SAME_ORIGIN)
     assert updated.status_code == 302
     assert client.get(updated.headers["Location"]).status_code == 200
 
@@ -111,3 +113,49 @@ def test_methodology_page_explains_cost_limits(client):
     response = client.get("/methodology")
     assert response.status_code == 200
     assert b"labor capacity, not cash savings" in response.data
+
+
+def test_cross_site_post_is_rejected_and_saves_nothing(client):
+    response = client.post("/demo/high-risk-ai/register", headers={"Origin": "https://evil.example"})
+    assert response.status_code == 403
+    assert b"Synthetic data only" in client.get("/risks").data
+    assert b"high-risk-ai" not in client.get("/risks").data
+
+
+def test_post_without_origin_or_referer_is_rejected(client):
+    assert client.post("/demo/high-risk-ai/register").status_code == 403
+
+
+def test_same_site_referer_is_accepted_when_origin_is_absent(client):
+    response = client.post("/demo/high-risk-ai/register", headers={"Referer": "http://localhost/demo/high-risk-ai"})
+    assert response.status_code == 302
+
+
+def test_completing_an_action_requires_notes(client, app):
+    response = client.post("/demo/high-risk-ai/register", headers=SAME_ORIGIN)
+    risk_id = response.headers["Location"].rsplit("/", 1)[-1]
+    from app.db import get_db
+    from app.services.workflow_service import get_risk
+    with app.app_context():
+        action = get_risk(get_db(), risk_id)["actions"][0]
+    rejected = client.post(f"/remediation/{action['action_id']}", data={
+        "risk_id": risk_id, "status": "completed", "owner": "Reviewer", "due_date": "", "completion_notes": ""
+    }, headers=SAME_ORIGIN)
+    assert rejected.status_code == 400
+    accepted = client.post(f"/remediation/{action['action_id']}", data={
+        "risk_id": risk_id, "status": "completed", "owner": "Reviewer", "due_date": "",
+        "completion_notes": "Retention terms confirmed in contract"
+    }, headers=SAME_ORIGIN)
+    assert accepted.status_code == 302
+
+
+def test_non_ascii_basic_credentials_return_401_not_500(tmp_path):
+    import base64
+    from app import create_app
+    app = create_app({"TESTING": True, "DATABASE": str(tmp_path / "auth.sqlite3"),
+                      "REQUIRE_AUTH": True, "DEMO_USERNAME": "demo", "DEMO_PASSWORD": "pw"})
+    client = app.test_client()
+    bad = base64.b64encode("d\u00e9mo:pw".encode("utf-8")).decode()
+    good = base64.b64encode(b"demo:pw").decode()
+    assert client.get("/", headers={"Authorization": f"Basic {bad}"}).status_code == 401
+    assert client.get("/", headers={"Authorization": f"Basic {good}"}).status_code == 200
