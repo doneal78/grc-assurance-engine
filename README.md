@@ -64,6 +64,6 @@ Every provided record is synthetic. The cost-of-assurance panel is modeled from 
 
 ## Hosted demo
 
-A hosted version is being set up and is not live yet. The Flask application runs on an AWS Lightsail Ubuntu instance provisioned by CloudFormation, with Nginx and Gunicorn serving it and SQLite storing synthetic saved risks on the instance. Daily Lightsail snapshots provide recovery points. The planned address is `https://grc-assurance.davidoneal.dev`, proxied by Cloudflare, but its DNS record and HTTPS certificate are not configured yet. See [docs/deployment.md](docs/deployment.md) for the current state and the setup procedure.
+The hosted demo is live at https://grc-assurance.davidoneal.dev behind a shared demo password. The Flask application runs on an AWS Lightsail Ubuntu instance provisioned by CloudFormation, with Nginx and Gunicorn serving it and SQLite storing synthetic saved risks on the instance. Cloudflare proxies the hostname and connects to the origin over HTTPS in Full (strict) mode. Daily Lightsail snapshots provide recovery points. See [docs/deployment.md](docs/deployment.md) for the current state, the setup procedure, and known gaps.
 
 The host is a small portfolio demo, not a production service. Its Lightsail bundle is $7/month before snapshot storage or other charges. SQLite is suitable for this single-instance synthetic demo only. All data must remain synthetic, and the password gate is one shared HTTP Basic login, not user management or MFA.

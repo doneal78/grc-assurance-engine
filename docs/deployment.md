@@ -2,11 +2,11 @@
 
 ## Current state
 
-As of October 14, 2026, the Lightsail instance is running, and the application answers its health check when requested directly at the origin. The public hostname, `grc-assurance.davidoneal.dev`, has no DNS record yet, and HTTPS is not configured. The demo is not ready to share. Do not use or share the demo password until HTTPS has been verified.
+AAs of October 14, 2026, the demo is live at `https://grc-assurance.davidoneal.dev` behind the shared demo password. The DNS record is proxied through Cloudflare, a Configuration Rule sets SSL to Full (strict) for this hostname only, and Nginx serves HTTPS at the origin with a Cloudflare Origin CA certificate. These checks passed from outside the server: `/health` returns the health JSON over HTTPS, an unauthenticated page request returns HTTP 401, `http://` requests redirect to `https://`, and the public certificate is issued by Google Trust Services. The signed-in phone-width walkthrough has not been completed yet, and the items under Known gaps are still open.
 
 ## Hosting design
 
-The app is a Flask application with writable SQLite state, so a static S3 and CloudFront site cannot run it. It runs on a CloudFormation-managed Lightsail instance instead. Cloudflare is the authoritative DNS for `davidoneal.dev` and will proxy the app hostname. Nginx will terminate HTTPS at the origin using a Cloudflare Origin CA certificate, which only Cloudflare trusts, and proxy requests to Gunicorn on the loopback interface. Cloudflare will connect to the origin in Full (strict) mode, set for this hostname only through a Configuration Rule, so other `davidoneal.dev` sites are not affected.
+The app is a Flask application with writable SQLite state, so a static S3 and CloudFront site cannot run it. It runs on a CloudFormation-managed Lightsail instance instead. Cloudflare is the authoritative DNS for `davidoneal.dev` and proxies the app hostname. Nginx terminates HTTPS at the origin using a Cloudflare Origin CA certificate, which only Cloudflare trusts, and proxies requests to Gunicorn on the loopback interface. Cloudflare connects to the origin in Full (strict) mode, set for this hostname only through a Configuration Rule, so other `davidoneal.dev` sites are not affected.
 
 The hostname is a first-level subdomain on purpose. Cloudflare's free Universal SSL certificate covers the root domain and first-level subdomains only, so a deeper name such as `app.labs.davidoneal.dev` would fail the TLS handshake when proxied.
 
