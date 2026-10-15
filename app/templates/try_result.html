@@ -1,6 +1,5 @@
 {% extends "base.html" %}
 {% block title %}{{ scenario.name }} | Try the demo{% endblock %}
-{% block nav %}<a href="{{ url_for('try_demo.index') }}">Try the demo</a>{% endblock %}
 {% block content %}
 <p class="eyebrow"><a href="{{ url_for('try_demo.index') }}">TRY THE DEMO</a> · SYNTHETIC · NOT SAVED</p>
 <h1>{{ scenario.name }}</h1>

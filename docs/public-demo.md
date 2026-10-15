@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The full application sits behind a shared demo password. The public demo lets anyone, including a hiring manager with no login, run a vendor or AI tool review the way an analyst would in production. Every result comes from the same tested services the full application uses: the evidence validator, the risk engine, and the control mapper. There is no separate demo scoring.
+The whole hosted demo is open with no login. These public pages let anyone, including a hiring manager, run a vendor or AI tool review the way an analyst would in production. Every result comes from the same tested services the full application uses: the evidence validator, the risk engine, and the control mapper. There is no separate demo scoring.
 
 The presentation idea, a guided scenario runner with an event log and a mock ticket payload, was inspired by irvinthev's GRC Cost of Assurance Dashboard, with permission. The code and logic here are separate and original.
 
@@ -30,17 +30,17 @@ Each claim topic offers six choices, each producing a real evidence record that 
 
 ## Status
 
-Built: public intake and assessment pages, with nothing saved.
+Built and live: public intake and assessment pages, with nothing saved, and Nginx rate limiting on `/try/` and the rest of the site.
 
-Planned: a private, per-visitor sandbox risk register with automatic deletion; Nginx rate limiting on `/try`; a README walkthrough. Each part is designed, built, and tested before the next starts.
+The signed-in password gate was later removed, so the full demo, including the shared synthetic risk register, is also open. A private per-visitor sandbox register remains a possible future improvement.
 
 ## Guardrails
 
 | Risk | Guardrail |
 | --- | --- |
-| Exposing the full demo | Only `/try/`, `/health`, and static files skip the password. Every other page still returns 401 without it. |
+| Shared data | The full demo is open, and its risk register is shared by everyone with the link. Pages say synthetic data only. The `/try/` pages never save anything. |
 | Saving visitor input | The public routes never write to the database. A test confirms a public submission does not appear in the risk register. |
 | Real vendor or personal data | The form says synthetic data only. The vendor name is limited to 80 printable characters and is escaped on output. |
 | Oversized or forged posts | Form posts over 16 KB are rejected. Cross-site posts are rejected by the same-origin check. |
 | Overstated results | Mappings stay labeled draft, the ticket is labeled a mock, and every result says human review is required. No dollar, time, or percentage figure appears that is not calculated from the result or shown as an adjustable assumption. |
-| Abuse and floods | Planned: Nginx rate limiting on `/try`. Until then, the public pages are cheap, read-only requests. |
+| Abuse and floods | Nginx limits each visitor to 20 requests a minute on `/try/` and 120 a minute elsewhere, with overall caps, returning HTTP 429 beyond that. |

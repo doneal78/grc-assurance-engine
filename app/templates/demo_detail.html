@@ -7,6 +7,6 @@
 {% include "_assessment_result.html" %}
 <section class="content-section action-panel"><h2>Record this review</h2>
 {% if saved_risk %}<p>This scenario is already in the local risk register as <a href="{{ url_for('risks.detail', risk_id=saved_risk.risk_id) }}">{{ saved_risk.risk_id }}</a>.</p>
-{% else %}<p>Save the synthetic scenario result as a local risk record. The app will create a follow-up action for escalations or unresolved evidence gaps.</p><form method="post" action="{{ url_for('demos.add_to_risk_register', scenario_id=scenario.scenario_id) }}"><button class="button-link" type="submit">Add to risk register</button></form>{% endif %}
+{% else %}<p>The risk register is shared by everyone using this demo, so use synthetic data only. Save the synthetic scenario result as a risk record. The app will create a follow-up action for escalations or unresolved evidence gaps.</p><form method="post" action="{{ url_for('demos.add_to_risk_register', scenario_id=scenario.scenario_id) }}"><button class="button-link" type="submit">Add to risk register</button></form>{% endif %}
 </section>
 {% endblock %}

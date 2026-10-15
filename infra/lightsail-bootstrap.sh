@@ -28,7 +28,7 @@ Wants=network-online.target
 User=ubuntu
 Group=ubuntu
 WorkingDirectory=/opt/grc-assurance-engine
-Environment=REQUIRE_AUTH=true
+Environment=REQUIRE_AUTH=false
 Environment=DATABASE_PATH=/var/lib/grc-assurance/grc_assurance.sqlite3
 EnvironmentFile=/etc/grc-assurance-engine.env
 ExecStart=/opt/grc-assurance-engine/.venv/bin/gunicorn --workers 2 --bind 127.0.0.1:8000 --access-logfile - run:app

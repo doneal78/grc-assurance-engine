@@ -60,10 +60,22 @@ Runtime data belongs in the `instance/` folder, which Git ignores. The app initi
 
 ## Data and limitations
 
-Every provided record is synthetic. The cost-of-assurance panel is modeled from labeled assumptions and does not report observed performance or actual cash savings. Workflow timestamps are not handling-time measurements. Mapping a requirement to a control does not prove compliance, and no part of this project claims certification, production readiness, or proven risk reduction. The hosted demo has an optional shared-password gate; this does not make it production-ready.
+Every provided record is synthetic. The cost-of-assurance panel is modeled from labeled assumptions and does not report observed performance or actual cash savings. Workflow timestamps are not handling-time measurements. Mapping a requirement to a control does not prove compliance, and no part of this project claims certification, production readiness, or proven risk reduction. The hosted demo is open with no login and uses synthetic data only; it is not production-ready.
 
 ## Hosted demo
 
-The hosted demo is live at https://grc-assurance.davidoneal.dev behind a shared demo password. The Flask application runs on an AWS Lightsail Ubuntu instance provisioned by CloudFormation, with Nginx and Gunicorn serving it and SQLite storing synthetic saved risks on the instance. Cloudflare proxies the hostname and connects to the origin over HTTPS in Full (strict) mode. Daily Lightsail snapshots provide recovery points. See [docs/deployment.md](docs/deployment.md) for the current state, the setup procedure, and known gaps.
+The hosted demo is live and open at https://grc-assurance.davidoneal.dev, with no login. Start at https://grc-assurance.davidoneal.dev/try/ to run a vendor review without changing anything. The Flask application runs on an AWS Lightsail Ubuntu instance provisioned by CloudFormation, with Nginx and Gunicorn serving it and SQLite storing synthetic saved risks on the instance. Cloudflare proxies the hostname and connects to the origin over HTTPS in Full (strict) mode. Daily Lightsail snapshots provide recovery points. See [docs/deployment.md](docs/deployment.md) for the current state, the setup procedure, and known gaps.
 
-The host is a small portfolio demo, not a production service. Its Lightsail bundle is $7/month before snapshot storage or other charges. SQLite is suitable for this single-instance synthetic demo only. All data must remain synthetic, and the password gate is one shared HTTP Basic login, not user management or MFA.
+The host is a small portfolio demo, not a production service. Its Lightsail bundle is $7/month before snapshot storage or other charges. SQLite is suitable for this single-instance synthetic demo only. All data must remain synthetic. There is no login, so the risk register is shared by everyone with the link, and Nginx rate limits every page.
+
+## Walking through the demo
+
+1. Open `/try/` and run the evidence-supported vendor. Point out that inherent risk, evidence confidence, and residual risk are shown separately.
+2. Run the high-risk AI vendor. Show which escalation rules fired and why a low score could never skip that review.
+3. Submit a custom vendor with contradicting evidence or an unknown answer, and show the result change to conflicting or undetermined instead of looking safe.
+4. Show the workflow event log and the mock remediation ticket, and explain that nothing is sent anywhere.
+5. Open a scenario under Demo scenarios, add it to the risk register, and work its remediation action. Completing an action requires notes.
+
+## Credit
+
+The guided scenario runner, event log, and mock ticket presentation were inspired, with permission, by irvinthev's [GRC Cost of Assurance Dashboard](https://irvinthev.github.io/grc-cost-of-assurance-dashboard/). The code, rules, and data in this repository are separate and original.
