@@ -18,7 +18,7 @@ The scenario runner composes evidence validation, risk evaluation, and mapping i
 
 ## Current limitations
 
-Scenario runs are deterministic examples, not vendor records. There is no real assessment intake, general-purpose finding management, metrics, or external integration. The optional HTTP Basic gate is a shared-password barrier for the hosted synthetic demo; it is not an identity system or production access-control design. The workflow log can be modified by someone with access to the database and is not tamper-proof. The local Flask development server must not be exposed publicly.
+Scenario runs are deterministic examples, not vendor records. There is no real assessment intake, general-purpose finding management, metrics, or external integration. The optional HTTP Basic gate can require a shared password when `REQUIRE_AUTH` is enabled. The hosted demo leaves it off. It is not an identity system or production access-control design. The workflow log can be modified by someone with access to the database and is not tamper-proof. The local Flask development server must not be exposed publicly.
 
 ## Design choices
 

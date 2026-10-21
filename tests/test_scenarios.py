@@ -30,7 +30,10 @@ def test_high_risk_ai_scenario_is_escalated_and_missing_is_not_failure():
     assert result["risk"]["inherent"]["score"] == 90
     assert result["risk"]["review_path"] == "escalated_review"
     assert {claim["evidence_status"] for claim in result["claims"]} == {"missing"}
-    assert any("ESC-001" == item["rule_id"] for item in result["risk"]["escalations"])
+    fired = result["risk"]["escalations"]
+    assert [item["rule_id"] for item in fired] == ["ESC-001", "ESC-002", "ESC-004", "ESC-006"]
+    assert all(item["assessment_type"] and item["owner_role"] and item["required_output"] and item["next_step"]
+               for item in fired)
     assert all(not claim["evidence"] for claim in result["claims"])
 
 

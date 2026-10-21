@@ -40,13 +40,15 @@ Then open http://127.0.0.1:5000/ in a browser. The app listens on 127.0.0.1 only
 3. For the high-risk or conflicting case, choose **Add to risk register**, assign an action owner/due date, and update its status. The risk record and local workflow events stay in the ignored SQLite database under `instance/`.
 4. Open **Methods** to review rule versions, mapping limitations, and the modeled cost formula.
 
-The local demo does not require credentials, network services, or private evidence. The hosted demo requires HTTP Basic credentials before any application page is served.
+The local demo does not require credentials, network services, or private evidence. The hosted demo is open with no login. The application still has an optional HTTP Basic gate, and it stays off unless `REQUIRE_AUTH` is set to true. The hosted site does not set that variable. See [docs/deployment.md](docs/deployment.md).
 
 ## Run the tests
 
 ```bash
 python -m pytest
 ```
+
+GitHub Actions runs this suite on Python 3.12 and 3.14 for every push and pull request.
 
 ## Health check
 

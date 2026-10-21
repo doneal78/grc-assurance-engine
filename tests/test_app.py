@@ -70,6 +70,20 @@ def test_demo_scenario_page_shows_traceable_results(client):
     assert b"Conflicting permissions claim" in response.data
     assert b"Conflicting" in response.data
     assert b"IA-2" in response.data
+    assert b"Evidence conflict review" in response.data
+    assert b"Evidence reviewer" in response.data
+    assert b"Required output" in response.data
+
+
+def test_high_risk_result_names_each_deeper_assessment(client):
+    response = client.get("/demo/high-risk-ai")
+    assert response.status_code == 200
+    assert b"Privileged-access impact assessment" in response.data
+    assert b"AI impact assessment" in response.data
+    assert b"Model-training assessment" in response.data
+    assert b"Retention and deletion review" in response.data
+    assert b"Owner role" in response.data
+    assert b"Next step" in response.data
 
 
 def test_unknown_demo_scenario_returns_404(client):
@@ -83,6 +97,8 @@ def test_scenario_can_be_added_to_register(client):
     assert detail.status_code == 200
     assert b"Remediation actions" in detail.data
     assert b"Workflow history" in detail.data
+    assert b"Privileged-access impact assessment" in detail.data
+    assert b"AI governance reviewer" in detail.data
     assert client.get("/risks").status_code == 200
 
 
@@ -113,6 +129,19 @@ def test_methodology_page_explains_cost_limits(client):
     response = client.get("/methodology")
     assert response.status_code == 200
     assert b"labor capacity, not cash savings" in response.data
+
+
+def test_methodology_page_lists_escalation_assessments(client):
+    response = client.get("/methodology")
+    assert response.status_code == 200
+    body = response.data
+    assert b"0.2.0" in body
+    assert b"Data-classification review" in body
+    assert b"Integration access review" in body
+    assert b"AI use determination" in body
+    assert b"Records owner" in body
+    assert b"Required output" in body
+    assert b"Business owner" in body
 
 
 def test_cross_site_post_is_rejected_and_saves_nothing(client):
