@@ -11,7 +11,7 @@ The presentation idea, a guided scenario runner with an event log and a mock tic
 | Step | What the visitor sees | What runs underneath |
 | --- | --- | --- |
 | 1. Intake | Pick one of three synthetic vendors, or describe their own: name, data sensitivity, integration permissions, AI use, model training, exposure, retention and deletion, and the evidence provided for four claim topics | `app/services/intake_builder.py` turns the form into claims and evidence records dated relative to today |
-| 2. Assessment | Inherent risk, evidence confidence, and residual risk shown separately, with escalation reasons, claim statuses, and draft control mappings | The real evidence validator, risk engine, and control mapper |
+| 2. Assessment | Inherent risk, evidence confidence, and residual risk shown separately, with each fired escalation's assessment, owner role, required output, and next step, plus claim statuses and draft control mappings | The real evidence validator, risk engine, and control mapper |
 | 3. Event log | The ordered workflow steps for that assessment | Generated from the results for that page view |
 | 4. Remediation ticket | A ServiceNow-style payload labeled as a mock | Built from escalations and evidence gaps. Never sent anywhere. |
 

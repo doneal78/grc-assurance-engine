@@ -1,4 +1,4 @@
-{# Shared assessment result: used by the signed-in demo and the public demo. #}
+{# Shared assessment result: used by the scenario pages and the public demo. #}
 <section class="notice"><strong>Illustrative result · Human review required</strong><p>Evaluation date {{ scenario.as_of }}{% if scenario.scenario_set_version %} · Scenario set {{ scenario.scenario_set_version }}{% endif %} · Risk rules {{ scenario.risk.rule_set_version }} · Evidence policy {{ scenario.evidence_policy_version }}</p></section>
 
 <section class="result-grid" aria-label="Assessment result">
@@ -11,7 +11,7 @@
 {% if scenario.risk.inherent.factors %}<ul class="factor-list">{% for factor in scenario.risk.inherent.factors %}<li><span><code>{{ factor.rule_id }}</code> · {{ factor.factor|replace('_', ' ')|title }} = {{ factor.value }}</span><strong>+{{ factor.points }}</strong></li>{% endfor %}</ul>{% else %}<p>No known-value factors contributed to the score.</p>{% endif %}
 {% if scenario.risk.missing_information %}<p class="inline-warning">Unknown inputs: {{ scenario.risk.missing_information|join(', ')|replace('_', ' ') }}. The result remains provisional.</p>{% endif %}
 <p><strong>Review route:</strong> {{ scenario.risk.review_path|replace('_', ' ')|title }}</p>
-{% if scenario.risk.escalations %}<ul>{% for item in scenario.risk.escalations %}<li><code>{{ item.rule_id }}</code> — {{ item.reason }}</li>{% endfor %}</ul>{% else %}<p>No configured escalation rule fired. Human review is still required.</p>{% endif %}
+{% if scenario.risk.escalations %}{% with escalations=scenario.risk.escalations %}{% include "_escalation_list.html" %}{% endwith %}{% else %}<p>No configured escalation rule fired. Human review is still required.</p>{% endif %}
 </section>
 
 <section class="content-section"><h2>Claims and evidence</h2>

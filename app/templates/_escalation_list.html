@@ -1,0 +1,15 @@
+<ul class="escalation-list">
+{% for item in escalations %}
+<li>
+  <p><code>{{ item.rule_id }}</code> — {{ item.reason }}</p>
+  {% if item.assessment_type %}
+  <dl class="meta-list">
+    <dt>Assessment</dt><dd>{{ item.assessment_type }}</dd>
+    <dt>Owner role</dt><dd>{{ item.owner_role }}</dd>
+    <dt>Required output</dt><dd>{{ item.required_output }}</dd>
+    <dt>Next step</dt><dd>{{ item.next_step }}</dd>
+  </dl>
+  {% endif %}
+</li>
+{% endfor %}
+</ul>

@@ -59,6 +59,7 @@ def test_all_unknown_is_undetermined_not_low():
     assert r["residual"]["tier"] == "undetermined"
     assert r["evidence_confidence"]["level"] == "none"
     assert rule_ids(r) == ["ESC-005"] and r["review_path"] == "escalated_review"
+    assert r["escalations"][0]["assessment_type"] == "Data-classification review"
     assert len(r["missing_information"]) == 6
 
 
@@ -67,6 +68,7 @@ def test_single_unknown_adds_no_points_and_is_listed():
     assert r["inherent"]["score"] == 20
     assert r["inherent"]["provisional"] is True and r["inherent"]["tier"] == "undetermined"
     assert r["missing_information"] == ["external_exposure"]
+    assert r["escalations"] == [] and r["review_path"] == "standard_review"
 
 
 def test_conflicting_claim_escalates_and_is_preserved():
@@ -84,6 +86,7 @@ def test_low_score_cannot_bypass_mandatory_escalation():
                       retention_deletion="undocumented"))
     assert r["inherent"]["tier"] == "low"
     assert rule_ids(r) == ["ESC-006"]
+    assert r["escalations"][0]["assessment_type"] == "Retention and deletion review"
     assert r["review_path"] == "escalated_review"
     assert r["residual"]["reason"].startswith("Not lowered")
 
@@ -150,7 +153,131 @@ def test_same_input_same_output_and_input_unchanged():
 
 
 def test_result_records_rule_set_version():
-    assert evaluate(make())["rule_set_version"] == "0.1.0"
+    assert evaluate(make())["rule_set_version"] == RULES["rule_set_version"] == "0.2.0"
+
+
+ESCALATION_DETAIL_FIELDS = ("assessment_type", "owner_role", "required_output", "next_step")
+
+
+def test_every_escalation_rule_defines_the_follow_up_assessment():
+    seen = set()
+    for rule in RULES["escalation_rules"]:
+        assert rule["rule_id"] not in seen
+        seen.add(rule["rule_id"])
+        for field in ESCALATION_DETAIL_FIELDS:
+            assert isinstance(rule[field], str) and rule[field].strip()
+
+
+def test_fired_escalation_carries_the_configured_assessment():
+    r = evaluate(make(data_sensitivity="restricted", integration_permissions="admin"))
+    assert rule_ids(r) == ["ESC-001"]
+    configured = next(rule for rule in RULES["escalation_rules"] if rule["rule_id"] == "ESC-001")
+    fired = r["escalations"][0]
+    assert fired["reason"] == configured["description"]
+    for field in ESCALATION_DETAIL_FIELDS:
+        assert fired[field] == configured[field]
+
+
+def test_escalation_rule_without_required_output_is_rejected():
+    rules = copy.deepcopy(RULES)
+    del rules["escalation_rules"][0]["required_output"]
+    with pytest.raises(ValueError, match="ESC-001: required_output"):
+        evaluate(make(), rules)
+
+
+def test_blank_escalation_owner_is_rejected():
+    rules = copy.deepcopy(RULES)
+    rules["escalation_rules"][1]["owner_role"] = "  "
+    with pytest.raises(ValueError, match="ESC-002: owner_role"):
+        evaluate(make(), rules)
+
+
+def test_public_faq_with_blank_ai_use_does_not_escalate():
+    """Public customer FAQ, no integration, AI use left blank. Provisional, not an AI impact assessment."""
+    r = evaluate(make(data_sensitivity="public", integration_permissions="none", ai_use="unknown",
+                      external_exposure="customer_facing"))
+    assert r["inherent"]["score"] == 5
+    assert r["inherent"]["provisional"] is True and r["inherent"]["tier"] == "undetermined"
+    assert r["evidence_confidence"]["level"] == "high"
+    assert r["escalations"] == [] and r["review_path"] == "standard_review"
+
+
+def test_internal_tool_with_unknown_permissions_does_not_escalate():
+    """Internal handbook, permissions not yet confirmed, no AI. The hidden worst case is still moderate."""
+    r = evaluate(make(data_sensitivity="internal", integration_permissions="unknown", ai_use="none"))
+    assert r["inherent"]["score"] == 10
+    assert r["inherent"]["provisional"] is True and r["missing_information"] == ["integration_permissions"]
+    assert r["escalations"] == [] and r["review_path"] == "standard_review"
+
+
+def test_restricted_archive_with_read_only_access_does_not_escalate():
+    r = evaluate(make(data_sensitivity="restricted", integration_permissions="read_only", ai_use="none"))
+    assert r["inherent"]["score"] == 45 and r["inherent"]["tier"] == "moderate"
+    assert r["residual"]["tier"] == "low"
+    assert r["escalations"] == [] and r["review_path"] == "standard_review"
+
+
+def test_restricted_data_with_no_integration_does_not_escalate():
+    r = evaluate(make(data_sensitivity="restricted", integration_permissions="none", ai_use="none"))
+    assert r["inherent"]["score"] == 35 and r["inherent"]["tier"] == "moderate"
+    assert r["escalations"] == [] and r["review_path"] == "standard_review"
+
+
+def test_assistive_ai_not_used_for_training_does_not_escalate():
+    r = evaluate(make(data_sensitivity="confidential", integration_permissions="read_only",
+                      ai_use="assistive", model_training_on_customer_data="no"))
+    assert r["inherent"]["score"] == 45 and r["inherent"]["tier"] == "moderate"
+    assert r["residual"]["tier"] == "low"
+    assert r["escalations"] == [] and r["review_path"] == "standard_review"
+
+
+def test_confidential_read_write_workspace_without_ai_does_not_escalate():
+    r = evaluate(make(data_sensitivity="confidential", integration_permissions="read_write", ai_use="none"))
+    assert r["inherent"]["score"] == 45 and r["inherent"]["tier"] == "moderate"
+    assert r["escalations"] == [] and r["review_path"] == "standard_review"
+
+
+def test_unknown_data_sensitivity_still_opens_classification():
+    r = evaluate(make(data_sensitivity="unknown"))
+    assert r["inherent"]["score"] == 10
+    assert r["inherent"]["tier"] == "undetermined"
+    assert rule_ids(r) == ["ESC-005"]
+    assert r["escalations"][0]["owner_role"] == "Business owner"
+    assert r["review_path"] == "escalated_review"
+
+
+def test_unknown_training_on_sensitive_ai_use_still_escalates():
+    r = evaluate(make(data_sensitivity="confidential", ai_use="assistive",
+                      model_training_on_customer_data="unknown"))
+    assert r["inherent"]["provisional"] is True
+    assert rule_ids(r) == ["ESC-004"]
+    assert r["escalations"][0]["assessment_type"] == "Model-training assessment"
+
+
+def test_unknown_permissions_and_retention_open_separate_reviews():
+    r = evaluate(make(data_sensitivity="restricted", integration_permissions="unknown",
+                      retention_deletion="undocumented"))
+    assert rule_ids(r) == ["ESC-006", "ESC-007"]
+    assert [item["assessment_type"] for item in r["escalations"]] == [
+        "Retention and deletion review", "Integration access review",
+    ]
+
+
+@pytest.mark.parametrize("data_sensitivity, field, expected", [
+    ("public", "ai_use", []),
+    ("internal", "ai_use", []),
+    ("confidential", "ai_use", ["ESC-008"]),
+    ("restricted", "ai_use", ["ESC-008"]),
+    ("public", "integration_permissions", []),
+    ("internal", "integration_permissions", []),
+    ("confidential", "integration_permissions", ["ESC-007"]),
+    ("restricted", "integration_permissions", ["ESC-007"]),
+])
+def test_unknown_permissions_or_ai_escalate_only_with_sensitive_data(data_sensitivity, field, expected):
+    r = evaluate(make(**{field: "unknown", "data_sensitivity": data_sensitivity}))
+    assert r["inherent"]["provisional"] is True and r["inherent"]["tier"] == "undetermined"
+    assert rule_ids(r) == expected
+    assert r["review_path"] == ("escalated_review" if expected else "standard_review")
 
 
 def test_engine_never_returns_an_approval():

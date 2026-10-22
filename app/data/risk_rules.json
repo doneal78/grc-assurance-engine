@@ -1,37 +1,110 @@
 {
-    "rule_set_version": "0.1.0",
-    "status": "draft",
-    "description": "Illustrative rule set. Not an industry-standard methodology and not empirically calibrated. See docs/risk-model.md.",
-    "unknown_value": "unknown",
-    "inherent_factors": {
-      "data_sensitivity": {"rule_id": "INH-DATA", "points": {"public": 0, "internal": 10, "confidential": 25, "restricted": 35}},
-      "integration_permissions": {"rule_id": "INH-PERM", "points": {"none": 0, "read_only": 10, "read_write": 20, "admin": 30}},
-      "ai_use": {"rule_id": "INH-AI", "points": {"none": 0, "assistive": 10, "autonomous": 20}},
-      "model_training_on_customer_data": {"rule_id": "INH-TRAIN", "applies_when_ai_use_is_not": "none", "points": {"no": 0, "yes": 10}},
-      "external_exposure": {"rule_id": "INH-EXPO", "points": {"internal_only": 0, "customer_facing": 5}}
+  "rule_set_version": "0.2.0",
+  "status": "draft",
+  "description": "Illustrative rule set. Not an industry-standard methodology and not empirically calibrated. See docs/risk-model.md.",
+  "unknown_value": "unknown",
+  "inherent_factors": {
+    "data_sensitivity": {"rule_id": "INH-DATA", "points": {"public": 0, "internal": 10, "confidential": 25, "restricted": 35}},
+    "integration_permissions": {"rule_id": "INH-PERM", "points": {"none": 0, "read_only": 10, "read_write": 20, "admin": 30}},
+    "ai_use": {"rule_id": "INH-AI", "points": {"none": 0, "assistive": 10, "autonomous": 20}},
+    "model_training_on_customer_data": {"rule_id": "INH-TRAIN", "applies_when_ai_use_is_not": "none", "points": {"no": 0, "yes": 10}},
+    "external_exposure": {"rule_id": "INH-EXPO", "points": {"internal_only": 0, "customer_facing": 5}}
+  },
+  "retention_deletion_values": ["documented", "undocumented", "unknown"],
+  "tiers": [
+    {"name": "low", "min": 0, "max": 29},
+    {"name": "moderate", "min": 30, "max": 54},
+    {"name": "high", "min": 55, "max": 74},
+    {"name": "critical", "min": 75, "max": 100}
+  ],
+  "evidence_weights": {"verified": 1.0, "self_attested": 0.5, "expired": 0.25, "not_reviewed": 0.0, "missing": 0.0, "conflicting": 0.0},
+  "confidence_thresholds": {"high": 0.75, "medium": 0.40},
+  "residual": {"max_tier_reduction": 1},
+  "escalation_rules": [
+    {
+      "rule_id": "ESC-001",
+      "description": "Restricted data with read_write or admin permissions",
+      "assessment_type": "Privileged-access impact assessment",
+      "owner_role": "GRC analyst",
+      "required_output": "A written finding on whether this integration can change or administer restricted data, which limits apply to that access, and whether the exposure is to be reduced, accepted for a stated period, or stopped.",
+      "next_step": "Record the finding on the risk register, with a remediation action when access must change. Escalated review continues until a person records that outcome.",
+      "all": [{"field": "data_sensitivity", "in": ["restricted"]}, {"field": "integration_permissions", "in": ["read_write", "admin"]}]
     },
-    "retention_deletion_values": ["documented", "undocumented", "unknown"],
-    "tiers": [
-      {"name": "low", "min": 0, "max": 29},
-      {"name": "moderate", "min": 30, "max": 54},
-      {"name": "high", "min": 55, "max": 74},
-      {"name": "critical", "min": 75, "max": 100}
-    ],
-    "evidence_weights": {"verified": 1.0, "self_attested": 0.5, "expired": 0.25, "not_reviewed": 0.0, "missing": 0.0, "conflicting": 0.0},
-    "confidence_thresholds": {"high": 0.75, "medium": 0.40},
-    "residual": {"max_tier_reduction": 1},
-    "escalation_rules": [
-      {"rule_id": "ESC-001", "description": "Restricted data with read_write or admin permissions",
-       "all": [{"field": "data_sensitivity", "in": ["restricted"]}, {"field": "integration_permissions", "in": ["read_write", "admin"]}]},
-      {"rule_id": "ESC-002", "description": "Autonomous AI with confidential or restricted data",
-       "all": [{"field": "ai_use", "in": ["autonomous"]}, {"field": "data_sensitivity", "in": ["confidential", "restricted"]}]},
-      {"rule_id": "ESC-003", "description": "A claim has status conflicting",
-       "all": [{"claim_status": "conflicting"}]},
-      {"rule_id": "ESC-004", "description": "AI in use with confidential or restricted data, and model training is yes or unknown",
-       "all": [{"field": "ai_use", "in": ["assistive", "autonomous"]}, {"field": "data_sensitivity", "in": ["confidential", "restricted"]}, {"field": "model_training_on_customer_data", "in": ["yes", "unknown"]}]},
-      {"rule_id": "ESC-005", "description": "Data sensitivity, integration permissions, or AI use is unknown",
-       "any": [{"field": "data_sensitivity", "in": ["unknown"]}, {"field": "integration_permissions", "in": ["unknown"]}, {"field": "ai_use", "in": ["unknown"]}]},
-      {"rule_id": "ESC-006", "description": "Confidential or restricted data, and retention and deletion is undocumented or unknown",
-       "all": [{"field": "data_sensitivity", "in": ["confidential", "restricted"]}, {"field": "retention_deletion", "in": ["undocumented", "unknown"]}]}
-    ]
-  }
+    {
+      "rule_id": "ESC-002",
+      "description": "Autonomous AI with confidential or restricted data",
+      "assessment_type": "AI impact assessment",
+      "owner_role": "AI governance reviewer",
+      "required_output": "An impact assessment of the autonomous behavior, the confidential or restricted data it can reach, who or what is affected, and the human oversight that can interrupt it.",
+      "next_step": "Keep the engagement on escalated review until the AI governance reviewer records the assessment outcome and any remediation that outcome requires.",
+      "all": [{"field": "ai_use", "in": ["autonomous"]}, {"field": "data_sensitivity", "in": ["confidential", "restricted"]}]
+    },
+    {
+      "rule_id": "ESC-003",
+      "description": "A claim has status conflicting",
+      "assessment_type": "Evidence conflict review",
+      "owner_role": "Evidence reviewer",
+      "required_output": "One resolved evidence status for the conflicting claim, naming the source relied on and why the contradicting source was rejected or superseded.",
+      "next_step": "Update the claim or the evidence record, then re-run the assessment. The conflict remains until a reviewer resolves it.",
+      "all": [{"claim_status": "conflicting"}]
+    },
+    {
+      "rule_id": "ESC-004",
+      "description": "AI in use with confidential or restricted data, and model training is yes or unknown",
+      "assessment_type": "Model-training assessment",
+      "owner_role": "AI governance reviewer",
+      "required_output": "A determination of whether customer or organizational data is used to train or improve a model, which data elements are involved, and the contractual or technical limit that supports the answer.",
+      "next_step": "When training is confirmed, record a risk and a remediation action. When training is shown not to occur, re-run the assessment with model training set to no. An unknown answer is not treated as no.",
+      "all": [
+        {"field": "ai_use", "in": ["assistive", "autonomous"]},
+        {"field": "data_sensitivity", "in": ["confidential", "restricted"]},
+        {"field": "model_training_on_customer_data", "in": ["yes", "unknown"]}
+      ]
+    },
+    {
+      "rule_id": "ESC-005",
+      "description": "Data sensitivity is unknown",
+      "assessment_type": "Data-classification review",
+      "owner_role": "Business owner",
+      "required_output": "The data categories in scope and one confirmed sensitivity value: public, internal, confidential, or restricted.",
+      "next_step": "Re-run the assessment with that value before opening any further deeper assessment. The provisional score is not a completed review.",
+      "all": [{"field": "data_sensitivity", "in": ["unknown"]}]
+    },
+    {
+      "rule_id": "ESC-006",
+      "description": "Confidential or restricted data, and retention and deletion is undocumented or unknown",
+      "assessment_type": "Retention and deletion review",
+      "owner_role": "Records owner",
+      "required_output": "The retention period, the deletion method, and where that practice is documented, or a finding that the practice is not documented.",
+      "next_step": "When the practice is undocumented, record a remediation action to document or change it. When it is documented, re-run the assessment with retention and deletion set to documented.",
+      "all": [
+        {"field": "data_sensitivity", "in": ["confidential", "restricted"]},
+        {"field": "retention_deletion", "in": ["undocumented", "unknown"]}
+      ]
+    },
+    {
+      "rule_id": "ESC-007",
+      "description": "Integration permissions are unknown and data sensitivity is confidential or restricted",
+      "assessment_type": "Integration access review",
+      "owner_role": "Integration owner",
+      "required_output": "The effective permission level taken from the integration configuration: none, read_only, read_write, or admin.",
+      "next_step": "Re-run the assessment with the confirmed permission level. Restricted data with read_write or admin access then follows the privileged-access impact assessment.",
+      "all": [
+        {"field": "integration_permissions", "in": ["unknown"]},
+        {"field": "data_sensitivity", "in": ["confidential", "restricted"]}
+      ]
+    },
+    {
+      "rule_id": "ESC-008",
+      "description": "AI use is unknown and data sensitivity is confidential or restricted",
+      "assessment_type": "AI use determination",
+      "owner_role": "Business owner",
+      "required_output": "Whether the service uses no AI, assistive AI, or autonomous AI, and whether a model is trained on customer data.",
+      "next_step": "Re-run the assessment. Autonomous use follows the AI impact assessment. Assistive or autonomous use with training set to yes or unknown follows the model-training assessment. Confirmed absence of AI does not open either assessment.",
+      "all": [
+        {"field": "ai_use", "in": ["unknown"]},
+        {"field": "data_sensitivity", "in": ["confidential", "restricted"]}
+      ]
+    }
+  ]
+}

@@ -115,6 +115,27 @@ def _condition_met(condition, assessment):
     raise ValueError(f"unsupported condition: {condition}")
 
 
+# Copied onto every fired escalation so the review path names the assessment,
+# who performs it, what it must produce, and what happens after it.
+ESCALATION_DETAIL_FIELDS = ("assessment_type", "owner_role", "required_output", "next_step")
+
+
+def _escalation_details(rule):
+    rule_id = rule.get("rule_id", "<missing rule_id>")
+    details = {}
+    for field in ESCALATION_DETAIL_FIELDS:
+        value = rule.get(field)
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"{rule_id}: {field} must be a non-empty string")
+        details[field] = value
+    return details
+
+
+def _require_escalation_definitions(rules):
+    for rule in rules["escalation_rules"]:
+        _escalation_details(rule)
+
+
 def _escalations(assessment, rules):
     fired = []
     for rule in rules["escalation_rules"]:
@@ -123,13 +144,18 @@ def _escalations(assessment, rules):
         else:
             met = any(_condition_met(c, assessment) for c in rule["any"])
         if met:
-            fired.append({"rule_id": rule["rule_id"], "reason": rule["description"]})
+            fired.append({
+                "rule_id": rule["rule_id"],
+                "reason": rule["description"],
+                **_escalation_details(rule),
+            })
     return fired
 
 
 def evaluate(assessment, rules=None):
     """Evaluate one assessment and return a structured, explainable result."""
     rules = rules if rules is not None else load_rules()
+    _require_escalation_definitions(rules)
     _validate(assessment, rules)
 
     score, factors, missing = _inherent(assessment, rules)
