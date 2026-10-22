@@ -6,11 +6,13 @@ A small Flask application for evidence-first vendor and AI-tool risk assessments
 
 The local Flask application has an app factory, a health-check endpoint, a responsive demo interface, and pytest coverage.
 
-The risk engine in `app/services/risk_engine.py` evaluates assessments against the versioned illustrative rules in `app/data/risk_rules.json`, and is used by the scenario walkthrough. It is a draft portfolio model, not a calibrated methodology.
+The risk engine in `app/services/risk_engine.py` evaluates assessments against the versioned illustrative rules in `app/data/risk_rules.json` and the single org policy in `app/data/org_policy.json`. It is a draft portfolio model, not a calibrated methodology, and the policy profile is illustrative rather than an approved corporate policy.
+
+Intake asks whether the AI makes fully automated decisions about people's eligibility, safety, or similar outcomes with no human review. A yes answer produces a prohibited outcome that cites restriction HR-001 and policy `ORG-AI-USE` version 1.0.0. That outcome is separate from the score. The only required contract clause in the starter profile, no vendor model training on company or customer data, is listed and not enforced. Another restriction or clause is added by extending those lists. On a saved risk, a person records approve, approve with conditions, or reject. Approving a prohibited result requires an exception rationale, and the prohibited flag stays on the assessment. The engine does not make that decision.
 
 Phase 3 is implemented as framework-independent services. The evidence validator in `app/services/evidence_validator.py` derives claim evidence status using configurable freshness limits in `app/data/evidence_policy.json`. The control mapper in `app/services/control_mapper.py` joins explicitly tagged claims to a small NIST SP 800-53 mapping library in `app/data/control_mappings.json`; the mappings are draft pending human review. See `docs/evidence-model.md` and `docs/control-mapping-methodology.md`.
 
-The local web interface includes three repeatable synthetic scenarios that run the same risk, evidence, and mapping services and show explanations and trace links. A scenario can be added to the local SQLite risk register with a follow-up action and workflow history. The dashboard includes a reproducible modeled labor-capacity example; it is not a measured saving. See `docs/BUILD_PLAN.md` for features that remain out of scope.
+The local web interface includes repeatable synthetic scenarios that run the same risk, evidence, policy, and mapping services and show explanations and trace links. One scenario is an eligibility tool whose score stays moderate while the policy outcome is prohibited. A scenario can be added to the local SQLite risk register with a follow-up action, a human decision, and workflow history. The dashboard includes a reproducible modeled labor-capacity example; it is not a measured saving. See `docs/BUILD_PLAN.md` for features that remain out of scope.
 
 ## Requirements
 
@@ -35,10 +37,10 @@ Then open http://127.0.0.1:5000/ in a browser. The app listens on 127.0.0.1 only
 
 ## Demo walkthrough
 
-1. Open **Demo scenarios** and choose one of the three synthetic cases.
-2. Review the inherent score/tier, confidence, residual result, explanation, evidence statuses, escalations, and draft control prompts.
-3. For the high-risk or conflicting case, choose **Add to risk register**, assign an action owner/due date, and update its status. The risk record and local workflow events stay in the ignored SQLite database under `instance/`.
-4. Open **Methods** to review rule versions, mapping limitations, and the modeled cost formula.
+1. Open **Demo scenarios** and choose a synthetic case, including **AI tool that decides eligibility**.
+2. Review the inherent score/tier, confidence, residual result, policy outcome, explanation, evidence statuses, escalations, and draft control prompts. On the eligibility case, the score and the prohibited outcome are separate, and HR-001 cites the policy version.
+3. For the high-risk, conflicting, or prohibited case, choose **Add to risk register**, assign an action owner/due date, and update its status. On the prohibited case, record a decision. Approval requires an exception rationale. Rejection does not. The prohibited outcome remains. The risk record, decision, and local workflow events stay in the ignored SQLite database under `instance/`.
+4. Open **Methods** to review the rule set, the org policy, the listed contract clause, mapping limitations, and the modeled cost formula.
 
 The local demo does not require credentials, network services, or private evidence. The hosted demo is open with no login. The application still has an optional HTTP Basic gate, and it stays off unless `REQUIRE_AUTH` is set to true. The hosted site does not set that variable. See [docs/deployment.md](docs/deployment.md).
 
@@ -58,11 +60,11 @@ GitHub Actions runs this suite on Python 3.12 and 3.14 for every push and pull r
 
 The health endpoint lives in `app/routes/health.py`, a file not listed in the original build plan. It is kept separate from the dashboard because it is an operational endpoint, not a page.
 
-Runtime data belongs in the `instance/` folder, which Git ignores. The app initializes a local SQLite database for saved synthetic risks, remediation actions, and workflow events. Scenario fixtures and saved data are synthetic; delete the ignored local database manually if you want to reset your demo records.
+Runtime data belongs in the `instance/` folder, which Git ignores. The app initializes a local SQLite database for saved synthetic risks, remediation actions, human decisions, and workflow events. Scenario fixtures and saved data are synthetic; delete the ignored local database manually if you want to reset your demo records. A database created before the policy columns existed gains those columns on startup. Rows saved before the policy check have no policy reference, and a decision cannot be recorded on them until the scenario is saved again.
 
 ## Data and limitations
 
-Every provided record is synthetic. The cost-of-assurance panel is modeled from labeled assumptions and does not report observed performance or actual cash savings. Workflow timestamps are not handling-time measurements. Mapping a requirement to a control does not prove compliance, and no part of this project claims certification, production readiness, or proven risk reduction. The hosted demo is open with no login and uses synthetic data only; it is not production-ready.
+Every provided record is synthetic. The org policy and the risk rules are illustrative. A prohibited outcome is not a legal determination, and an exception rationale does not clear it. Contract clauses are listed and not checked. The cost-of-assurance panel is modeled from labeled assumptions and does not report observed performance or actual cash savings. Workflow timestamps, including a decision timestamp, are not handling-time measurements. The decision log is not tamper-proof, and the decider's name is not authenticated. Mapping a requirement to a control does not prove compliance, and no part of this project claims certification, production readiness, or proven risk reduction. The hosted demo is open with no login and uses synthetic data only; it is not production-ready.
 
 ## Hosted demo
 
@@ -72,11 +74,12 @@ The host is a small portfolio demo, not a production service. Its Lightsail bund
 
 ## Walking through the demo
 
-1. Open `/try/` and run the evidence-supported vendor. Point out that inherent risk, evidence confidence, and residual risk are shown separately.
+1. Open `/try/` and run the evidence-supported vendor. Point out that inherent risk, evidence confidence, residual risk, and the policy outcome are shown separately.
 2. Run the high-risk AI vendor. Show which escalation rules fired and why a low score could never skip that review.
-3. Submit a custom vendor with contradicting evidence or an unknown answer, and show the result change to conflicting or undetermined instead of looking safe.
-4. Show the workflow event log and the mock remediation ticket, and explain that nothing is sent anywhere.
-5. Open a scenario under Demo scenarios, add it to the risk register, and work its remediation action. Completing an action requires notes.
+3. Run the AI tool that decides eligibility, or submit a custom vendor with that question answered yes. The score is still calculated, and the policy outcome is prohibited under HR-001. Answering unknown is not treated as no, and it is not treated as prohibited.
+4. Submit a custom vendor with contradicting evidence or an unknown answer, and show the result change to conflicting or undetermined instead of looking safe.
+5. Show the workflow event log and the mock remediation ticket, and explain that nothing is sent anywhere. The public page does not save a decision.
+6. Open a scenario under Demo scenarios, add it to the risk register, and work its remediation action. Completing an action requires notes. On the eligibility risk, record a decision. Approval requires an exception rationale. The prohibited outcome stays visible.
 
 ## Credit
 

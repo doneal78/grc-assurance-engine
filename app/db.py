@@ -26,6 +26,20 @@ def close_db(_error=None):
         connection.close()
 
 
+def migrate(connection):
+    """Add columns introduced after the first risk-register schema.
+
+    CREATE TABLE IF NOT EXISTS does not alter a table that already exists.
+    Existing local and hosted databases keep their rows; new columns stay
+    empty until a scenario is saved again.
+    """
+    columns = {row[1] for row in connection.execute("PRAGMA table_info(risks)")}
+    for name in ("policy_id", "policy_version", "policy_outcome"):
+        if name not in columns:
+            connection.execute(f"ALTER TABLE risks ADD COLUMN {name} TEXT")
+    connection.commit()
+
+
 def init_app(app):
     """Create the local schema if needed and release request connections."""
     app.teardown_appcontext(close_db)
@@ -34,5 +48,6 @@ def init_app(app):
         try:
             schema = Path(__file__).with_name("schema.sql").read_text(encoding="utf-8")
             connection.executescript(schema)
+            migrate(connection)
         finally:
             connection.close()

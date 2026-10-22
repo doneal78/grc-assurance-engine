@@ -1,18 +1,21 @@
-# Risk Model (Rule Set 0.2.0, draft)
+# Risk Model (Rule Set 0.3.0, draft)
 
 This model is illustrative. It is not an industry-standard methodology and is not empirically calibrated. Weights, thresholds, and escalation definitions live in `app/data/risk_rules.json`, and every assessment records the rule set version it used.
 
 Rule set 0.2.0 keeps the same point values and tier boundaries as 0.1.0. It adds the assessment contract on every escalation rule, and it narrows the old ESC-005. That rule used to escalate whenever data sensitivity, integration permissions, or AI use was unknown. Unknown data sensitivity still always escalates. Unknown permissions and unknown AI use escalate only when the data is confidential or restricted, as ESC-007 and ESC-008.
 
-## Three separate results
+Rule set 0.3.0 keeps those point values, tier boundaries, and ESC-001 through ESC-008. It adds one intake answer, `decisions_affecting_people`, and ESC-009 for when that answer is unknown. The prohibited outcome below is not a change to the score. It comes from the separate org policy in `app/data/org_policy.json`.
+
+## Separate results
 
 | Result | Meaning | Form |
 | --- | --- | --- |
 | Inherent risk | Exposure before considering safeguards | Score 0 to 100, plus a tier |
 | Evidence confidence | How well the available evidence supports the claims | high, medium, low, or none |
 | Residual risk | Exposure remaining after supported safeguards | A tier, with a stated reason |
+| Policy outcome | Whether the intake matches a hard restriction in the org policy | `prohibited` or `not_prohibited`, citing the restriction id and policy version |
 
-These are never combined into one number.
+The first three are never combined into one number. The policy outcome is not a tier and does not add points.
 
 ## Inputs and inherent risk points
 
@@ -24,12 +27,15 @@ These are never combined into one number.
 | Model training on customer data | INH-TRAIN | no 0, yes 10, unknown (only when AI use is not none) |
 | External exposure | INH-EXPO | internal_only 0, customer_facing 5, unknown |
 | Retention and deletion | (escalation only) | documented, undocumented, unknown |
+| Decisions affecting people | (policy check, no points) | no, yes, unknown |
 
-An `unknown` value adds no points and is listed under missing information. Any unknown makes the result provisional. When provisional, the inherent tier and residual risk are both reported as undetermined, and the partial score is shown for reference only. Unknown is never treated as proof of safety or failure. An unknown does not, by itself, open a deeper assessment. Which unknowns escalate is defined by the rules below and explained under Proportionality.
+`decisions_affecting_people` asks whether the AI makes fully automated decisions about people's eligibility, safety, or similar outcomes, with no human review. It uses the same yes/no/unknown answers as model training. It is not an inherent-risk factor. `yes` is handled by the org policy, not by the point table. `unknown` adds no points, is listed under missing information, and fires ESC-009.
+
+An `unknown` value adds no points and is listed under missing information. Any unknown makes the result provisional. When provisional, the inherent tier and residual risk are both reported as undetermined, and the partial score is shown for reference only. Unknown is never treated as proof of safety or failure, and it is never a prohibited value. An unknown does not, by itself, open a deeper assessment. Which unknowns escalate is defined by the rules below and explained under Proportionality.
 
 When the questionnaire and technical integration details disagree, scoring uses the technical detail, both values are kept, and the conflict is recorded.
 
-Tiers: low 0 to 29, moderate 30 to 54, high 55 to 74, critical 75 to 100. Why those cuts are where they are is under Proportionality. The numbers were not moved in 0.2.0.
+Tiers: low 0 to 29, moderate 30 to 54, high 55 to 74, critical 75 to 100. Why those cuts are where they are is under Proportionality. The numbers were not moved in 0.2.0 or 0.3.0.
 
 ## Evidence statuses
 
@@ -48,7 +54,26 @@ Confidence is the average weight across all claims: high at 0.75 or above, mediu
 
 ## Residual risk
 
-Residual risk equals the inherent tier, lowered by one tier only when all of these are true: the result is not provisional, confidence is high, no claim is conflicting, and no escalation rule fired. It is never lowered by more than one tier.
+Residual risk equals the inherent tier, lowered by one tier only when all of these are true: the result is not provisional, confidence is high, no claim is conflicting, and no escalation rule fired. It is never lowered by more than one tier. A prohibited policy outcome does not block that reduction and does not raise the tier.
+
+## Organization policy outcome
+
+The profile is one file, `app/data/org_policy.json`. This prototype is not multi-tenant. The current profile is illustrative policy `ORG-AI-USE` version `1.0.0`.
+
+| Kind | Id | What it does in this version |
+| --- | --- | --- |
+| Hard restriction | HR-001 | Fully automated AI decisions about eligibility, safety, or similar outcomes with no human review. `decisions_affecting_people` = `yes`. The result is `prohibited` and cites HR-001 plus the policy id and version. |
+| Required contract clause | CC-001 | No vendor model training on company or customer data. Copied onto every result with `enforced: false`. |
+
+The starter profile stops there. Another restriction or clause is another object in the same list. This version does not add a second restriction.
+
+A `yes` answer matches HR-001 even when AI use is `none`. The engine does not reconcile that contradiction. Both answers stay visible for the reviewer.
+
+`unknown` does not match HR-001. The result stays `not_prohibited`, becomes provisional, and opens ESC-009 because that unknown can hide the restriction at any data sensitivity.
+
+A matched restriction sets the review path to escalated review. It does not fire an escalation rule, so it does not change the residual-tier calculation. A moderate inherent score can still show a lowered residual tier and a prohibited policy outcome at the same time. The score is not a clearance, and `not_prohibited` is not an approval.
+
+CC-001 is listed so a reviewer can see the clause the organization wants in a contract. This version does not compare it to the intake. A `yes` on model training still follows INH-TRAIN and, when the other conditions are met, ESC-004. That is the risk rule set, not clause enforcement.
 
 ## Mandatory escalation rules
 
@@ -136,6 +161,16 @@ The same words are stored in `app/data/risk_rules.json`.
 
 **Next step.** Re-run the assessment. Autonomous use follows the AI impact assessment. Assistive or autonomous use with training set to yes or unknown follows the model-training assessment. Confirmed absence of AI does not open either assessment.
 
+### ESC-009 Affected-decision determination
+
+**Condition.** Whether the AI makes fully automated decisions about people's eligibility, safety, or similar outcomes, with no human review, is unknown.
+
+**Owner role.** Business owner.
+
+**Required output.** Whether the AI makes those fully automated decisions with no human review, answered yes or no.
+
+**Next step.** Re-run the assessment with yes or no. Yes matches the org policy hard restriction. Unknown is not treated as no.
+
 ## Proportionality
 
 The tier and the escalation path answer different questions. The tier is how much exposure the known answers add up to. An escalation opens one named assessment when a specific condition is met. A low tier does not skip an escalation, and a missing answer does not open every deeper assessment.
@@ -164,7 +199,7 @@ Point values are multiples of 5, and the largest single factor is restricted dat
 
 **ESC-004** treats training unknown as the condition that needs the assessment, and treats an explicit no as enough to stay off this path. Unknown is not converted into no.
 
-**ESC-005** escalates only when data sensitivity itself is unknown. That unknown can hide every data-dependent rule, so the next assessment is classification, performed by the business owner, and the other deeper assessments wait for the re-run. A fully blank intake fires ESC-005 only. The other blank fields stay in missing information, the tier stays undetermined, and the review path stays escalated. It does not open an AI impact assessment before anyone knows what the data is.
+**ESC-005** escalates only when data sensitivity itself is unknown. That unknown can hide every data-dependent rule, so the next assessment is classification, performed by the business owner, and the other deeper assessments wait for the re-run. A scoring intake with every core answer unknown, and with the policy answer set to no, fires ESC-005 only. If the policy answer is also unknown, ESC-009 fires as well. The other blank fields stay in missing information, the tier stays undetermined, and the review path stays escalated. It does not open an AI impact assessment before anyone knows what the data is.
 
 **ESC-006** still fires when the score is low. Confidential data with no integration and undocumented retention scores 25 (low) and escalates. The condition is an unaddressed retention obligation on sensitive data, not a high total. Unknown or undocumented retention on public or internal data does not fire this rule.
 
@@ -172,7 +207,11 @@ Point values are multiples of 5, and the largest single factor is restricted dat
 
 **ESC-008** fires when AI use is unknown and the data is confidential or restricted, because that unknown can hide ESC-002 or ESC-004. Unknown AI use on public or internal data cannot meet either rule, both of which require confidential or restricted data. A public customer FAQ with AI use left blank stays provisional under standard review. It does not open an AI impact assessment.
 
+**ESC-009** fires whenever the decisions-affecting-people answer is unknown, including on public or internal data. HR-001 does not depend on data sensitivity, so this unknown is not narrowed the way ESC-007 and ESC-008 are. Answering yes does not fire ESC-009. Yes is the policy outcome, not a score escalation. Answering no fires nothing from this rule.
+
 **External exposure** unknown never escalates. It is worth at most 5 points, and it still makes the result provisional.
+
+**HR-001** is not an escalation rule. It does not add points and it does not stop a one-tier residual reduction. It does move the review path to escalated review, because a prohibited use should not be presented as routine standard review. The path change is routing. The tier is still the tier.
 
 ### What standard review means for a provisional result
 
@@ -190,15 +229,35 @@ Point values are multiples of 5, and the largest single factor is restricted dat
 | Restricted archive, read_only, no AI, documented retention, verified | 45, moderate | high | low | none | standard_review |
 | Confidential data, assistive AI, training no, read_only, verified | 45, moderate | high | low | none | standard_review |
 | Data sensitivity unknown, otherwise the lower-risk baseline | 10, undetermined | high | undetermined | ESC-005 | escalated_review |
+| Decisions affecting people unknown, otherwise the lower-risk baseline | 20, undetermined | high | undetermined | ESC-009 | escalated_review |
+| Decisions affecting people yes, assistive AI, internal, read_only, training no, one verified claim | 30, moderate | high | low | none | escalated_review, policy prohibited HR-001 |
+
+Unless a row says otherwise, `decisions_affecting_people` is `no`. The policy outcome is then `not_prohibited` under `ORG-AI-USE` 1.0.0, and the review path is the path in the table.
 
 ## Outputs
 
-Every evaluation returns: the rule set version, the inherent score, tier, and contributing factors with rule IDs, whether the result is provisional, evidence confidence with counts per status, the residual tier and its reason, fired escalation rules with their reasons and the assessment type, owner role, required output, and next step, missing information, conflicts, and a review path of standard_review or escalated_review. The engine never returns an approval. A person makes every disposition.
+Every evaluation returns: the rule set version, the inherent score, tier, and contributing factors with rule IDs, whether the result is provisional, evidence confidence with counts per status, the residual tier and its reason, fired escalation rules with their reasons and the assessment type, owner role, required output, and next step, missing information, conflicts, the org policy id and version, the policy outcome, listed contract clauses with `enforced: false`, and a review path of standard_review or escalated_review. The engine never returns an approval or a rejection. A prohibited outcome is not a rejection. A person makes every disposition.
+
+## Human disposition
+
+On a saved risk, a person records one of three dispositions:
+
+- approve
+- approve with conditions, with the conditions stored as text
+- reject
+
+The record stores the rationale, the decider's name or role, a UTC timestamp from the server clock, the policy id and version, and the rule set version. Those last two are copied from the saved assessment. The form does not ask the reviewer to type them. Each save writes a workflow event. Saving again replaces the current decision and writes another event. The earlier rationale is not kept as a second row. The local event log is not tamper-proof.
+
+A prohibited result cannot be approved, with or without conditions, unless the reviewer records an exception rationale. Rejection does not require one. An exception rationale is rejected when the result is not prohibited, and it is rejected on a rejection, so the field means only "proceed despite this restriction."
+
+The exception is allowed on purpose. The policy check makes the restriction visible and traceable. It does not decide the case, and it is not an automatic block. The person remains the final decider. The exception does not change the policy outcome. The assessment stays prohibited, and the decision shows both the restriction and the recorded reason for proceeding.
+
+This prototype has no non-overridable restriction. An organization that needs a legal ban to be impossible to override inside the tool would configure that separately. It is not implemented here. The recorded decider is not checked against an identity system or against the restriction's owner role. A saved result that has no policy reference cannot receive a decision until the scenario is evaluated again.
 
 ## Invalid input
 
-Missing required fields or values outside the allowed lists are rejected with an error naming each problem field. The engine does not guess or substitute values. An escalation rule that omits its assessment type, owner role, required output, or next step is rejected before scoring, so a deeper assessment cannot fire without a defined follow-up.
+Missing required fields or values outside the allowed lists are rejected with an error naming each problem field. The engine does not guess or substitute values. An escalation rule that omits its assessment type, owner role, required output, or next step is rejected before scoring, so a deeper assessment cannot fire without a defined follow-up. A policy that lists `unknown` as a prohibited value, or that marks a contract clause enforced, is rejected before scoring.
 
 ## Repeatability
 
-The same input and the same rule set version always produce the same output. An assessment stored under rule set 0.1.0 keeps that version on its record. Re-running the same answers under 0.2.0 can change the review path where ESC-005 used to match and no longer does.
+The same input and the same rule set version always produce the same output. An assessment stored under an older rule set keeps that version on its record. Re-running 0.1.0 answers under 0.2.0 can change the review path where ESC-005 used to match and no longer does. Re-running under 0.3.0 requires `decisions_affecting_people`. The same other answers with that field set to `no` keep the 0.2.0 score and the same ESC-001 through ESC-008 results. The decision timestamp uses the server clock and is not part of the deterministic score.

@@ -59,7 +59,7 @@ def test_unknown_route_returns_404(client):
 def test_dashboard_shows_honest_empty_state(client):
     response = client.get("/")
     assert response.status_code == 200
-    assert b"Three repeatable scenarios" in response.data
+    assert b"Repeatable scenarios" in response.data
     assert b"Synthetic scenarios" in response.data
     assert b"Synthetic data only" in response.data
 
@@ -135,7 +135,11 @@ def test_methodology_page_lists_escalation_assessments(client):
     response = client.get("/methodology")
     assert response.status_code == 200
     body = response.data
-    assert b"0.2.0" in body
+    assert b"illustrative rule set 0.3.0" in body
+    assert b"ORG-AI-USE" in body
+    assert b"HR-001" in body
+    assert b"Listed, not enforced" in body
+    assert b"CC-001" in body
     assert b"Data-classification review" in body
     assert b"Integration access review" in body
     assert b"AI use determination" in body
@@ -158,6 +162,77 @@ def test_post_without_origin_or_referer_is_rejected(client):
 def test_same_site_referer_is_accepted_when_origin_is_absent(client):
     response = client.post("/demo/high-risk-ai/register", headers={"Referer": "http://localhost/demo/high-risk-ai"})
     assert response.status_code == 302
+
+
+def _register(client, scenario_id):
+    response = client.post(f"/demo/{scenario_id}/register", headers=SAME_ORIGIN)
+    assert response.status_code == 302
+    return response.headers["Location"].rsplit("/", 1)[-1]
+
+
+def test_prohibited_result_page_requires_an_exception_to_approve(client):
+    risk_id = _register(client, "prohibited-ai-decisions")
+    detail = client.get(f"/risks/{risk_id}")
+    assert detail.status_code == 200
+    assert b"Prohibited" in detail.data
+    assert b"HR-001" in detail.data
+    assert b"ORG-AI-USE" in detail.data
+    assert b"Listed, not enforced" in detail.data
+    assert b"Moderate" in detail.data and b"Low" in detail.data
+    rejected = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "approve", "rationale": "Looks fine", "decider": "GRC analyst",
+        "conditions": "", "exception_rationale": "",
+    }, headers=SAME_ORIGIN)
+    assert rejected.status_code == 400
+    assert b"exception" in rejected.data.lower()
+    assert b"Looks fine" not in client.get(f"/risks/{risk_id}").data
+    accepted = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "approve",
+        "rationale": "The output is advisory.",
+        "decider": "Reviewer <role>",
+        "conditions": "",
+        "exception_rationale": "A named officer decides each eligibility case.",
+    }, headers=SAME_ORIGIN)
+    assert accepted.status_code == 302
+    page = client.get(accepted.headers["Location"])
+    body = page.data
+    assert b"Reviewer &lt;role&gt;" in body
+    assert b"A named officer decides each eligibility case." in body
+    assert b"ORG-AI-USE" in body
+    assert b"0.3.0" in body
+    assert b"Decision Recorded" in body
+    assert b"Prohibited" in body
+
+
+def test_prohibited_result_can_be_rejected_without_an_exception(client):
+    risk_id = _register(client, "prohibited-ai-decisions")
+    response = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "reject", "rationale": "The use is outside the policy.",
+        "decider": "AI governance reviewer", "conditions": "", "exception_rationale": "",
+    }, headers=SAME_ORIGIN)
+    assert response.status_code == 302
+    page = client.get(response.headers["Location"])
+    assert b"Reject" in page.data
+    assert b"The use is outside the policy." in page.data
+
+
+def test_standard_result_can_be_approved_without_an_exception(client):
+    risk_id = _register(client, "evidence-supported")
+    response = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "approve", "rationale": "No restriction matched.",
+        "decider": "GRC analyst", "conditions": "", "exception_rationale": "",
+    }, headers=SAME_ORIGIN)
+    assert response.status_code == 302
+    assert b"No restriction matched." in client.get(f"/risks/{risk_id}").data
+
+
+def test_decision_post_without_origin_is_rejected(client):
+    risk_id = _register(client, "evidence-supported")
+    response = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "approve", "rationale": "Should not save.", "decider": "GRC analyst",
+    })
+    assert response.status_code == 403
+    assert b"Should not save." not in client.get(f"/risks/{risk_id}").data
 
 
 def test_completing_an_action_requires_notes(client, app):

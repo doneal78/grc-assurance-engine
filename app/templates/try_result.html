@@ -14,7 +14,7 @@
 <section class="content-section"><h2>Remediation ticket</h2>
 {% if payload %}<p>In production, this payload would open a remediation ticket in a system such as ServiceNow. Here it is only displayed. Nothing is sent.</p>
 <pre class="payload"><code>{{ payload|tojson(indent=2) }}</code></pre>
-{% else %}<p>No ticket needed: no escalation rule fired and no evidence gap needs follow-up. A person still reviews the result.</p>{% endif %}
+{% else %}<p>No ticket needed: no escalation rule fired, no hard restriction matched, and no evidence gap needs follow-up. A person still reviews the result.</p>{% endif %}
 </section>
 
 <section class="content-section action-panel"><h2>Try another</h2>

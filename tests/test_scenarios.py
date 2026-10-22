@@ -9,7 +9,7 @@ from app.services.scenario_runner import ScenarioNotFoundError, list_scenarios, 
 
 def test_scenarios_are_labeled_synthetic_and_have_expected_count():
     scenarios = list_scenarios()
-    assert len(scenarios) == 3
+    assert len(scenarios) == 4
     assert all(item["synthetic_data"] for item in scenarios)
 
 

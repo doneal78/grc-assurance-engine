@@ -19,6 +19,7 @@ def make(**overrides):
         "model_training_on_customer_data": "no",
         "external_exposure": "internal_only",
         "retention_deletion": "documented",
+        "decisions_affecting_people": "no",
         "claims": [
             {"claim_id": "C1", "statement": "MFA is enforced", "evidence_status": "verified"},
             {"claim_id": "C2", "statement": "Data is encrypted at rest", "evidence_status": "verified"},
@@ -153,7 +154,7 @@ def test_same_input_same_output_and_input_unchanged():
 
 
 def test_result_records_rule_set_version():
-    assert evaluate(make())["rule_set_version"] == RULES["rule_set_version"] == "0.2.0"
+    assert evaluate(make())["rule_set_version"] == RULES["rule_set_version"] == "0.3.0"
 
 
 ESCALATION_DETAIL_FIELDS = ("assessment_type", "owner_role", "required_output", "next_step")

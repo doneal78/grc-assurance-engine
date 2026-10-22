@@ -20,7 +20,7 @@ def form(**overrides):
     base = {"vendor_name": "Northwind Notes", "data_sensitivity": "internal",
             "integration_permissions": "read_only", "ai_use": "none",
             "model_training_on_customer_data": "no", "external_exposure": "internal_only",
-            "retention_deletion": "documented"}
+            "retention_deletion": "documented", "decisions_affecting_people": "no"}
     base.update({f"evidence_{topic}": "independent_verified" for topic in TOPICS})
     base.update(overrides)
     return base
@@ -63,6 +63,36 @@ def test_contradicting_evidence_escalates_and_drafts_a_ticket():
     assert "C-INTEGRATION-PERMISSIONS" in [item["claim_id"] for item in payload["evidence_requests"]]
 
 
+def test_decisions_that_affect_people_are_prohibited_without_changing_the_score():
+    allowed = run(ai_use="assistive", decisions_affecting_people="no")
+    blocked = run(ai_use="assistive", decisions_affecting_people="yes")
+    assert allowed["risk"]["inherent"] == blocked["risk"]["inherent"]
+    assert blocked["risk"]["policy_outcome"]["status"] == "prohibited"
+    assert blocked["risk"]["policy_outcome"]["restrictions"][0]["restriction_id"] == "HR-001"
+    assert remediation_payload(blocked)["priority"] == "Policy restriction — human decision required"
+    assert remediation_payload(blocked)["restrictions"] == ["HR-001"]
+    assert remediation_payload(allowed) is None
+    titles = [event["title"] for event in workflow_events(blocked)]
+    assert "Policy check" in titles
+
+
+def test_public_form_asks_the_policy_question(gated_client):
+    response = gated_client.get("/try/")
+    assert response.status_code == 200
+    assert b"fully automated decisions" in response.data
+    assert b"no human review" in response.data
+
+
+def test_public_yes_answer_shows_the_restriction(gated_client):
+    response = gated_client.post("/try/assess", data=form(ai_use="assistive", decisions_affecting_people="yes"),
+                                 headers=SAME_ORIGIN)
+    assert response.status_code == 200
+    assert b"HR-001" in response.data
+    assert b"ORG-AI-USE" in response.data
+    assert b"Listed, not enforced" in response.data
+    assert b"Not Prohibited" not in response.data
+
+
 def test_unknown_answers_are_undetermined_not_low():
     r = run(data_sensitivity="unknown")
     assert r["risk"]["inherent"]["tier"] == "undetermined"
@@ -71,7 +101,7 @@ def test_unknown_answers_are_undetermined_not_low():
 
 def test_event_log_lists_steps_in_order():
     titles = [e["title"] for e in workflow_events(run(evidence_audit_logging="none"))]
-    assert titles == ["Intake received", "Evidence validated", "Risk evaluated",
+    assert titles == ["Intake received", "Evidence validated", "Risk evaluated", "Policy check",
                       "Escalation check", "Controls mapped", "Remediation ticket drafted"]
 
 
