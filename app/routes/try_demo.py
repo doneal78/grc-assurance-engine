@@ -9,8 +9,8 @@ from datetime import date
 from flask import Blueprint, abort, render_template, request
 
 from app.services.intake_builder import (
-    CLAIM_STATEMENTS, EVIDENCE_OPTIONS, IntakeError, build_intake, field_choices,
-    remediation_payload, run_intake, workflow_events,
+    CLAIM_STATEMENTS, CLAUSE_EVIDENCE_OPTIONS, EVIDENCE_OPTIONS, IntakeError, build_intake,
+    clause_evidence_field, field_choices, remediation_payload, run_intake, workflow_events,
 )
 from app.services.org_policy import load_org_policy
 from app.services.scenario_runner import ScenarioNotFoundError, list_scenarios, run_scenario
@@ -19,9 +19,13 @@ bp = Blueprint("try_demo", __name__, url_prefix="/try")
 
 
 def _form_context(form=None, problems=None):
+    policy = load_org_policy()
     return {"scenarios": list_scenarios(), "choices": field_choices(),
             "evidence_options": EVIDENCE_OPTIONS, "claim_topics": CLAIM_STATEMENTS,
-            "policy_fields": load_org_policy()["intake_fields"],
+            "policy_fields": policy["intake_fields"],
+            "contract_clauses": policy["required_contract_clauses"],
+            "clause_evidence_options": CLAUSE_EVIDENCE_OPTIONS,
+            "clause_evidence_field": clause_evidence_field,
             "form": form or {}, "problems": problems or []}
 
 

@@ -10,7 +10,7 @@ Nothing here writes to the database.
 from datetime import timedelta
 
 from app.services.control_mapper import map_claims
-from app.services.evidence_validator import validate
+from app.services.evidence_validator import validate_assessment
 from app.services.org_policy import load_org_policy
 from app.services.risk_engine import evaluate, load_rules
 
@@ -39,6 +39,15 @@ EVIDENCE_OPTIONS = {
     "not_reviewed": "Independent report, not reviewed yet",
     "expired": "Independent report, older than its freshness limit",
     "contradicts": "Configuration export that contradicts the claim",
+    "none": "Nothing provided",
+}
+
+CLAUSE_EVIDENCE_OPTIONS = {
+    "independent_verified": "Reviewed contract excerpt, not from the vendor",
+    "vendor_statement": "Vendor's own contract statement, reviewed",
+    "not_reviewed": "Contract excerpt, not reviewed yet",
+    "expired": "Contract excerpt, older than its freshness limit",
+    "contradicts": "Contract excerpt that contradicts the clause",
     "none": "Nothing provided",
 }
 
@@ -78,6 +87,10 @@ def field_choices():
     return choices
 
 
+def clause_evidence_field(clause_id):
+    return f"evidence_clause_{clause_id}"
+
+
 def _ids(topic):
     suffix = topic.upper().replace("_", "-")
     return f"C-{suffix}", f"E-{suffix}"
@@ -113,6 +126,35 @@ def _evidence_record(topic, option, as_of):
     return None  # "none": the claim has no evidence records
 
 
+def _clause_evidence_record(clause, option, as_of):
+    """Build one synthetic contract-clause record dated relative to the evaluation date."""
+    evidence_id = f"E-{clause['clause_id']}"
+    claim_id = clause["clause_id"]
+
+    def days_ago(days):
+        return (as_of - timedelta(days=days)).isoformat()
+
+    review = {"reviewer": "Demo reviewer", "reviewed_on": days_ago(5), "relevant": True,
+              "in_scope": True, "supports_claim": True, "contradicts_claim": False}
+    base = {"evidence_id": evidence_id, "claim_id": claim_id,
+            "artifact_name": f"Contract excerpt for {clause['clause_id']}",
+            "artifact_type": "contract_clause"}
+    if option == "independent_verified":
+        return {**base, "source": "internal_observation", "collection_date": days_ago(120), "review": review}
+    if option == "not_reviewed":
+        return {**base, "source": "internal_observation", "collection_date": days_ago(60)}
+    if option == "expired":
+        return {**base, "source": "internal_observation", "collection_date": days_ago(500), "review": review}
+    if option == "vendor_statement":
+        return {**base, "artifact_name": f"Vendor contract statement for {clause['clause_id']}",
+                "source": "vendor", "collection_date": days_ago(30), "review": review}
+    if option == "contradicts":
+        return {**base, "artifact_name": f"Contract excerpt contradicting {clause['clause_id']}",
+                "source": "internal_observation", "collection_date": days_ago(7),
+                "review": {**review, "contradicts_claim": True}}
+    return None  # "none": the clause has no evidence records
+
+
 def build_intake(form, as_of):
     """Validate the intake form and return claims, evidence, and assessment inputs."""
     problems = []
@@ -144,6 +186,16 @@ def build_intake(form, as_of):
         if record is not None:
             evidence.append(record)
 
+    for clause in load_org_policy()["required_contract_clauses"]:
+        field = clause_evidence_field(clause["clause_id"])
+        option = form.get(field, "")
+        if option not in CLAUSE_EVIDENCE_OPTIONS:
+            problems.append(f"Evidence for {clause['clause_id']}: choose one of the listed options.")
+            continue
+        record = _clause_evidence_record(clause, option, as_of)
+        if record is not None:
+            evidence.append(record)
+
     if problems:
         raise IntakeError(problems)
     return {"vendor_name": vendor_name, "assessment": assessment, "claims": claims, "evidence": evidence}
@@ -151,8 +203,11 @@ def build_intake(form, as_of):
 
 def run_intake(intake, as_of):
     """Run a validated intake through the same services the full application uses."""
-    evidence_result = validate(intake["claims"], intake["evidence"], as_of)
-    risk = evaluate({**intake["assessment"], "claims": evidence_result["claims"]})
+    policy = load_org_policy()
+    checked = validate_assessment(intake["claims"], intake["evidence"], as_of,
+                                  policy["required_contract_clauses"])
+    risk = evaluate({**intake["assessment"], "claims": checked["claims"]},
+                    clause_check=checked["clause_check"])
     return {
         "scenario_id": None,
         "name": intake["vendor_name"],
@@ -161,19 +216,25 @@ def run_intake(intake, as_of):
         "as_of": as_of.isoformat(),
         "scenario_set_version": None,
         "assessment_inputs": intake["assessment"],
-        "evidence_policy_version": evidence_result["evidence_policy_version"],
-        "claims": evidence_result["claims"],
+        "evidence_policy_version": checked["evidence_policy_version"],
+        "claims": checked["claims"],
         "risk": risk,
-        "mappings": map_claims(evidence_result["claims"]),
+        "mappings": map_claims(checked["claims"]),
     }
+
+
+def _clause_gaps(risk):
+    clauses = risk["policy"]["required_contract_clauses"]
+    return [clause for clause in clauses if clause.get("evidence_status") in GAP_STATUSES]
 
 
 def remediation_payload(result):
     """A mock ServiceNow-style ticket payload, or None when no follow-up is needed."""
     risk = result["risk"]
     gaps = [c for c in result["claims"] if c["evidence_status"] in GAP_STATUSES]
+    clause_gaps = _clause_gaps(risk)
     prohibited = risk["policy_outcome"]["status"] == "prohibited"
-    if not risk["escalations"] and not gaps and not prohibited:
+    if not risk["escalations"] and not gaps and not prohibited and not clause_gaps:
         return None
     if prohibited:
         priority = "Policy restriction — human decision required"
@@ -198,6 +259,12 @@ def remediation_payload(result):
              "request": f"Provide current, reviewable evidence for: {c['statement']}"}
             for c in gaps
         ],
+        "contract_clauses": [
+            {"clause_id": clause["clause_id"], "status": clause["evidence_status"],
+             "request": (f"Provide current, reviewable evidence for required clause {clause['clause_id']}: "
+                         f"{clause['text']}")}
+            for clause in clause_gaps
+        ],
         "related_controls": [m["control_id"] for m in result["mappings"]],
         "rule_set_version": risk["rule_set_version"],
         "evidence_policy_version": result["evidence_policy_version"],
@@ -216,13 +283,18 @@ def workflow_events(result):
         escalation = "No escalation rule fired. Human review is still required."
     policy = risk["policy"]
     outcome = risk["policy_outcome"]
+    clause_summary = ", ".join(
+        f"{clause['clause_id']} {clause['evidence_status'].replace('_', ' ')}"
+        for clause in policy["required_contract_clauses"]
+    ) or "none listed"
     if outcome["status"] == "prohibited":
         ids = ", ".join(item["restriction_id"] for item in outcome["restrictions"])
         policy_detail = (f"Prohibited under {policy['policy_id']} {policy['policy_version']}: {ids}. "
+                         f"Required contract clauses: {clause_summary}. "
                          "The score and residual tier are unchanged by this outcome.")
     else:
         policy_detail = (f"No hard restriction matched ({policy['policy_id']} {policy['policy_version']}). "
-                         "Listed contract clauses were not checked.")
+                         f"Required contract clauses: {clause_summary}.")
     steps = [
         ("Intake received", f"{len(result['claims'])} claims recorded for {result['name']}."),
         ("Evidence validated", f"Evidence policy {result['evidence_policy_version']}, evaluated as of "

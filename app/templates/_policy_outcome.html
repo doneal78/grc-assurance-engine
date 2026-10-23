@@ -26,12 +26,34 @@
   {% endif %}
   <h3>Required contract clauses</h3>
   {% if evaluation.policy.required_contract_clauses %}
-  <ul>
-    {% for clause in evaluation.policy.required_contract_clauses %}
-    <li><code>{{ clause.clause_id }}</code> — {{ clause.title }}. {{ clause.text }} <span class="status status-draft">Listed, not enforced</span></li>
-    {% endfor %}
-  </ul>
-  <p class="muted">Clause enforcement is a later phase. A model-training answer still follows the risk rule set on its own.</p>
+  {% if evaluation.policy.clause_evidence_policy_version %}
+  <p class="muted">Checked with evidence policy {{ evaluation.policy.clause_evidence_policy_version }} as of {{ evaluation.policy.clause_checked_as_of }}. Verified is the assured state. A gap does not change the score and does not block a decision.</p>
+  {% endif %}
+  {% for clause in evaluation.policy.required_contract_clauses %}
+  <article class="claim-card">
+    <div class="claim-heading">
+      <h3><code>{{ clause.clause_id }}</code> — {{ clause.title }}</h3>
+      {% if clause.evidence_status %}
+      <span class="status status-{{ clause.evidence_status|replace('_', '-') }}">{{ clause.evidence_status|replace('_', ' ')|title }}</span>
+      {% else %}
+      <span class="status status-draft">Listed, not enforced</span>
+      {% endif %}
+    </div>
+    <p>{{ clause.text }}</p>
+    {% if clause.evidence_status %}
+    <p class="muted">{{ clause.status_reason }}</p>
+    <p class="muted">Evidence basis</p>
+    {% if clause.evidence %}
+    <ul>{% for item in clause.evidence %}<li><code>{{ item.evidence_id }}</code> — {{ item.status|replace('_', ' ')|title }}: {{ item.reason }}</li>{% endfor %}</ul>
+    {% else %}
+    <p>No evidence records for this clause. This is an evidence gap, not a confirmed failure of the clause.</p>
+    {% endif %}
+    {% else %}
+    <p class="muted">This saved result lists the clause without an evidence check.</p>
+    {% endif %}
+  </article>
+  {% endfor %}
+  <p class="muted">The model-training answer still follows the risk rule set on its own. The clause status is not an approval.</p>
   {% else %}
   <p>No contract clauses are listed on this policy.</p>
   {% endif %}

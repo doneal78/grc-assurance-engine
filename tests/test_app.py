@@ -84,6 +84,20 @@ def test_high_risk_result_names_each_deeper_assessment(client):
     assert b"Retention and deletion review" in response.data
     assert b"Owner role" in response.data
     assert b"Next step" in response.data
+    assert b"CC-001" in response.data
+    assert b"No evidence records for this clause" in response.data
+
+
+def test_contract_clause_conflict_page_shows_the_evidence_basis(client):
+    response = client.get("/demo/contract-clause-conflict")
+    assert response.status_code == 200
+    assert b"CC-001" in response.data
+    assert b"Conflicting" in response.data
+    assert b"E-CC-001-VENDOR" in response.data
+    assert b"E-CC-001-CONFLICT" in response.data
+    assert b"Evidence basis" in response.data
+    assert b"Moderate" in response.data
+    assert b"Not Prohibited" in response.data
 
 
 def test_unknown_demo_scenario_returns_404(client):
@@ -138,7 +152,8 @@ def test_methodology_page_lists_escalation_assessments(client):
     assert b"illustrative rule set 0.3.0" in body
     assert b"ORG-AI-USE" in body
     assert b"HR-001" in body
-    assert b"Listed, not enforced" in body
+    assert b"Checked against evidence" in body
+    assert b"does not block a human decision" in body
     assert b"CC-001" in body
     assert b"Data-classification review" in body
     assert b"Integration access review" in body
@@ -177,7 +192,9 @@ def test_prohibited_result_page_requires_an_exception_to_approve(client):
     assert b"Prohibited" in detail.data
     assert b"HR-001" in detail.data
     assert b"ORG-AI-USE" in detail.data
-    assert b"Listed, not enforced" in detail.data
+    assert b"E-CC-001" in detail.data
+    assert b"Evidence basis" in detail.data
+    assert b"Listed, not enforced" not in detail.data
     assert b"Moderate" in detail.data and b"Low" in detail.data
     rejected = client.post(f"/risks/{risk_id}/decision", data={
         "disposition": "approve", "rationale": "Looks fine", "decider": "GRC analyst",

@@ -32,7 +32,7 @@ def test_starter_policy_is_one_restriction_and_one_clause():
     assert "no human reviews the decision" in restriction["description"]
     assert "eligibility" in restriction["description"] and "safety" in restriction["description"]
     clause = policy["required_contract_clauses"][0]
-    assert clause["enforced"] is False
+    assert clause["enforced"] is True
     assert "company or customer data" in clause["text"]
     assert len(policy["intake_fields"]) == 1
 
@@ -40,11 +40,13 @@ def test_starter_policy_is_one_restriction_and_one_clause():
 def test_every_result_carries_the_policy_reference_and_lists_clauses():
     result = evaluate(make())
     assert result["policy"]["policy_id"] == "ORG-AI-USE"
-    assert result["policy"]["policy_version"] == "1.0.0"
+    assert result["policy"]["policy_version"] == "1.1.0"
     assert result["policy"]["status"] == "illustrative"
     clauses = result["policy"]["required_contract_clauses"]
     assert [clause["clause_id"] for clause in clauses] == ["CC-001"]
-    assert all(clause["enforced"] is False for clause in clauses)
+    assert all(clause["enforced"] is True for clause in clauses)
+    assert all(clause["evidence_status"] == "missing" for clause in clauses)
+    assert all(clause["status_reason"] == "No evidence provided." for clause in clauses)
     assert result["policy_outcome"]["status"] == "not_prohibited"
     assert result["policy_outcome"]["restrictions"] == []
     assert result["policy_outcome"]["answers"][0]["value"] == "no"
@@ -64,7 +66,7 @@ def test_prohibition_cites_the_restriction_and_does_not_change_the_score():
     match = blocked["policy_outcome"]["restrictions"][0]
     assert match["restriction_id"] == "HR-001"
     assert match["policy_id"] == blocked["policy"]["policy_id"]
-    assert match["policy_version"] == blocked["policy"]["policy_version"] == "1.0.0"
+    assert match["policy_version"] == blocked["policy"]["policy_version"] == "1.1.0"
     assert match["observed_value"] == "yes"
     assert "approv" not in str(blocked).lower()
 
@@ -87,10 +89,12 @@ def test_unknown_is_not_prohibited_and_opens_esc_009():
     assert result["review_path"] == "escalated_review"
 
 
-def test_contract_clause_is_listed_and_training_still_scores_on_its_own():
+def test_contract_clause_is_missing_without_evidence_and_training_still_scores():
     result = evaluate(make(model_training_on_customer_data="yes"))
     assert result["policy_outcome"]["status"] == "not_prohibited"
-    assert result["policy"]["required_contract_clauses"][0]["enforced"] is False
+    clause = result["policy"]["required_contract_clauses"][0]
+    assert clause["enforced"] is True
+    assert clause["evidence_status"] == "missing"
     training = next(factor for factor in result["inherent"]["factors"] if factor["rule_id"] == "INH-TRAIN")
     assert training["points"] == 10
     assert [item["rule_id"] for item in result["escalations"]] == []
@@ -119,10 +123,10 @@ def test_policy_cannot_treat_unknown_as_prohibited():
         evaluate(make(), policy=policy)
 
 
-def test_clause_marked_enforced_is_rejected():
+def test_clause_marked_not_enforced_is_rejected():
     policy = copy.deepcopy(load_org_policy())
-    policy["required_contract_clauses"][0]["enforced"] = True
-    with pytest.raises(ValueError, match="clause enforcement is not implemented"):
+    policy["required_contract_clauses"][0]["enforced"] = False
+    with pytest.raises(ValueError, match="enforced must be true"):
         evaluate(make(), policy=policy)
 
 
@@ -143,3 +147,45 @@ def test_a_second_configured_restriction_is_cited_without_changing_points():
     assert allowed["inherent"] == blocked["inherent"]
     assert [item["restriction_id"] for item in blocked["policy_outcome"]["restrictions"]] == ["HR-001", "HR-002"]
     assert blocked["policy_outcome"]["status"] == "prohibited"
+
+
+def test_a_second_required_clause_is_checked_without_changing_points():
+    policy = copy.deepcopy(load_org_policy())
+    policy["required_contract_clauses"].append({
+        "clause_id": "CC-002",
+        "title": "Second illustrative clause",
+        "text": "The vendor must delete company data on request.",
+        "enforced": True,
+    })
+    bare = evaluate(make(), policy=policy)
+    checked = evaluate(make(), policy=policy, clause_check={
+        "evidence_policy_version": "0.2.0",
+        "as_of": "2026-10-14",
+        "clauses": [
+            {"clause_id": "CC-001", "evidence_status": "self_attested",
+             "status_reason": "Best usable evidence status is self_attested.", "evidence": []},
+            {"clause_id": "CC-002", "evidence_status": "missing",
+             "status_reason": "No evidence provided.", "evidence": []},
+        ],
+    })
+    assert bare["inherent"] == checked["inherent"]
+    assert [item["clause_id"] for item in checked["policy"]["required_contract_clauses"]] == ["CC-001", "CC-002"]
+    assert [item["evidence_status"] for item in checked["policy"]["required_contract_clauses"]] == [
+        "self_attested", "missing"]
+    assert checked["policy"]["required_contract_clauses"][1]["text"].startswith("The vendor must delete")
+
+
+def test_duplicate_clause_id_is_rejected():
+    policy = copy.deepcopy(load_org_policy())
+    policy["required_contract_clauses"].append(dict(policy["required_contract_clauses"][0]))
+    with pytest.raises(ValueError, match="CC-001 is duplicated"):
+        evaluate(make(), policy=policy)
+
+
+def test_clause_check_must_cover_every_required_clause():
+    with pytest.raises(ValueError, match="unknown clause"):
+        evaluate(make(), clause_check={"clauses": [
+            {"clause_id": "CC-001", "evidence_status": "verified", "status_reason": "Checked.", "evidence": []},
+            {"clause_id": "CC-009", "evidence_status": "missing", "status_reason": "No evidence provided.",
+             "evidence": []},
+        ]})

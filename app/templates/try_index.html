@@ -47,6 +47,12 @@
     <label>{{ statement }}<select name="evidence_{{ topic }}">{% for key, text in evidence_options.items() %}<option value="{{ key }}"{% if form.get('evidence_' ~ topic) == key %} selected{% endif %}>{{ text }}</option>{% endfor %}</select></label>
     {% endfor %}
   </fieldset>
+  <fieldset class="evidence-fieldset">
+    <legend>What evidence supports each required contract clause?</legend>
+    {% for clause in contract_clauses %}
+    <label>{{ clause.clause_id }} — {{ clause.text }}<select name="{{ clause_evidence_field(clause.clause_id) }}">{% for key, text in clause_evidence_options.items() %}<option value="{{ key }}"{% if form.get(clause_evidence_field(clause.clause_id)) == key %} selected{% endif %}>{{ text }}</option>{% endfor %}</select></label>
+    {% endfor %}
+  </fieldset>
   <button class="button-link" type="submit">Run assessment</button>
 </form>
 <p class="muted">Evidence dates are set relative to today, so "older than its freshness limit" really is expired under the evidence policy. Try contradicting evidence, unknown answers, or high risk with perfect paperwork, and see which rules respond.</p>

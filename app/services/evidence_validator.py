@@ -2,7 +2,7 @@
 
 Plain Python with no Flask or database. The evaluation date is passed in,
 never read from the system clock, so results are reproducible.
-See docs/evidence-model.md.
+Required contract clauses use the same rules. See docs/evidence-model.md.
 """
 
 import json
@@ -116,4 +116,72 @@ def validate(claims, evidence, as_of, policy=None):
         results.append({**claim, "evidence_status": status, "status_reason": reason, "evidence": records})
     return {"evidence_policy_version": policy["evidence_policy_version"],
             "as_of": as_of.isoformat(), "claims": results}
+
+
+def validate_contract_clauses(clauses, evidence, as_of, policy=None):
+    """Check each required contract clause with the same rules as a claim.
+
+    Evidence for a clause uses the clause id as its claim_id. Records for
+    other claims are ignored. The status is the claim status from validate:
+    verified, self_attested, expired, not_reviewed, missing, or conflicting.
+    Verified is the assured state in this model. There is no separate
+    "assured" label.
+    """
+    claims = [{"claim_id": clause["clause_id"], "statement": clause["text"]} for clause in clauses]
+    clause_ids = {claim["claim_id"] for claim in claims}
+    linked = [record for record in evidence if record.get("claim_id") in clause_ids]
+    derived = validate(claims, linked, as_of, policy)
+    by_id = {item["claim_id"]: item for item in derived["claims"]}
+    results = []
+    for clause in clauses:
+        item = by_id[clause["clause_id"]]
+        results.append({
+            "clause_id": clause["clause_id"],
+            "title": clause["title"],
+            "text": clause["text"],
+            "enforced": True,
+            "evidence_status": item["evidence_status"],
+            "status_reason": item["status_reason"],
+            "evidence": item["evidence"],
+        })
+    return {"evidence_policy_version": derived["evidence_policy_version"],
+            "as_of": derived["as_of"], "clauses": results}
+
+
+def validate_assessment(claims, evidence, as_of, contract_clauses, policy=None):
+    """Validate claims and required contract clauses under one evidence policy.
+
+    A record whose claim_id is a clause id is clause evidence. Every other
+    record stays with the claims. A claim id must not reuse a clause id.
+    """
+    problems = []
+    if not isinstance(contract_clauses, list):
+        raise EvidenceInputError(["contract_clauses: must be a list"])
+    clause_ids = []
+    for clause in contract_clauses:
+        clause_id = clause.get("clause_id") if isinstance(clause, dict) else None
+        if not isinstance(clause_id, str) or not clause_id.strip():
+            problems.append("contract clause: clause_id is required")
+            continue
+        if clause_id in clause_ids:
+            problems.append(f"{clause_id}: duplicate clause_id")
+        clause_ids.append(clause_id)
+    claim_ids = [claim.get("claim_id") for claim in claims if isinstance(claim, dict)]
+    for clause_id in sorted(set(clause_ids) & set(claim_ids)):
+        problems.append(f"{clause_id}: claim_id collides with a contract clause id")
+    if problems:
+        raise EvidenceInputError(problems)
+
+    clause_id_set = set(clause_ids)
+    claim_evidence, clause_evidence = [], []
+    for record in evidence:
+        if record.get("claim_id") in clause_id_set:
+            clause_evidence.append(record)
+        else:
+            claim_evidence.append(record)
+    claim_result = validate(claims, claim_evidence, as_of, policy)
+    clause_check = validate_contract_clauses(contract_clauses, clause_evidence, as_of, policy)
+    return {"evidence_policy_version": claim_result["evidence_policy_version"],
+            "as_of": claim_result["as_of"], "claims": claim_result["claims"],
+            "clause_check": clause_check}
             

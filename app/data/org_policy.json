@@ -1,8 +1,8 @@
 {
   "policy_id": "ORG-AI-USE",
-  "policy_version": "1.0.0",
+  "policy_version": "1.1.0",
   "status": "illustrative",
-  "description": "Single-organization AI use policy for this portfolio prototype. The starter profile is one hard restriction and one required contract clause. Add another by appending to those lists. It is not an approved corporate policy, and it is not a multi-tenant policy store.",
+  "description": "Single-organization AI use policy for this portfolio prototype. The starter profile is one hard restriction and one required contract clause. Required clauses are checked against vendor evidence. Add another by appending to those lists. It is not an approved corporate policy, and it is not a multi-tenant policy store.",
   "intake_fields": [
     {
       "field": "decisions_affecting_people",
@@ -28,7 +28,7 @@
       "clause_id": "CC-001",
       "title": "No vendor model training on company or customer data",
       "text": "The vendor must not train or improve models on company or customer data.",
-      "enforced": false
+      "enforced": true
     }
   ]
 }

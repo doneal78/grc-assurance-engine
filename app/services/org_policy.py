@@ -1,7 +1,8 @@
 """Load the single organization AI-use policy.
 
 Plain Python. One profile is intentional: multi-tenant policy storage is out of
-scope. Required contract clauses are listed for reviewers and are not enforced.
+scope. Required contract clauses are checked against evidence by the evidence
+validator. This module only checks that the policy document is well formed.
 """
 
 import json
@@ -85,6 +86,7 @@ def validate_policy(policy, unknown_value):
     clauses = policy["required_contract_clauses"]
     if not isinstance(clauses, list):
         raise ValueError("required_contract_clauses must be a list")
+    seen_clauses = set()
     for clause in clauses:
         if not isinstance(clause, dict):
             raise ValueError("contract clause must be an object")
@@ -92,8 +94,13 @@ def validate_policy(policy, unknown_value):
         for key in ("clause_id", "title", "text"):
             if not _nonempty(clause.get(key)):
                 raise ValueError(f"{clause_id}: {key} must be a non-empty string")
-        if clause.get("enforced") is True:
-            raise ValueError(f"{clause_id}: clause enforcement is not implemented")
+        if clause_id in seen_clauses:
+            raise ValueError(f"{clause_id} is duplicated")
+        seen_clauses.add(clause_id)
+        if clause.get("enforced") is not True:
+            raise ValueError(
+                f"{clause_id}: required clauses are checked against evidence, so enforced must be true"
+            )
 
 
 def load_org_policy(path=DEFAULT_POLICY_PATH):
