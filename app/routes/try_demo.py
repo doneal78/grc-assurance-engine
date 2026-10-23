@@ -12,6 +12,7 @@ from app.services.intake_builder import (
     CLAIM_STATEMENTS, EVIDENCE_OPTIONS, IntakeError, build_intake, field_choices,
     remediation_payload, run_intake, workflow_events,
 )
+from app.services.org_policy import load_org_policy
 from app.services.scenario_runner import ScenarioNotFoundError, list_scenarios, run_scenario
 
 bp = Blueprint("try_demo", __name__, url_prefix="/try")
@@ -20,6 +21,7 @@ bp = Blueprint("try_demo", __name__, url_prefix="/try")
 def _form_context(form=None, problems=None):
     return {"scenarios": list_scenarios(), "choices": field_choices(),
             "evidence_options": EVIDENCE_OPTIONS, "claim_topics": CLAIM_STATEMENTS,
+            "policy_fields": load_org_policy()["intake_fields"],
             "form": form or {}, "problems": problems or []}
 
 

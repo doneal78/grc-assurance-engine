@@ -1,6 +1,6 @@
 # GRC Assurance Engine — Build Plan
 
-**Project status:** Phases 1–7 initial demo slice implemented; general intake and observed metrics remain out of scope
+**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. General intake and observed metrics remain out of scope. Multi-tenant policy storage and contract-clause enforcement are not implemented.
 **Project type:** GRC Engineering portfolio application  
 **Development approach:** Local-first, phased implementation, test-driven business logic  
 **Primary IDE:** Cursor  
@@ -339,7 +339,7 @@ Do not use cross-framework mappings to claim that frameworks or requirements are
 
 ## 9. Phase 4 — Repeatable Demonstration Scenarios
 
-**Status:** Three fixed-date synthetic scenarios are implemented and displayed under `/demo`. Each calls the existing risk engine, evidence validator, and control mapper; no assessment records are persisted yet.
+**Status:** Fixed-date synthetic scenarios are displayed under `/demo` and can be saved to the local risk register. The original three cover an evidence-supported tool, a high-risk AI service, and conflicting claims. `prohibited-ai-decisions` shows a hard restriction that stays separate from the score.
 
 Create deterministic synthetic fixtures in `app/data/demo_scenarios.json` or an equivalently appropriate fixture structure.
 

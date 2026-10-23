@@ -134,7 +134,7 @@ def test_result_records_policy_version_and_date():
 def test_derived_status_changes_engine_confidence():
     base = {"data_sensitivity": "internal", "integration_permissions": "read_only", "ai_use": "none",
             "model_training_on_customer_data": "no", "external_exposure": "internal_only",
-            "retention_deletion": "documented"}
+            "retention_deletion": "documented", "decisions_affecting_people": "no"}
     verified = validate(CLAIMS, [ev()], AS_OF)["claims"]
     vendor = validate(CLAIMS, [ev(source="vendor", artifact_type="vendor_statement")], AS_OF)["claims"]
     assert evaluate({**base, "claims": verified})["evidence_confidence"]["level"] == "high"

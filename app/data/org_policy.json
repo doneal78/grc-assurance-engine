@@ -1,0 +1,34 @@
+{
+  "policy_id": "ORG-AI-USE",
+  "policy_version": "1.0.0",
+  "status": "illustrative",
+  "description": "Single-organization AI use policy for this portfolio prototype. The starter profile is one hard restriction and one required contract clause. Add another by appending to those lists. It is not an approved corporate policy, and it is not a multi-tenant policy store.",
+  "intake_fields": [
+    {
+      "field": "decisions_affecting_people",
+      "prompt": "Does the AI make fully automated decisions about people's eligibility, safety, or similar outcomes, with no human review?",
+      "help": "Yes matches hard restriction HR-001. Unknown stays unresolved and is not treated as no.",
+      "allowed": ["no", "yes", "unknown"]
+    }
+  ],
+  "hard_restrictions": [
+    {
+      "restriction_id": "HR-001",
+      "title": "No fully automated decisions about people",
+      "description": "The organization does not accept fully automated AI decisions that affect a person's eligibility, safety, or similar outcomes when no human reviews the decision.",
+      "field": "decisions_affecting_people",
+      "prohibited_when": ["yes"],
+      "owner_role": "AI governance reviewer",
+      "required_output": "A recorded disposition. Proceeding past this restriction requires a written exception rationale that cites this restriction. A rejection does not.",
+      "next_step": "Record the disposition on the risk register. The prohibited outcome stays on the assessment either way."
+    }
+  ],
+  "required_contract_clauses": [
+    {
+      "clause_id": "CC-001",
+      "title": "No vendor model training on company or customer data",
+      "text": "The vendor must not train or improve models on company or customer data.",
+      "enforced": false
+    }
+  ]
+}

@@ -63,7 +63,7 @@ A matching SHA-256 hash shows the file has not changed since its hash was record
 
 ## Connection to the risk engine
 
-The validator sets each claim's evidence status, and the Phase 2 risk engine uses those statuses exactly as it does today. The engine and its rule set do not change. Each result records both the rule set version and the evidence policy version.
+The validator sets each claim's evidence status, and the risk engine uses those statuses as its evidence input. Later rule sets can add intake fields. They do not reinterpret an evidence status. Each result records the rule set version, the evidence policy version, and the org policy version.
 
 ## Worked examples (expected results)
 

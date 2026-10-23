@@ -10,10 +10,10 @@ The presentation idea, a guided scenario runner with an event log and a mock tic
 
 | Step | What the visitor sees | What runs underneath |
 | --- | --- | --- |
-| 1. Intake | Pick one of three synthetic vendors, or describe their own: name, data sensitivity, integration permissions, AI use, model training, exposure, retention and deletion, and the evidence provided for four claim topics | `app/services/intake_builder.py` turns the form into claims and evidence records dated relative to today |
-| 2. Assessment | Inherent risk, evidence confidence, and residual risk shown separately, with each fired escalation's assessment, owner role, required output, and next step, plus claim statuses and draft control mappings | The real evidence validator, risk engine, and control mapper |
-| 3. Event log | The ordered workflow steps for that assessment | Generated from the results for that page view |
-| 4. Remediation ticket | A ServiceNow-style payload labeled as a mock | Built from escalations and evidence gaps. Never sent anywhere. |
+| 1. Intake | Pick one of the synthetic vendors, or describe their own: name, data sensitivity, integration permissions, AI use, whether the AI makes fully automated decisions about people's eligibility, safety, or similar outcomes with no human review, model training, exposure, retention and deletion, and the evidence provided for four claim topics | `app/services/intake_builder.py` turns the form into claims and evidence records dated relative to today |
+| 2. Assessment | Inherent risk, evidence confidence, residual risk, and the org-policy outcome shown separately, with each fired escalation's assessment, owner role, required output, and next step, plus the policy restriction when one matches, claim statuses, and draft control mappings | The real evidence validator, risk engine, org policy, and control mapper |
+| 3. Event log | The ordered workflow steps for that assessment, including the policy check | Generated from the results for that page view |
+| 4. Remediation ticket | A ServiceNow-style payload labeled as a mock | Built from escalations, a matched hard restriction, or evidence gaps. Never sent anywhere. The public pages do not record the human decision. That form is on a saved risk. |
 
 ## Evidence choices
 

@@ -35,6 +35,11 @@
   <label class="wide">Vendor or tool name<input name="vendor_name" maxlength="80" required value="{{ form.get('vendor_name', '') }}" placeholder="Example: Northwind AI Notes"></label>
   {% for field, label in fields %}
   <label>{{ label }}<select name="{{ field }}">{% for value in choices[field] %}<option value="{{ value }}"{% if form.get(field) == value %} selected{% endif %}>{{ value|replace('_', ' ')|capitalize }}</option>{% endfor %}</select></label>
+  {% if field == 'ai_use' %}
+    {% for spec in policy_fields %}
+    <label class="wide">{{ spec.prompt }}<select name="{{ spec.field }}">{% for value in spec.allowed %}<option value="{{ value }}"{% if form.get(spec.field, spec.allowed[0]) == value %} selected{% endif %}>{{ value|replace('_', ' ')|capitalize }}</option>{% endfor %}</select>{% if spec.help %}<span class="muted">{{ spec.help }}</span>{% endif %}</label>
+    {% endfor %}
+  {% endif %}
   {% endfor %}
   <fieldset class="evidence-fieldset">
     <legend>What evidence did the vendor provide for each claim?</legend>

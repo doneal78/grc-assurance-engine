@@ -8,7 +8,10 @@ CREATE TABLE IF NOT EXISTS risks (
     inherent_tier TEXT NOT NULL,
     residual_tier TEXT NOT NULL,
     rationale_json TEXT NOT NULL,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    policy_id TEXT,
+    policy_version TEXT,
+    policy_outcome TEXT
 );
 
 CREATE TABLE IF NOT EXISTS remediation_actions (
@@ -30,6 +33,21 @@ CREATE TABLE IF NOT EXISTS workflow_events (
     event_type TEXT NOT NULL,
     detail TEXT NOT NULL,
     occurred_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS decisions (
+    decision_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    risk_id TEXT NOT NULL UNIQUE REFERENCES risks(risk_id) ON DELETE CASCADE,
+    disposition TEXT NOT NULL CHECK (disposition IN ('approve', 'approve_with_conditions', 'reject')),
+    conditions TEXT NOT NULL DEFAULT '',
+    rationale TEXT NOT NULL,
+    exception_rationale TEXT NOT NULL DEFAULT '',
+    decider TEXT NOT NULL,
+    policy_id TEXT NOT NULL,
+    policy_version TEXT NOT NULL,
+    rule_set_version TEXT NOT NULL,
+    prohibited_at_decision TEXT NOT NULL CHECK (prohibited_at_decision IN ('prohibited', 'not_prohibited')),
+    decided_at TEXT NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_actions_risk ON remediation_actions(risk_id);

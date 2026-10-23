@@ -1,13 +1,16 @@
 """Rules-based risk evaluation engine.
 
 Plain Python with no Flask, database, or network access. It reads a versioned
-rule set and returns a structured, explainable result. It never approves a
-vendor: the review path is always standard_review or escalated_review.
-See docs/risk-model.md.
+rule set and the single org policy, and returns a structured, explainable
+result. It never approves or rejects a vendor. The review path is
+standard_review or escalated_review. A prohibited policy outcome is separate
+from the score tiers. See docs/risk-model.md.
 """
 
 import json
 from pathlib import Path
+
+from app.services.org_policy import load_org_policy, validate_policy
 
 DEFAULT_RULES_PATH = Path(__file__).resolve().parent.parent / "data" / "risk_rules.json"
 
@@ -35,12 +38,19 @@ def load_rules(path=DEFAULT_RULES_PATH):
         return json.load(handle)
 
 
-def _validate(assessment, rules):
+def _validate(assessment, rules, policy):
     problems = []
     unknown = rules["unknown_value"]
     for field in REQUIRED_FIELDS:
         if field not in assessment:
             problems.append(f"{field}: required field is missing")
+    for spec in policy["intake_fields"]:
+        field = spec["field"]
+        if field not in assessment:
+            problems.append(f"{field}: required field is missing")
+        elif assessment[field] not in spec["allowed"]:
+            allowed = sorted(spec["allowed"])
+            problems.append(f"{field}: {assessment[field]!r} is not one of {allowed}")
     for field, factor in rules["inherent_factors"].items():
         if field in assessment:
             allowed = sorted(set(factor["points"]) | {unknown})
@@ -152,17 +162,71 @@ def _escalations(assessment, rules):
     return fired
 
 
-def evaluate(assessment, rules=None):
+def _policy_outcome(assessment, policy):
+    """Match hard restrictions. Unknown is never a match; clauses are not applied."""
+    matched = []
+    for restriction in policy["hard_restrictions"]:
+        field = restriction["field"]
+        value = assessment[field]
+        if value not in restriction["prohibited_when"]:
+            continue
+        matched.append({
+            "restriction_id": restriction["restriction_id"],
+            "title": restriction["title"],
+            "reason": restriction["description"],
+            "field": field,
+            "observed_value": value,
+            "policy_id": policy["policy_id"],
+            "policy_version": policy["policy_version"],
+            "owner_role": restriction["owner_role"],
+            "required_output": restriction["required_output"],
+            "next_step": restriction["next_step"],
+        })
+    return {
+        "status": "prohibited" if matched else "not_prohibited",
+        "restrictions": matched,
+        "answers": [
+            {"field": spec["field"], "prompt": spec["prompt"], "value": assessment[spec["field"]]}
+            for spec in policy["intake_fields"]
+        ],
+    }
+
+
+def _policy_reference(policy):
+    return {
+        "policy_id": policy["policy_id"],
+        "policy_version": policy["policy_version"],
+        "status": policy.get("status", ""),
+        "required_contract_clauses": [
+            {
+                "clause_id": clause["clause_id"],
+                "title": clause["title"],
+                "text": clause["text"],
+                "enforced": False,
+            }
+            for clause in policy["required_contract_clauses"]
+        ],
+    }
+
+
+def evaluate(assessment, rules=None, policy=None):
     """Evaluate one assessment and return a structured, explainable result."""
     rules = rules if rules is not None else load_rules()
+    policy = policy if policy is not None else load_org_policy()
     _require_escalation_definitions(rules)
-    _validate(assessment, rules)
+    validate_policy(policy, rules["unknown_value"])
+    _validate(assessment, rules, policy)
 
     score, factors, missing = _inherent(assessment, rules)
+    unknown = rules["unknown_value"]
+    for spec in policy["intake_fields"]:
+        if assessment[spec["field"]] == unknown:
+            missing.append(spec["field"])
     provisional = bool(missing)
     confidence = _confidence(assessment["claims"], rules)
     escalations = _escalations(assessment, rules)
     conflicts = [c for c in assessment["claims"] if c["evidence_status"] == "conflicting"]
+    policy_outcome = _policy_outcome(assessment, policy)
 
     if provisional:
         inherent_tier = residual_tier = "undetermined"
@@ -197,6 +261,8 @@ def evaluate(assessment, rules=None):
         "escalations": escalations,
         "missing_information": missing,
         "conflicts": conflicts,
-        "review_path": "escalated_review" if escalations else "standard_review",
+        "policy": _policy_reference(policy),
+        "policy_outcome": policy_outcome,
+        "review_path": "escalated_review" if escalations or policy_outcome["status"] == "prohibited" else "standard_review",
     }
     

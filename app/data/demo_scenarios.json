@@ -1,5 +1,5 @@
 {
-  "scenario_set_version": "0.1.0",
+  "scenario_set_version": "0.2.0",
   "synthetic_data": true,
   "as_of": "2026-10-14",
   "scenarios": [
@@ -13,7 +13,8 @@
         "ai_use": "none",
         "model_training_on_customer_data": "no",
         "external_exposure": "customer_facing",
-        "retention_deletion": "documented"
+        "retention_deletion": "documented",
+        "decisions_affecting_people": "no"
       },
       "claims": [
         {"claim_id": "C-AUTH", "topic": "authentication", "statement": "Organizational users authenticate to the service."},
@@ -36,7 +37,8 @@
         "ai_use": "autonomous",
         "model_training_on_customer_data": "unknown",
         "external_exposure": "customer_facing",
-        "retention_deletion": "unknown"
+        "retention_deletion": "unknown",
+        "decisions_affecting_people": "no"
       },
       "claims": [
         {"claim_id": "C-AUTH", "topic": "authentication", "statement": "Organizational users authenticate to the service."},
@@ -55,7 +57,8 @@
         "ai_use": "assistive",
         "model_training_on_customer_data": "no",
         "external_exposure": "customer_facing",
-        "retention_deletion": "documented"
+        "retention_deletion": "documented",
+        "decisions_affecting_people": "no"
       },
       "claims": [
         {"claim_id": "C-PERM", "topic": "integration_permissions", "statement": "The integration is limited to read-only access."},
@@ -64,6 +67,26 @@
       "evidence": [
         {"evidence_id": "E-QUESTIONNAIRE", "claim_id": "C-PERM", "artifact_name": "Vendor questionnaire response", "artifact_type": "vendor_questionnaire_answer", "source": "vendor", "collection_date": "2026-10-01", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-02", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}},
         {"evidence_id": "E-INTEGRATION", "claim_id": "C-PERM", "artifact_name": "Internal integration permission export", "artifact_type": "configuration_export", "source": "internal_observation", "collection_date": "2026-10-03", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-03", "relevant": true, "in_scope": true, "supports_claim": false, "contradicts_claim": true}}
+      ]
+    },
+    {
+      "scenario_id": "prohibited-ai-decisions",
+      "name": "AI tool that decides eligibility",
+      "summary": "An internal tool has current reviewed evidence and a moderate inherent score, but it makes fully automated eligibility decisions with no human review. The org policy marks that use prohibited. The score is still calculated separately.",
+      "assessment": {
+        "data_sensitivity": "internal",
+        "integration_permissions": "read_only",
+        "ai_use": "assistive",
+        "model_training_on_customer_data": "no",
+        "external_exposure": "internal_only",
+        "retention_deletion": "documented",
+        "decisions_affecting_people": "yes"
+      },
+      "claims": [
+        {"claim_id": "C-AUTH", "topic": "authentication", "statement": "Organizational users authenticate to the service."}
+      ],
+      "evidence": [
+        {"evidence_id": "E-AUTH", "claim_id": "C-AUTH", "artifact_name": "Independent SOC 2 Type II report", "artifact_type": "soc2_type2_report", "source": "independent_auditor", "collection_date": "2026-03-28", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-01", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}}
       ]
     }
   ]

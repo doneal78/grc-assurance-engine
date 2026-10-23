@@ -3,10 +3,46 @@
 {% block content %}
 <p class="eyebrow"><a href="{{ url_for('risks.index') }}">RISK REGISTER</a> · {{ risk.risk_id }}</p><h1>{{ risk.scenario_name }}</h1>
 <p class="lead">{{ risk.risk_statement }}</p>
-<section class="result-grid"><article class="result-card"><p class="eyebrow">INHERENT RISK</p><strong class="tier tier-{{ risk.inherent_tier }}">{{ risk.inherent_tier|title }}</strong></article><article class="result-card"><p class="eyebrow">RESIDUAL RISK</p><strong class="tier tier-{{ risk.residual_tier }}">{{ risk.residual_tier|title }}</strong></article><article class="result-card"><p class="eyebrow">CREATED · UTC</p><strong>{{ risk.created_at }}</strong><p>Local record</p></article></section>
+<section class="result-grid"><article class="result-card"><p class="eyebrow">INHERENT RISK</p><strong class="tier tier-{{ risk.inherent_tier }}">{{ risk.inherent_tier|title }}</strong></article><article class="result-card"><p class="eyebrow">RESIDUAL RISK</p><strong class="tier tier-{{ risk.residual_tier }}">{{ risk.residual_tier|title }}</strong></article><article class="result-card"><p class="eyebrow">POLICY OUTCOME</p>{% if risk.policy_outcome %}<strong class="status status-{{ risk.policy_outcome|replace('_', '-') }}">{{ risk.policy_outcome|replace('_', ' ')|title }}</strong><p>{{ risk.policy_id }} {{ risk.policy_version }}</p>{% else %}<strong>Not on this record</strong><p>Saved before the policy check</p>{% endif %}</article><article class="result-card"><p class="eyebrow">CREATED · UTC</p><strong>{{ risk.created_at }}</strong><p>Local record</p></article></section>
+{% if risk.rationale.risk.policy %}
+{% with evaluation=risk.rationale.risk %}{% include "_policy_outcome.html" %}{% endwith %}
+{% else %}
+<section class="content-section"><h2>Organization policy</h2><p class="inline-warning">This saved result has no policy reference. Delete the local database and add the scenario again before recording a decision.</p></section>
+{% endif %}
 <section class="content-section"><h2>Assessment rationale</h2><p>{{ risk.rationale.risk.residual.reason }}</p>{% if risk.rationale.risk.escalations %}{% with escalations=risk.rationale.risk.escalations %}{% include "_escalation_list.html" %}{% endwith %}{% endif %}<h3>Evidence and claim statuses</h3><ul>{% for claim in risk.rationale.claims %}<li>{{ claim.claim_id }} — {{ claim.evidence_status|replace('_', ' ')|title }}: {{ claim.status_reason }}</li>{% endfor %}</ul><h3>Draft control prompts</h3><ul>{% for mapping in risk.rationale.mappings %}<li>{{ mapping.control_id }} — {{ mapping.title }} ({{ mapping.review_status }})</li>{% endfor %}</ul></section>
+<section class="content-section"><h2>Human decision</h2>
+{% if risk.decision %}
+<article class="claim-card">
+  <div class="claim-heading"><h3>{{ risk.decision.disposition|replace('_', ' ')|title }}</h3><span class="muted">{{ risk.decision.decided_at }} UTC</span></div>
+  <dl class="meta-list">
+    <dt>Decider</dt><dd>{{ risk.decision.decider }}</dd>
+    <dt>Rationale</dt><dd>{{ risk.decision.rationale }}</dd>
+    {% if risk.decision.conditions %}<dt>Conditions</dt><dd>{{ risk.decision.conditions }}</dd>{% endif %}
+    {% if risk.decision.exception_rationale %}<dt>Exception rationale</dt><dd>{{ risk.decision.exception_rationale }}</dd>{% endif %}
+    <dt>Policy</dt><dd>{{ risk.decision.policy_id }} {{ risk.decision.policy_version }}</dd>
+    <dt>Rule set</dt><dd>{{ risk.decision.rule_set_version }}</dd>
+    <dt>Policy outcome at decision</dt><dd>{{ risk.decision.prohibited_at_decision|replace('_', ' ')|title }}</dd>
+  </dl>
+</article>
+<p class="muted">Saving another decision replaces this one and adds a workflow event. The earlier rationale is not kept as a second row.</p>
+{% else %}
+<p>No decision recorded. The assessment result is not a disposition.</p>
+{% endif %}
+{% if risk.rationale.risk.policy %}
+{% if risk.policy_outcome == 'prohibited' %}<p class="inline-warning">This result matches a hard restriction. The score does not approve or reject it. Approving it, with or without conditions, requires an exception rationale. Rejecting it does not. The prohibited outcome stays on the assessment either way. An exception is allowed so a named person can proceed on the record. The application does not block the decision, and it does not clear the restriction.</p>{% endif %}
+<form class="action-form" method="post" action="{{ url_for('risks.record_risk_decision', risk_id=risk.risk_id) }}">
+  <label>Disposition<select name="disposition">{% for value in dispositions %}<option value="{{ value }}">{{ value|replace('_', ' ')|title }}</option>{% endfor %}</select></label>
+  <label>Decider (name or role)<input name="decider" maxlength="100" required placeholder="Example: AI governance reviewer"></label>
+  <label class="wide">Rationale<textarea name="rationale" maxlength="1000" rows="3" required></textarea></label>
+  <label class="wide">Conditions<textarea name="conditions" maxlength="1000" rows="2" placeholder="Required only for approve with conditions"></textarea></label>
+  <label class="wide">Exception rationale<textarea name="exception_rationale" maxlength="1000" rows="2" placeholder="Required only to approve a prohibited result"></textarea></label>
+  <button class="button-link" type="submit">Record decision</button>
+</form>
+<p class="muted">The policy reference and rule set version are copied from this saved assessment. The timestamp is the server time in UTC. This log is not tamper-proof.</p>
+{% endif %}
+</section>
 <section class="content-section"><h2>Remediation actions</h2>
-{% if risk.actions %}{% for action in risk.actions %}<article class="claim-card"><div class="claim-heading"><div><h3>{{ action.description }}</h3><p class="muted">Priority: {{ action.priority|title }} · Created {{ action.created_at }} · Updated {{ action.updated_at }}</p></div><span class="status status-{{ action.status|replace('_', '-') }}">{{ action.status|replace('_', ' ')|title }}</span></div><form class="action-form" method="post" action="{{ url_for('risks.update_remediation', action_id=action.action_id) }}"><input type="hidden" name="risk_id" value="{{ risk.risk_id }}"><label>Owner<input name="owner" maxlength="100" required value="{{ action.owner }}"></label><label>Due date<input name="due_date" type="date" value="{{ action.due_date or '' }}"></label><label>Status<select name="status">{% for status in ['open', 'in_progress', 'completed'] %}<option value="{{ status }}" {% if action.status == status %}selected{% endif %}>{{ status|replace('_', ' ')|title }}</option>{% endfor %}</select></label><label>Completion notes<textarea name="completion_notes" maxlength="1000" rows="2" placeholder="Required when status is Completed">{{ action.completion_notes }}</textarea></label><button class="button-link" type="submit">Save action</button></form></article>{% endfor %}{% else %}<p>No remediation action was created: this scenario had no configured escalation or unresolved evidence gap.</p>{% endif %}
+{% if risk.actions %}{% for action in risk.actions %}<article class="claim-card"><div class="claim-heading"><div><h3>{{ action.description }}</h3><p class="muted">Priority: {{ action.priority|title }} · Created {{ action.created_at }} · Updated {{ action.updated_at }}</p></div><span class="status status-{{ action.status|replace('_', '-') }}">{{ action.status|replace('_', ' ')|title }}</span></div><form class="action-form" method="post" action="{{ url_for('risks.update_remediation', action_id=action.action_id) }}"><input type="hidden" name="risk_id" value="{{ risk.risk_id }}"><label>Owner<input name="owner" maxlength="100" required value="{{ action.owner }}"></label><label>Due date<input name="due_date" type="date" value="{{ action.due_date or '' }}"></label><label>Status<select name="status">{% for status in ['open', 'in_progress', 'completed'] %}<option value="{{ status }}" {% if action.status == status %}selected{% endif %}>{{ status|replace('_', ' ')|title }}</option>{% endfor %}</select></label><label>Completion notes<textarea name="completion_notes" maxlength="1000" rows="2" placeholder="Required when status is Completed">{{ action.completion_notes }}</textarea></label><button class="button-link" type="submit">Save action</button></form></article>{% endfor %}{% else %}<p>No remediation action was created: this scenario had no configured escalation, matched policy restriction, or unresolved evidence gap.</p>{% endif %}
 </section>
 <section class="content-section"><h2>Workflow history</h2><ol class="event-list">{% for event in risk.events %}<li><strong>{{ event.event_type|replace('_', ' ')|title }}</strong> · {{ event.detail }}<br><span class="muted">{{ event.occurred_at }}</span></li>{% endfor %}</ol><p class="muted">This local event log is for traceability. It is not tamper-proof or immutable.</p></section>
 {% endblock %}

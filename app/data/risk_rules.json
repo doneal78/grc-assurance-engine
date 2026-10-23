@@ -1,7 +1,7 @@
 {
-  "rule_set_version": "0.2.0",
+  "rule_set_version": "0.3.0",
   "status": "draft",
-  "description": "Illustrative rule set. Not an industry-standard methodology and not empirically calibrated. See docs/risk-model.md.",
+  "description": "Illustrative rule set. Not an industry-standard methodology and not empirically calibrated. Rule set 0.3.0 adds the decisions_affecting_people intake check and ESC-009. Point values, tier boundaries, and ESC-001 through ESC-008 are unchanged from 0.2.0. See docs/risk-model.md.",
   "unknown_value": "unknown",
   "inherent_factors": {
     "data_sensitivity": {"rule_id": "INH-DATA", "points": {"public": 0, "internal": 10, "confidential": 25, "restricted": 35}},
@@ -105,6 +105,15 @@
         {"field": "ai_use", "in": ["unknown"]},
         {"field": "data_sensitivity", "in": ["confidential", "restricted"]}
       ]
+    },
+    {
+      "rule_id": "ESC-009",
+      "description": "Whether the AI makes fully automated decisions about people's eligibility, safety, or similar outcomes, with no human review, is unknown",
+      "assessment_type": "Affected-decision determination",
+      "owner_role": "Business owner",
+      "required_output": "Whether the AI makes those fully automated decisions with no human review, answered yes or no.",
+      "next_step": "Re-run the assessment with yes or no. Yes matches the org policy hard restriction. Unknown is not treated as no.",
+      "all": [{"field": "decisions_affecting_people", "in": ["unknown"]}]
     }
   ]
 }

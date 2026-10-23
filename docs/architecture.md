@@ -7,14 +7,16 @@ The application uses the Flask factory in `app/__init__.py` to register web blue
 | Responsibility | Current location | Notes |
 | --- | --- | --- |
 | HTTP routes | `app/routes/` | Health, dashboard, and synthetic scenario pages. |
-| Business logic | `app/services/` | Risk evaluation, evidence validation, control mapping, scenario orchestration, local workflow persistence, and cost calculations. |
-| Database | `app/db.py`, `app/schema.sql` | SQLite schema and request-scoped connections for risks, remediation actions, and workflow events. `DATABASE_PATH` can place the file on a persistent host volume. |
-| Versioned rules/data | `app/data/` | Risk rules, evidence freshness policy, mappings, and fixed-date demo scenarios. |
+| Business logic | `app/services/` | Risk evaluation, the single org-policy check, evidence validation, control mapping, scenario orchestration, local workflow persistence, human decisions, and cost calculations. |
+| Database | `app/db.py`, `app/schema.sql` | SQLite schema and request-scoped connections for risks, remediation actions, human decisions, and workflow events. `DATABASE_PATH` can place the file on a persistent host volume. Startup adds policy columns to a risk table created before those columns existed. |
+| Versioned rules/data | `app/data/` | Risk rules, the single org policy profile, evidence freshness policy, mappings, and fixed-date demo scenarios. |
 | Presentation | `app/templates/`, `app/static/` | Server-rendered HTML and responsive CSS. |
 | Automated checks | `tests/` | pytest tests include service-level business logic and Flask route behavior. |
 | Documentation | `docs/` | Design, assumptions, and limitations. |
 
-The scenario runner composes evidence validation, risk evaluation, and mapping in that order. It passes the derived claim evidence results into the risk engine and mapping service. A missing or conflicting status is never replaced by a UI-generated conclusion. Scenario data is loaded from version-controlled JSON and evaluated on an explicit fixed date. A user can save a synthetic scenario result to SQLite; the persistence service stores the risk rationale and references, creates a follow-up action for escalations or evidence gaps, and records local workflow events using parameterized SQL.
+The scenario runner composes evidence validation, risk evaluation, and mapping in that order. It passes the derived claim evidence results into the risk engine and mapping service. A missing or conflicting status is never replaced by a UI-generated conclusion. Scenario data is loaded from version-controlled JSON and evaluated on an explicit fixed date. Risk evaluation also reads `app/data/org_policy.json` and attaches that policy's id, version, outcome, and listed contract clauses. A user can save a synthetic scenario result to SQLite; the persistence service stores the risk rationale and references, creates a follow-up action for escalations, a matched hard restriction, or evidence gaps, and records local workflow events using parameterized SQL.
+
+A saved risk can then store one human decision: approve, approve with conditions, or reject. The workflow service copies the policy reference and rule set version from the saved assessment, requires an exception rationale before an approval of a prohibited result, and writes a `decision_recorded` event. Replacing a decision updates that row and writes another event. The prohibited outcome on the assessment is not edited. See `docs/risk-model.md` for why an exception is allowed.
 
 ## Current limitations
 
@@ -27,3 +29,8 @@ Scenario runs are deterministic examples, not vendor records. There is no real a
 - Static JSON makes every demonstration input inspectable and repeatable.
 - Mapping results retain source, version, claim, and evidence references while remaining visibly draft.
 - No external AI service participates in scoring or approval decisions.
+- One org policy file is enough. There is no tenant selector.
+- The policy outcome is calculated in the risk engine. Templates display it. They do not decide it.
+- Contract clauses are stored as data and returned with `enforced: false`. The engine has no clause-checking branch.
+- A prohibited result can be approved only with an exception rationale because a person, not the score, makes the disposition. The restriction stays on the record. There is no configured non-overridable ban.
+- The decider is a name or role typed into the form. Nothing checks it against a directory or against the restriction's owner role.

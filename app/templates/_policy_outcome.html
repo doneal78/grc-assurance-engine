@@ -1,0 +1,38 @@
+<section class="content-section">
+  <h2>Organization policy</h2>
+  <p>Policy <code>{{ evaluation.policy.policy_id }}</code> version {{ evaluation.policy.policy_version }}{% if evaluation.policy.status %} · {{ evaluation.policy.status }}{% endif %}. One organization profile. This outcome is separate from the inherent score and the residual tier.</p>
+  {% if evaluation.policy_outcome.answers %}
+  <ul>{% for answer in evaluation.policy_outcome.answers %}<li>{{ answer.prompt }} <strong>{{ answer.value }}</strong></li>{% endfor %}</ul>
+  {% endif %}
+  {% if evaluation.policy_outcome.status == 'prohibited' %}
+  <p class="inline-warning"><strong>Prohibited.</strong> A hard restriction matched. The engine does not reject the intake, and it does not change the score. A person records the disposition.</p>
+  <ul class="escalation-list">
+    {% for item in evaluation.policy_outcome.restrictions %}
+    <li>
+      <p><code>{{ item.restriction_id }}</code> — {{ item.title }}</p>
+      <p>{{ item.reason }}</p>
+      <dl class="meta-list">
+        <dt>Policy</dt><dd>{{ item.policy_id }} {{ item.policy_version }}</dd>
+        <dt>Observed answer</dt><dd>{{ item.observed_value }}</dd>
+        <dt>Owner role</dt><dd>{{ item.owner_role }}</dd>
+        <dt>Required output</dt><dd>{{ item.required_output }}</dd>
+        <dt>Next step</dt><dd>{{ item.next_step }}</dd>
+      </dl>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>No hard restriction matched. That is not a clearance and it is not an approval.</p>
+  {% endif %}
+  <h3>Required contract clauses</h3>
+  {% if evaluation.policy.required_contract_clauses %}
+  <ul>
+    {% for clause in evaluation.policy.required_contract_clauses %}
+    <li><code>{{ clause.clause_id }}</code> — {{ clause.title }}. {{ clause.text }} <span class="status status-draft">Listed, not enforced</span></li>
+    {% endfor %}
+  </ul>
+  <p class="muted">Clause enforcement is a later phase. A model-training answer still follows the risk rule set on its own.</p>
+  {% else %}
+  <p>No contract clauses are listed on this policy.</p>
+  {% endif %}
+</section>
