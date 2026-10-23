@@ -10,7 +10,7 @@ The presentation idea, a guided scenario runner with an event log and a mock tic
 
 | Step | What the visitor sees | What runs underneath |
 | --- | --- | --- |
-| 1. Intake | Pick one of the synthetic vendors, or describe their own: name, data sensitivity, integration permissions, AI use, whether the AI makes fully automated decisions about people's eligibility, safety, or similar outcomes with no human review, model training, exposure, retention and deletion, and the evidence provided for four claim topics | `app/services/intake_builder.py` turns the form into claims and evidence records dated relative to today |
+| 1. Intake | Pick one of the synthetic vendors, or describe their own: name, data sensitivity, integration permissions, AI use, whether the AI makes fully automated decisions about people's eligibility, safety, or similar outcomes with no human review, model training, exposure, retention and deletion, the evidence provided for four claim topics, and the evidence for each required contract clause | `app/services/intake_builder.py` turns the form into claims and evidence records dated relative to today |
 | 2. Assessment | Inherent risk, evidence confidence, residual risk, and the org-policy outcome shown separately, with each fired escalation's assessment, owner role, required output, and next step, plus the policy restriction when one matches, claim statuses, and draft control mappings | The real evidence validator, risk engine, org policy, and control mapper |
 | 3. Event log | The ordered workflow steps for that assessment, including the policy check | Generated from the results for that page view |
 | 4. Remediation ticket | A ServiceNow-style payload labeled as a mock | Built from escalations, a matched hard restriction, or evidence gaps. Never sent anywhere. The public pages do not record the human decision. That form is on a saved risk. |
@@ -27,6 +27,8 @@ Each claim topic offers six choices, each producing a real evidence record that 
 | Independent report, older than its freshness limit | SOC 2 Type II report, 500 days old, reviewed | expired |
 | Configuration export that contradicts the claim | Configuration export, 7 days old, reviewer marked it contradicting | conflicting |
 | Nothing provided | No record | missing |
+
+Each required contract clause has the same six choices. Those records use artifact type `contract_clause`. A reviewed excerpt that is not from the vendor is an internal observation and can be verified. The vendor's own contract statement stays self-attested. The clause status is shown with the policy outcome. It does not change the score.
 
 ## Status
 

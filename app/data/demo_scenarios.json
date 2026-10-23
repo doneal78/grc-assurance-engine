@@ -1,12 +1,12 @@
 {
-  "scenario_set_version": "0.2.0",
+  "scenario_set_version": "0.3.0",
   "synthetic_data": true,
   "as_of": "2026-10-14",
   "scenarios": [
     {
       "scenario_id": "evidence-supported",
       "name": "Evidence-supported collaboration tool",
-      "summary": "A limited integration processes internal data, with current independently reviewed evidence for authentication, permissions, and transmission safeguards.",
+      "summary": "A limited integration processes internal data, with current independently reviewed evidence for authentication, permissions, and transmission safeguards, and a reviewed contract excerpt for the no-training clause.",
       "assessment": {
         "data_sensitivity": "internal",
         "integration_permissions": "read_only",
@@ -24,7 +24,8 @@
       "evidence": [
         {"evidence_id": "E-AUTH", "claim_id": "C-AUTH", "artifact_name": "Independent SOC 2 Type II report", "artifact_type": "soc2_type2_report", "source": "independent_auditor", "collection_date": "2026-03-28", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-01", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}},
         {"evidence_id": "E-PERM", "claim_id": "C-PERM", "artifact_name": "Integration permission export", "artifact_type": "configuration_export", "source": "internal_observation", "collection_date": "2026-10-01", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-02", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}},
-        {"evidence_id": "E-TRANSIT", "claim_id": "C-TRANSIT", "artifact_name": "Independent SOC 2 Type II report", "artifact_type": "soc2_type2_report", "source": "independent_auditor", "collection_date": "2026-03-28", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-01", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}}
+        {"evidence_id": "E-TRANSIT", "claim_id": "C-TRANSIT", "artifact_name": "Independent SOC 2 Type II report", "artifact_type": "soc2_type2_report", "source": "independent_auditor", "collection_date": "2026-03-28", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-01", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}},
+        {"evidence_id": "E-CC-001", "claim_id": "CC-001", "artifact_name": "Reviewed contract excerpt: no model training on customer data", "artifact_type": "contract_clause", "source": "internal_observation", "collection_date": "2026-04-02", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-01", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}}
       ]
     },
     {
@@ -72,7 +73,7 @@
     {
       "scenario_id": "prohibited-ai-decisions",
       "name": "AI tool that decides eligibility",
-      "summary": "An internal tool has current reviewed evidence and a moderate inherent score, but it makes fully automated eligibility decisions with no human review. The org policy marks that use prohibited. The score is still calculated separately.",
+      "summary": "An internal tool has current reviewed evidence and a moderate inherent score, but it makes fully automated eligibility decisions with no human review. The org policy marks that use prohibited. A reviewed contract excerpt supports the no-training clause. The score is still calculated separately.",
       "assessment": {
         "data_sensitivity": "internal",
         "integration_permissions": "read_only",
@@ -86,7 +87,30 @@
         {"claim_id": "C-AUTH", "topic": "authentication", "statement": "Organizational users authenticate to the service."}
       ],
       "evidence": [
-        {"evidence_id": "E-AUTH", "claim_id": "C-AUTH", "artifact_name": "Independent SOC 2 Type II report", "artifact_type": "soc2_type2_report", "source": "independent_auditor", "collection_date": "2026-03-28", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-01", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}}
+        {"evidence_id": "E-AUTH", "claim_id": "C-AUTH", "artifact_name": "Independent SOC 2 Type II report", "artifact_type": "soc2_type2_report", "source": "independent_auditor", "collection_date": "2026-03-28", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-01", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}},
+        {"evidence_id": "E-CC-001", "claim_id": "CC-001", "artifact_name": "Reviewed contract excerpt: no model training on customer data", "artifact_type": "contract_clause", "source": "internal_observation", "collection_date": "2026-04-02", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-01", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}}
+      ]
+    },
+    {
+      "scenario_id": "contract-clause-conflict",
+      "name": "Contract clause contradicted",
+      "summary": "The vendor's contract says it will not train on customer data, and an internal excerpt of the agreement allows model improvement on that data. The intake answer is still no. The clause check is conflicting, and the score is unchanged.",
+      "assessment": {
+        "data_sensitivity": "internal",
+        "integration_permissions": "read_only",
+        "ai_use": "assistive",
+        "model_training_on_customer_data": "no",
+        "external_exposure": "internal_only",
+        "retention_deletion": "documented",
+        "decisions_affecting_people": "no"
+      },
+      "claims": [
+        {"claim_id": "C-AUTH", "topic": "authentication", "statement": "Organizational users authenticate to the service."}
+      ],
+      "evidence": [
+        {"evidence_id": "E-AUTH", "claim_id": "C-AUTH", "artifact_name": "Independent SOC 2 Type II report", "artifact_type": "soc2_type2_report", "source": "independent_auditor", "collection_date": "2026-03-28", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-01", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}},
+        {"evidence_id": "E-CC-001-VENDOR", "claim_id": "CC-001", "artifact_name": "Vendor contract excerpt, no-training clause", "artifact_type": "contract_clause", "source": "vendor", "collection_date": "2026-09-01", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-02", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": false}},
+        {"evidence_id": "E-CC-001-CONFLICT", "claim_id": "CC-001", "artifact_name": "Internal copy of the model-improvement schedule", "artifact_type": "contract_clause", "source": "internal_observation", "collection_date": "2026-10-03", "review": {"reviewer": "Demo reviewer", "reviewed_on": "2026-10-04", "relevant": true, "in_scope": true, "supports_claim": true, "contradicts_claim": true}}
       ]
     }
   ]

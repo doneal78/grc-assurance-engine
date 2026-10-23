@@ -91,16 +91,23 @@ def register_scenario(db, result):
 
     statuses = {claim["evidence_status"] for claim in result["claims"]}
     prohibited = policy_outcome == "prohibited"
-    evidence_gap = bool(statuses & {"missing", "conflicting", "expired", "not_reviewed"})
-    needs_action = bool(risk["escalations"] or prohibited or evidence_gap)
+    gap_statuses = {"missing", "conflicting", "expired", "not_reviewed"}
+    evidence_gap = bool(statuses & gap_statuses)
+    clause_gaps = [clause for clause in (policy.get("required_contract_clauses") or [])
+                   if clause.get("evidence_status") in gap_statuses]
+    needs_action = bool(risk["escalations"] or prohibited or evidence_gap or clause_gaps)
     if needs_action:
         priority = "critical" if risk["inherent"]["tier"] == "critical" else "high"
-        if prohibited and (risk["escalations"] or evidence_gap):
+        if prohibited and (risk["escalations"] or evidence_gap or clause_gaps):
             description = ("Review escalations or evidence gaps, and record a human decision on the "
                            "policy restriction. Proceeding requires an exception rationale.")
         elif prohibited:
             description = ("Policy restriction matched. Record a human decision. "
                            "Proceeding requires an exception rationale.")
+        elif clause_gaps and not risk["escalations"] and not evidence_gap:
+            ids = ", ".join(clause["clause_id"] for clause in clause_gaps)
+            description = (f"Required contract clause evidence needs review ({ids}). "
+                           "The score is unchanged. A person records the disposition.")
         else:
             description = "Review escalations and resolve evidence gaps or conflicts."
         db.execute(

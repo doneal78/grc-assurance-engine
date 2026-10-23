@@ -4,7 +4,8 @@ Plain Python with no Flask, database, or network access. It reads a versioned
 rule set and the single org policy, and returns a structured, explainable
 result. It never approves or rejects a vendor. The review path is
 standard_review or escalated_review. A prohibited policy outcome is separate
-from the score tiers. See docs/risk-model.md.
+from the score tiers. Required contract clause statuses come from the evidence
+validator and are not scored. See docs/risk-model.md.
 """
 
 import json
@@ -162,8 +163,71 @@ def _escalations(assessment, rules):
     return fired
 
 
+CLAUSE_EVIDENCE_STATUSES = (
+    "verified", "self_attested", "expired", "not_reviewed", "missing", "conflicting",
+)
+
+
+def _missing_clause(clause):
+    """The validator's result when a clause has no evidence records."""
+    return {
+        "clause_id": clause["clause_id"],
+        "title": clause["title"],
+        "text": clause["text"],
+        "enforced": True,
+        "evidence_status": "missing",
+        "status_reason": "No evidence provided.",
+        "evidence": [],
+    }
+
+
+def _merge_clauses(policy, clause_check):
+    """Attach validator statuses. The policy text stays the source of the clause."""
+    required = policy["required_contract_clauses"]
+    if clause_check is None:
+        return [_missing_clause(clause) for clause in required], None, None
+    if not isinstance(clause_check, dict) or not isinstance(clause_check.get("clauses"), list):
+        raise ValueError("clause check must include a clauses list")
+    by_id = {}
+    for item in clause_check["clauses"]:
+        if not isinstance(item, dict):
+            raise ValueError("clause result must be an object")
+        clause_id = item.get("clause_id", "<missing clause_id>")
+        if clause_id in by_id:
+            raise ValueError(f"{clause_id}: duplicate clause result")
+        status = item.get("evidence_status")
+        if status not in CLAUSE_EVIDENCE_STATUSES:
+            raise ValueError(f"{clause_id}: evidence_status {status!r} is not a clause evidence status")
+        reason = item.get("status_reason")
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError(f"{clause_id}: status_reason is required")
+        if not isinstance(item.get("evidence", []), list):
+            raise ValueError(f"{clause_id}: evidence must be a list")
+        by_id[clause_id] = item
+    required_ids = [clause["clause_id"] for clause in required]
+    missing_ids = [clause_id for clause_id in required_ids if clause_id not in by_id]
+    if missing_ids:
+        raise ValueError("clause check missing " + ", ".join(missing_ids))
+    extra_ids = [clause_id for clause_id in by_id if clause_id not in required_ids]
+    if extra_ids:
+        raise ValueError("clause check has unknown clause " + ", ".join(extra_ids))
+    merged = []
+    for clause in required:
+        item = by_id[clause["clause_id"]]
+        merged.append({
+            "clause_id": clause["clause_id"],
+            "title": clause["title"],
+            "text": clause["text"],
+            "enforced": True,
+            "evidence_status": item["evidence_status"],
+            "status_reason": item["status_reason"],
+            "evidence": item.get("evidence", []),
+        })
+    return merged, clause_check.get("evidence_policy_version"), clause_check.get("as_of")
+
+
 def _policy_outcome(assessment, policy):
-    """Match hard restrictions. Unknown is never a match; clauses are not applied."""
+    """Match hard restrictions. Unknown is never a match. Clause evidence is separate."""
     matched = []
     for restriction in policy["hard_restrictions"]:
         field = restriction["field"]
@@ -192,30 +256,30 @@ def _policy_outcome(assessment, policy):
     }
 
 
-def _policy_reference(policy):
+def _policy_reference(policy, clauses, clause_evidence_policy_version, clause_checked_as_of):
     return {
         "policy_id": policy["policy_id"],
         "policy_version": policy["policy_version"],
         "status": policy.get("status", ""),
-        "required_contract_clauses": [
-            {
-                "clause_id": clause["clause_id"],
-                "title": clause["title"],
-                "text": clause["text"],
-                "enforced": False,
-            }
-            for clause in policy["required_contract_clauses"]
-        ],
+        "clause_evidence_policy_version": clause_evidence_policy_version,
+        "clause_checked_as_of": clause_checked_as_of,
+        "required_contract_clauses": clauses,
     }
 
 
-def evaluate(assessment, rules=None, policy=None):
-    """Evaluate one assessment and return a structured, explainable result."""
+def evaluate(assessment, rules=None, policy=None, clause_check=None):
+    """Evaluate one assessment and return a structured, explainable result.
+
+    clause_check is the evidence validator's contract-clause result. When it
+    is omitted, no clause evidence was supplied and each required clause is
+    missing. This function does not derive a clause status from raw evidence.
+    """
     rules = rules if rules is not None else load_rules()
     policy = policy if policy is not None else load_org_policy()
     _require_escalation_definitions(rules)
     validate_policy(policy, rules["unknown_value"])
     _validate(assessment, rules, policy)
+    clauses, clause_version, clause_as_of = _merge_clauses(policy, clause_check)
 
     score, factors, missing = _inherent(assessment, rules)
     unknown = rules["unknown_value"]
@@ -261,7 +325,7 @@ def evaluate(assessment, rules=None, policy=None):
         "escalations": escalations,
         "missing_information": missing,
         "conflicts": conflicts,
-        "policy": _policy_reference(policy),
+        "policy": _policy_reference(policy, clauses, clause_version, clause_as_of),
         "policy_outcome": policy_outcome,
         "review_path": "escalated_review" if escalations or policy_outcome["status"] == "prohibited" else "standard_review",
     }

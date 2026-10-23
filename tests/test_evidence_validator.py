@@ -5,7 +5,10 @@ from datetime import date
 
 import pytest
 
-from app.services.evidence_validator import EvidenceInputError, validate
+from app.services.evidence_validator import (
+    EvidenceInputError, validate, validate_assessment, validate_contract_clauses,
+)
+from app.services.org_policy import load_org_policy
 from app.services.risk_engine import evaluate
 
 AS_OF = date(2026, 10, 14)
@@ -128,7 +131,7 @@ def test_same_input_same_output_and_input_unchanged():
 
 def test_result_records_policy_version_and_date():
     v = validate(CLAIMS, [ev()], AS_OF)
-    assert v["evidence_policy_version"] == "0.1.0" and v["as_of"] == "2026-10-14"
+    assert v["evidence_policy_version"] == "0.2.0" and v["as_of"] == "2026-10-14"
 
 
 def test_derived_status_changes_engine_confidence():
@@ -139,4 +142,104 @@ def test_derived_status_changes_engine_confidence():
     vendor = validate(CLAIMS, [ev(source="vendor", artifact_type="vendor_statement")], AS_OF)["claims"]
     assert evaluate({**base, "claims": verified})["evidence_confidence"]["level"] == "high"
     assert evaluate({**base, "claims": vendor})["evidence_confidence"]["level"] == "medium"
+
+
+CC001 = load_org_policy()["required_contract_clauses"][0]
+
+
+def clause_ev(**overrides):
+    base = {"evidence_id": "E-CC-001", "claim_id": "CC-001",
+            "artifact_name": "Contract excerpt", "artifact_type": "contract_clause",
+            "source": "internal_observation", "collection_date": "2026-04-02", "review": review()}
+    base.update(overrides)
+    return base
+
+
+def clause_status(evidence):
+    return validate_contract_clauses([CC001], evidence, AS_OF)["clauses"][0]
+
+
+def test_contract_clause_type_is_in_the_evidence_policy():
+    from app.services.evidence_validator import load_policy
+    policy = load_policy()
+    assert policy["evidence_policy_version"] == "0.2.0"
+    assert policy["max_age_days"]["contract_clause"] == 365
+
+
+def test_clause_without_evidence_is_missing():
+    clause = clause_status([])
+    assert clause["clause_id"] == "CC-001"
+    assert clause["enforced"] is True
+    assert clause["evidence_status"] == "missing"
+    assert clause["status_reason"] == "No evidence provided."
+    assert clause["evidence"] == []
+    assert "company or customer data" in clause["text"]
+
+
+def test_reviewed_contract_excerpt_is_verified():
+    clause = clause_status([clause_ev()])
+    assert clause["evidence_status"] == "verified"
+    assert clause["evidence"][0]["evidence_id"] == "E-CC-001"
+    assert "Independent" in clause["evidence"][0]["reason"] or "supporting" in clause["evidence"][0]["reason"]
+
+
+def test_vendor_contract_statement_is_self_attested():
+    clause = clause_status([clause_ev(source="vendor", artifact_type="vendor_statement")])
+    assert clause["evidence_status"] == "self_attested"
+
+
+def test_contract_clause_expires_on_its_own_limit():
+    current = clause_status([clause_ev(collection_date="2025-10-14")])
+    expired = clause_status([clause_ev(collection_date="2025-10-13")])
+    assert current["evidence_status"] == "verified"
+    assert expired["evidence_status"] == "expired"
+    assert "limit for contract_clause is 365" in expired["evidence"][0]["reason"]
+
+
+def test_contradicting_contract_excerpt_is_conflicting():
+    supporting = clause_ev()
+    contradicting = clause_ev(evidence_id="E-CC-001-B", collection_date="2026-09-01",
+                              review=review(contradicts_claim=True))
+    clause = clause_status([supporting, contradicting])
+    assert clause["evidence_status"] == "conflicting"
+    assert {item["status"] for item in clause["evidence"]} == {"verified", "conflicting"}
+
+
+def test_clause_status_does_not_change_the_score_or_review_path():
+    base = {"data_sensitivity": "internal", "integration_permissions": "read_only", "ai_use": "assistive",
+            "model_training_on_customer_data": "no", "external_exposure": "internal_only",
+            "retention_deletion": "documented", "decisions_affecting_people": "no",
+            "claims": [{"claim_id": "C1", "statement": "MFA is enforced", "evidence_status": "verified"}]}
+    missing = evaluate(base)
+    verified = evaluate(base, clause_check=validate_contract_clauses([CC001], [clause_ev()], AS_OF))
+    conflicting = evaluate(base, clause_check=validate_contract_clauses(
+        [CC001], [clause_ev(), clause_ev(evidence_id="E2", review=review(contradicts_claim=True))], AS_OF))
+    assert missing["inherent"] == verified["inherent"] == conflicting["inherent"]
+    assert missing["residual"] == verified["residual"] == conflicting["residual"]
+    assert missing["escalations"] == verified["escalations"] == conflicting["escalations"] == []
+    assert missing["review_path"] == verified["review_path"] == conflicting["review_path"] == "standard_review"
+    assert missing["evidence_confidence"] == verified["evidence_confidence"]
+    assert [item["evidence_status"] for item in missing["policy"]["required_contract_clauses"]] == ["missing"]
+    assert verified["policy"]["required_contract_clauses"][0]["evidence_status"] == "verified"
+    assert conflicting["policy"]["required_contract_clauses"][0]["evidence_status"] == "conflicting"
+    assert verified["policy"]["clause_evidence_policy_version"] == "0.2.0"
+    assert verified["policy"]["required_contract_clauses"][0]["enforced"] is True
+
+
+def test_claim_evidence_is_not_treated_as_clause_evidence():
+    checked = validate_assessment(CLAIMS, [ev()], AS_OF, [CC001])
+    assert checked["claims"][0]["evidence_status"] == "verified"
+    assert checked["clause_check"]["clauses"][0]["evidence_status"] == "missing"
+
+
+def test_clause_evidence_is_not_rejected_as_an_unknown_claim():
+    checked = validate_assessment(CLAIMS, [ev(), clause_ev()], AS_OF, [CC001])
+    assert checked["claims"][0]["evidence_status"] == "verified"
+    assert checked["clause_check"]["clauses"][0]["evidence_status"] == "verified"
+    assert checked["evidence_policy_version"] == "0.2.0"
+
+
+def test_clause_id_cannot_collide_with_a_claim_id():
+    with pytest.raises(EvidenceInputError, match="collides"):
+        validate_assessment([{"claim_id": "CC-001", "statement": "Same id"}], [], AS_OF, [CC001])
     

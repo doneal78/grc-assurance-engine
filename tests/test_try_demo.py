@@ -7,8 +7,9 @@ import pytest
 
 from app import create_app
 from app.services.intake_builder import (
-    IntakeError, build_intake, remediation_payload, run_intake, workflow_events,
+    IntakeError, build_intake, clause_evidence_field, remediation_payload, run_intake, workflow_events,
 )
+from app.services.org_policy import load_org_policy
 
 AS_OF = date(2026, 10, 14)
 SAME_ORIGIN = {"Origin": "http://localhost"}
@@ -22,6 +23,8 @@ def form(**overrides):
             "model_training_on_customer_data": "no", "external_exposure": "internal_only",
             "retention_deletion": "documented", "decisions_affecting_people": "no"}
     base.update({f"evidence_{topic}": "independent_verified" for topic in TOPICS})
+    for clause in load_org_policy()["required_contract_clauses"]:
+        base[clause_evidence_field(clause["clause_id"])] = "independent_verified"
     base.update(overrides)
     return base
 
@@ -40,6 +43,9 @@ def test_low_risk_intake_uses_real_engine_results():
     assert r["risk"]["evidence_confidence"]["level"] == "high"
     assert r["risk"]["review_path"] == "standard_review"
     assert remediation_payload(r) is None
+    clause = r["risk"]["policy"]["required_contract_clauses"][0]
+    assert clause["evidence_status"] == "verified"
+    assert clause["evidence"][0]["evidence_id"] == "E-CC-001"
     assert {m["control_id"] for m in r["mappings"]} == {"IA-2", "AC-6", "SC-8", "AU-2"}
 
 
@@ -89,8 +95,43 @@ def test_public_yes_answer_shows_the_restriction(gated_client):
     assert response.status_code == 200
     assert b"HR-001" in response.data
     assert b"ORG-AI-USE" in response.data
-    assert b"Listed, not enforced" in response.data
+    assert b"CC-001" in response.data
+    assert b"Evidence basis" in response.data
+    assert b"Listed, not enforced" not in response.data
     assert b"Not Prohibited" not in response.data
+
+
+@pytest.mark.parametrize("option, expected", [
+    ("independent_verified", "verified"),
+    ("vendor_statement", "self_attested"),
+    ("contradicts", "conflicting"),
+    ("none", "missing"),
+])
+def test_clause_evidence_option_sets_cc_001_status(option, expected):
+    result = run(**{clause_evidence_field("CC-001"): option})
+    clause = result["risk"]["policy"]["required_contract_clauses"][0]
+    assert clause["evidence_status"] == expected
+    assert result["risk"]["inherent"]["score"] == 20
+    assert result["risk"]["review_path"] == "standard_review"
+
+
+def test_missing_clause_evidence_drafts_a_ticket_without_blocking():
+    result = run(**{clause_evidence_field("CC-001"): "none"})
+    payload = remediation_payload(result)
+    assert payload["contract_clauses"][0]["clause_id"] == "CC-001"
+    assert payload["contract_clauses"][0]["status"] == "missing"
+    assert payload["review_path"] == "standard_review"
+    assert result["risk"]["policy_outcome"]["status"] == "not_prohibited"
+    detail = next(event["detail"] for event in workflow_events(result) if event["title"] == "Policy check")
+    assert "CC-001 missing" in detail
+
+
+def test_public_form_asks_for_clause_evidence(gated_client):
+    response = gated_client.get("/try/")
+    assert response.status_code == 200
+    assert b"required contract clause" in response.data
+    assert b"CC-001" in response.data
+    assert b"must not train or improve models" in response.data
 
 
 def test_unknown_answers_are_undetermined_not_low():

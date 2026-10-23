@@ -1,4 +1,4 @@
-# Evidence Model (Evidence Policy 0.1.0, draft)
+# Evidence Model (Evidence Policy 0.2.0, draft)
 
 This document defines how a claim's evidence status is derived from evidence records. Statuses are calculated by written rules, not typed in by hand, so every status can be explained. Freshness limits will live in `app/data/evidence_policy.json`, a file added for this phase because the build plan requires configurable freshness.
 
@@ -26,6 +26,9 @@ A review records four checks: relevant to this service, in scope, supports the c
 | vendor_questionnaire_answer | 365 |
 | vendor_statement | 365 |
 | configuration_export | 90 |
+| contract_clause | 365 |
+
+Evidence policy 0.2.0 adds `contract_clause`. The 365-day limit matches a policy document in this illustrative set. It is not a legal conclusion about how long a contract term lasts. The other limits are unchanged from 0.1.0.
 
 ## Status of one evidence record
 
@@ -60,6 +63,23 @@ The validator rejects, with an error naming each problem: unknown artifact types
 ## File hashes
 
 A matching SHA-256 hash shows the file has not changed since its hash was recorded. It does not show the file is authentic, accurate, complete, or sufficient. A hash is recorded for reference and never changes a status.
+
+## Required contract clauses
+
+A required clause from `app/data/org_policy.json` is checked as a claim. The evidence record's `claim_id` is the clause id, for example `CC-001`. The clause text is the claim statement. `validate_contract_clauses` calls `validate`, so a clause does not have a second status algorithm.
+
+`contract_clause` is the artifact type for a contract excerpt. Another known artifact type can also support a clause, and it keeps that type's freshness limit. A vendor source is self-attested even when the artifact type is `contract_clause`. An internal observation or an independent auditor can reach verified when the other review rules pass.
+
+| Clause situation | Status | Meaning here |
+| --- | --- | --- |
+| No evidence records | missing | Not demonstrated. Not a confirmed breach of the clause. |
+| Reviewed, current, supporting, source is not the vendor | verified | The assured state in this model. There is no separate "assured" label. |
+| Same, but the source is the vendor | self_attested | The vendor's own statement is not independent verification. |
+| A record contradicts the clause | conflicting | One supporting document does not outweigh the contradiction. |
+| Older than the freshness limit, and not contradicting | expired | Currency is calculated, not assumed. |
+| No review recorded, and still current | not_reviewed | Having the excerpt is not the same as checking it. |
+
+The risk engine records that status, the reason, and the evidence basis. It does not add the clause to the claim list, so the clause does not change evidence confidence or fire ESC-003. See `docs/risk-model.md`.
 
 ## Connection to the risk engine
 

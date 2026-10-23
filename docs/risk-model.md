@@ -58,12 +58,12 @@ Residual risk equals the inherent tier, lowered by one tier only when all of the
 
 ## Organization policy outcome
 
-The profile is one file, `app/data/org_policy.json`. This prototype is not multi-tenant. The current profile is illustrative policy `ORG-AI-USE` version `1.0.0`.
+The profile is one file, `app/data/org_policy.json`. This prototype is not multi-tenant. The current profile is illustrative policy `ORG-AI-USE` version `1.1.0`. Version 1.1.0 keeps the HR-001 and CC-001 text from 1.0.0. It marks CC-001 enforced and checks it against evidence. Point values are unchanged.
 
 | Kind | Id | What it does in this version |
 | --- | --- | --- |
 | Hard restriction | HR-001 | Fully automated AI decisions about eligibility, safety, or similar outcomes with no human review. `decisions_affecting_people` = `yes`. The result is `prohibited` and cites HR-001 plus the policy id and version. |
-| Required contract clause | CC-001 | No vendor model training on company or customer data. Copied onto every result with `enforced: false`. |
+| Required contract clause | CC-001 | No vendor model training on company or customer data. Checked against evidence. The status is an evidence status, not a score. |
 
 The starter profile stops there. Another restriction or clause is another object in the same list. This version does not add a second restriction.
 
@@ -73,7 +73,13 @@ A `yes` answer matches HR-001 even when AI use is `none`. The engine does not re
 
 A matched restriction sets the review path to escalated review. It does not fire an escalation rule, so it does not change the residual-tier calculation. A moderate inherent score can still show a lowered residual tier and a prohibited policy outcome at the same time. The score is not a clearance, and `not_prohibited` is not an approval.
 
-CC-001 is listed so a reviewer can see the clause the organization wants in a contract. This version does not compare it to the intake. A `yes` on model training still follows INH-TRAIN and, when the other conditions are met, ESC-004. That is the risk rule set, not clause enforcement.
+CC-001 is checked by the evidence validator, not by a separate scoring rule. Evidence for the clause uses `CC-001` as its claim id. The artifact type `contract_clause` is in the evidence policy. Any other known artifact type can also be linked to the clause and keeps that type's freshness limit.
+
+The clause status uses the evidence vocabulary. Verified is the assured state: a non-vendor source was reviewed and the evidence is current, relevant, in scope, and supports the clause. Self-attested means the source is the vendor. Missing means no usable evidence was provided. Conflicting means at least one record contradicts the clause. Expired and not reviewed stay distinct. There is no separate "assured" status.
+
+A missing or conflicting clause does not change the inherent score, the residual tier, or the review path, and it does not fire a new escalation rule. ESC-004 still covers a yes or unknown training answer on confidential or restricted data. That rule answers whether the intake says training happens. The clause check answers whether evidence supports the contractual limit. A gap is shown on the result. Like other evidence gaps, it is enough to draft a follow-up. It does not block approval, and it does not require the exception rationale that a prohibited result requires. The person remains the decider.
+
+A `yes` on model training still follows INH-TRAIN and, when the other conditions are met, ESC-004. That is the risk rule set. The clause status is recorded beside it.
 
 ## Mandatory escalation rules
 
@@ -232,11 +238,11 @@ Point values are multiples of 5, and the largest single factor is restricted dat
 | Decisions affecting people unknown, otherwise the lower-risk baseline | 20, undetermined | high | undetermined | ESC-009 | escalated_review |
 | Decisions affecting people yes, assistive AI, internal, read_only, training no, one verified claim | 30, moderate | high | low | none | escalated_review, policy prohibited HR-001 |
 
-Unless a row says otherwise, `decisions_affecting_people` is `no`. The policy outcome is then `not_prohibited` under `ORG-AI-USE` 1.0.0, and the review path is the path in the table.
+Unless a row says otherwise, `decisions_affecting_people` is `no`. The policy outcome is then `not_prohibited` under `ORG-AI-USE` 1.1.0, and the review path is the path in the table. Clause evidence status is not a column here. It does not change the score, the residual tier, or the review path. The synthetic scenario `contract-clause-conflict` uses internal data, read-only access, and assistive AI with training set to no. That scores 30, moderate, with a low residual tier and standard review. CC-001 is conflicting on that scenario. The same answers with no clause evidence produce the same score and the same review path.
 
 ## Outputs
 
-Every evaluation returns: the rule set version, the inherent score, tier, and contributing factors with rule IDs, whether the result is provisional, evidence confidence with counts per status, the residual tier and its reason, fired escalation rules with their reasons and the assessment type, owner role, required output, and next step, missing information, conflicts, the org policy id and version, the policy outcome, listed contract clauses with `enforced: false`, and a review path of standard_review or escalated_review. The engine never returns an approval or a rejection. A prohibited outcome is not a rejection. A person makes every disposition.
+Every evaluation returns: the rule set version, the inherent score, tier, and contributing factors with rule IDs, whether the result is provisional, evidence confidence with counts per status, the residual tier and its reason, fired escalation rules with their reasons and the assessment type, owner role, required output, and next step, missing information, conflicts, the org policy id and version, the policy outcome, each required contract clause with `enforced: true` and an evidence status, reason, and evidence basis, and a review path of standard_review or escalated_review. When the caller does not supply a clause check, each required clause is missing because no clause evidence was provided. The engine never returns an approval or a rejection. A prohibited outcome is not a rejection. A clause gap is not a rejection. A person makes every disposition.
 
 ## Human disposition
 
@@ -256,7 +262,7 @@ This prototype has no non-overridable restriction. An organization that needs a 
 
 ## Invalid input
 
-Missing required fields or values outside the allowed lists are rejected with an error naming each problem field. The engine does not guess or substitute values. An escalation rule that omits its assessment type, owner role, required output, or next step is rejected before scoring, so a deeper assessment cannot fire without a defined follow-up. A policy that lists `unknown` as a prohibited value, or that marks a contract clause enforced, is rejected before scoring.
+Missing required fields or values outside the allowed lists are rejected with an error naming each problem field. The engine does not guess or substitute values. An escalation rule that omits its assessment type, owner role, required output, or next step is rejected before scoring, so a deeper assessment cannot fire without a defined follow-up. A policy that lists `unknown` as a prohibited value, or that marks a required contract clause as not enforced, is rejected before scoring. A clause check that omits a required clause, repeats one, or uses a status outside the evidence vocabulary is rejected.
 
 ## Repeatability
 

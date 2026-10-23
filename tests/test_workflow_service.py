@@ -83,7 +83,7 @@ def test_prohibited_scenario_creates_a_follow_up_without_an_escalation(db):
     risk = get_risk(db, risk_id)
     assert risk["policy_outcome"] == "prohibited"
     assert risk["policy_id"] == "ORG-AI-USE"
-    assert risk["policy_version"] == "1.0.0"
+    assert risk["policy_version"] == "1.1.0"
     assert risk["inherent_tier"] == "moderate"
     assert risk["residual_tier"] == "low"
     assert len(risk["actions"]) == 1
@@ -151,6 +151,25 @@ def test_prohibited_approval_requires_an_exception_and_reject_does_not(db):
     assert approved["rationale"]["risk"]["policy_outcome"]["status"] == "prohibited"
     assert [event["event_type"] for event in approved["events"]].count("decision_recorded") == 2
     assert "Replaces reject" in approved["events"][-1]["detail"]
+
+
+def test_clause_conflict_creates_follow_up_and_can_still_be_approved(db):
+    result = run_scenario("contract-clause-conflict")
+    risk_id = register_scenario(db, result)
+    risk = get_risk(db, risk_id)
+    assert risk["policy_outcome"] == "not_prohibited"
+    assert risk["inherent_tier"] == "moderate"
+    assert risk["residual_tier"] == "low"
+    assert len(risk["actions"]) == 1
+    assert "CC-001" in risk["actions"][0]["description"]
+    assert "score is unchanged" in risk["actions"][0]["description"]
+    clause = risk["rationale"]["risk"]["policy"]["required_contract_clauses"][0]
+    assert clause["evidence_status"] == "conflicting"
+    assert _decision(db, risk_id, disposition="approve", rationale="The conflict is recorded and accepted for now.") == risk_id
+    saved = get_risk(db, risk_id)
+    assert saved["decision"]["disposition"] == "approve"
+    assert saved["decision"]["exception_rationale"] == ""
+    assert saved["rationale"]["risk"]["policy"]["required_contract_clauses"][0]["evidence_status"] == "conflicting"
 
 
 def test_exception_is_rejected_when_the_result_is_not_prohibited(db):

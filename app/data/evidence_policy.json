@@ -1,7 +1,7 @@
 {
-    "evidence_policy_version": "0.1.0",
+    "evidence_policy_version": "0.2.0",
     "status": "draft",
-    "description": "Illustrative freshness limits. See docs/evidence-model.md.",
+    "description": "Illustrative freshness limits. Evidence policy 0.2.0 adds contract_clause at the same 365-day limit as a policy document. Other limits are unchanged. See docs/evidence-model.md.",
     "sources": ["vendor", "independent_auditor", "internal_observation"],
     "max_age_days": {
       "soc2_type2_report": 365,
@@ -9,7 +9,8 @@
       "policy_document": 365,
       "vendor_questionnaire_answer": 365,
       "vendor_statement": 365,
-      "configuration_export": 90
+      "configuration_export": 90,
+      "contract_clause": 365
     }
   }
   
