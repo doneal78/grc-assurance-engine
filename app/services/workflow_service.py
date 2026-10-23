@@ -59,6 +59,28 @@ def risk_for_scenario(db, scenario_id):
     return _dict(row)
 
 
+def _stored_rationale(result):
+    """Keep the inputs a reviewer package needs beside the evaluation.
+
+    Rows saved before this shape have only risk, claims, mappings, and the
+    scenario set version. The export says so instead of inventing answers.
+    """
+    return {
+        "risk": result["risk"],
+        "claims": result["claims"],
+        "mappings": result["mappings"],
+        "scenario_set_version": result.get("scenario_set_version"),
+        "assessment_inputs": result.get("assessment_inputs"),
+        "answer_applicability": result.get("answer_applicability") or {},
+        "evidence_policy_version": result.get("evidence_policy_version"),
+        "as_of": result.get("as_of"),
+        "trust_center": result.get("trust_center"),
+        "questionnaire_version": result.get("questionnaire_version"),
+        "vendor_name": result.get("name"),
+        "summary": result.get("summary"),
+    }
+
+
 def register_scenario(db, result):
     """Persist one scenario as a local risk record and create a follow-up action."""
     if not result.get("synthetic_data"):
@@ -80,8 +102,7 @@ def register_scenario(db, result):
          rationale_json, created_at, policy_id, policy_version, policy_outcome)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (risk_id, scenario_id, result["name"], statement, risk["inherent"]["tier"],
-         risk["residual"]["tier"], json.dumps({"risk": risk, "claims": result["claims"],
-         "mappings": result["mappings"], "scenario_set_version": result["scenario_set_version"]}), now,
+         risk["residual"]["tier"], json.dumps(_stored_rationale(result)), now,
          policy.get("policy_id"), policy.get("policy_version"), policy_outcome),
     )
     db.execute(

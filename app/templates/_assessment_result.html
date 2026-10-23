@@ -1,5 +1,5 @@
 {# Shared assessment result: used by the scenario pages and the public demo. #}
-<section class="notice"><strong>Illustrative result · Human review required</strong><p>Evaluation date {{ scenario.as_of }}{% if scenario.scenario_set_version %} · Scenario set {{ scenario.scenario_set_version }}{% endif %} · Risk rules {{ scenario.risk.rule_set_version }} · Evidence policy {{ scenario.evidence_policy_version }} · Org policy {{ scenario.risk.policy.policy_id }} {{ scenario.risk.policy.policy_version }}</p></section>
+<section class="notice"><strong>Illustrative result · Human review required</strong><p>Evaluation date {{ scenario.as_of }}{% if scenario.scenario_set_version %} · Scenario set {{ scenario.scenario_set_version }}{% endif %}{% if scenario.questionnaire_version %} · Questionnaire {{ scenario.questionnaire_version }}{% endif %} · Risk rules {{ scenario.risk.rule_set_version }} · Evidence policy {{ scenario.evidence_policy_version }} · Org policy {{ scenario.risk.policy.policy_id }} {{ scenario.risk.policy.policy_version }}</p></section>
 
 <section class="result-grid" aria-label="Assessment result">
   <article class="result-card"><p class="eyebrow">INHERENT RISK</p><strong class="tier tier-{{ scenario.risk.inherent.tier }}">{{ scenario.risk.inherent.tier|title }}</strong><p>Score {{ scenario.risk.inherent.score }}{% if scenario.risk.inherent.provisional %} · provisional{% endif %}</p></article>
@@ -17,8 +17,16 @@
 </section>
 
 <section class="content-section"><h2>Claims and evidence</h2>
-{% for claim in scenario.claims %}<article class="claim-card"><div class="claim-heading"><h3>{{ claim.statement }}</h3><span class="status status-{{ claim.evidence_status|replace('_', '-') }}">{{ claim.evidence_status|replace('_', ' ')|title }}</span></div><p class="muted">{{ claim.status_reason }}</p>{% if claim.evidence %}<ul>{% for item in claim.evidence %}<li><code>{{ item.evidence_id }}</code> — {{ item.status|replace('_', ' ')|title }}: {{ item.reason }}</li>{% endfor %}</ul>{% else %}<p>No evidence records. This is an evidence gap, not a confirmed control failure.</p>{% endif %}</article>{% endfor %}
+{% for claim in scenario.claims %}<article class="claim-card"><div class="claim-heading"><h3>{{ claim.statement }}</h3><span class="status status-{{ claim.evidence_status|replace('_', '-') }}">{{ claim.evidence_status|replace('_', ' ')|title }}</span></div><p class="muted">{{ claim.status_reason }}</p>{% if claim.evidence %}<ul>{% for item in claim.evidence %}<li><code>{{ item.evidence_id }}</code> — {{ item.status|replace('_', ' ')|title }}: {{ item.reason }}{% if item.artifact_name %} · {{ item.artifact_name }}{% endif %}{% if item.source %} · {{ item.source|replace('_', ' ') }}{% endif %}{% if item.trust_center_url %} · <span class="trust-url">{{ item.trust_center_url }}</span>{% endif %}</li>{% endfor %}</ul>{% else %}<p>No evidence records. This is an evidence gap, not a confirmed control failure.</p>{% endif %}</article>{% endfor %}
 </section>
+{% if scenario.trust_center %}
+<section class="content-section"><h2>Trust center</h2>
+<p>{{ scenario.trust_center.note }}</p>
+{% if scenario.trust_center.url %}<p class="trust-url">URL: <a href="{{ scenario.trust_center.url }}" rel="noreferrer noopener">{{ scenario.trust_center.url }}</a></p>{% else %}<p>No trust center URL was provided.</p>{% endif %}
+<ul>{% for pointer in scenario.trust_center.pointers %}<li>{{ pointer.prompt }} — {{ pointer.option|replace('_', ' ') }}{% if pointer.evidence_ids %} · {{ pointer.evidence_ids|join(', ') }}{% else %} · no evidence record{% endif %}</li>{% endfor %}</ul>
+<p class="muted">Fetched: no. Collection: {{ scenario.trust_center.collection|replace('_', ' ') }}. The evidence statuses above come from the evidence validator.</p>
+</section>
+{% endif %}
 
 <section class="content-section"><h2>Related control mapping prompts</h2>
 {% if scenario.mappings %}<div class="mapping-list">{% for mapping in scenario.mappings %}<article class="mapping-card"><div class="claim-heading"><h3>{{ mapping.control_id }} · {{ mapping.title }}</h3><span class="status status-draft">{{ mapping.review_status|title }}</span></div><p>{{ mapping.rationale }}</p><p class="muted">{{ mapping.framework }} {{ mapping.framework_version }} · Claim topics: {{ mapping.claim_topics|join(', ') }} · <a href="{{ mapping.source_reference }}" rel="noreferrer">NIST catalog source</a></p><p class="muted">Claims: {{ mapping.related_claims|map(attribute='claim_id')|join(', ') }} · Evidence: {% if mapping.related_evidence %}{{ mapping.related_evidence|map(attribute='evidence_id')|join(', ') }}{% else %}none linked{% endif %}</p></article>{% endfor %}</div>{% else %}<p>No mapping matched these claim topics.</p>{% endif %}

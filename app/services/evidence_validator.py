@@ -90,6 +90,22 @@ def _evidence_status(ev, as_of, policy):
     return "verified", "Independent, reviewed, current, relevant, in scope, and supporting."
 
 
+def _evidence_view(ev, status, reason):
+    """Status plus the reference fields a reviewer needs to trace the record.
+
+    A trust-center URL and pointer id are copied through when the intake
+    stored them. They do not change the status. The validator still does
+    not fetch anything.
+    """
+    item = {"evidence_id": ev["evidence_id"], "status": status,
+            "reason": reason, "file_sha256": ev.get("file_sha256")}
+    for key in ("artifact_name", "artifact_type", "source", "pointer_id", "trust_center_url"):
+        value = ev.get(key)
+        if isinstance(value, str) and value:
+            item[key] = value
+    return item
+
+
 def validate(claims, evidence, as_of, policy=None):
     """Derive an evidence status for every claim."""
     policy = policy if policy is not None else load_policy()
@@ -100,8 +116,7 @@ def validate(claims, evidence, as_of, policy=None):
         for ev in evidence:
             if ev["claim_id"] == claim["claim_id"]:
                 status, reason = _evidence_status(ev, as_of, policy)
-                records.append({"evidence_id": ev["evidence_id"], "status": status,
-                                "reason": reason, "file_sha256": ev.get("file_sha256")})
+                records.append(_evidence_view(ev, status, reason))
         statuses = [r["status"] for r in records]
         usable = [s for s in statuses if s != "unusable"]
         if not records:

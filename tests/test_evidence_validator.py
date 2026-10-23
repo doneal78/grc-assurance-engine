@@ -239,6 +239,17 @@ def test_clause_evidence_is_not_rejected_as_an_unknown_claim():
     assert checked["evidence_policy_version"] == "0.2.0"
 
 
+def test_trust_center_reference_is_copied_and_does_not_change_status():
+    plain = claim_result([ev()])
+    cited = claim_result([ev(pointer_id="soc2", trust_center_url="https://trust.example.test/acme")])
+    assert plain["evidence_status"] == cited["evidence_status"] == "verified"
+    assert cited["evidence"][0]["pointer_id"] == "soc2"
+    assert cited["evidence"][0]["trust_center_url"] == "https://trust.example.test/acme"
+    assert cited["evidence"][0]["artifact_type"] == "soc2_type2_report"
+    assert "pointer_id" not in plain["evidence"][0]
+    assert "trust_center_url" not in plain["evidence"][0]
+
+
 def test_clause_id_cannot_collide_with_a_claim_id():
     with pytest.raises(EvidenceInputError, match="collides"):
         validate_assessment([{"claim_id": "CC-001", "statement": "Same id"}], [], AS_OF, [CC001])

@@ -9,7 +9,7 @@ The application uses the Flask factory in `app/__init__.py` to register web blue
 | HTTP routes | `app/routes/` | Health, dashboard, and synthetic scenario pages. |
 | Business logic | `app/services/` | Risk evaluation, the single org-policy check, evidence validation, control mapping, scenario orchestration, local workflow persistence, human decisions, and cost calculations. |
 | Database | `app/db.py`, `app/schema.sql` | SQLite schema and request-scoped connections for risks, remediation actions, human decisions, and workflow events. `DATABASE_PATH` can place the file on a persistent host volume. Startup adds policy columns to a risk table created before those columns existed. |
-| Versioned rules/data | `app/data/` | Risk rules, the single org policy profile, evidence freshness policy, mappings, and fixed-date demo scenarios. |
+| Versioned rules/data | `app/data/` | Risk rules, the single org policy profile, the public intake questionnaire, evidence freshness policy, mappings, and fixed-date demo scenarios. |
 | Presentation | `app/templates/`, `app/static/` | Server-rendered HTML and responsive CSS. |
 | Automated checks | `tests/` | pytest tests include service-level business logic and Flask route behavior. |
 | Documentation | `docs/` | Design, assumptions, and limitations. |
@@ -34,3 +34,4 @@ Scenario runs are deterministic examples, not vendor records. There is no real a
 - Required contract clauses are data in the org policy. The evidence validator derives each clause status. The risk engine records that status and does not score it. A gap does not block the human decision.
 - A prohibited result can be approved only with an exception rationale because a person, not the score, makes the disposition. The restriction stays on the record. There is no configured non-overridable ban.
 - The decider is a name or role typed into the form. Nothing checks it against a directory or against the restriction's owner role.
+- The public intake questionnaire is versioned data. It chooses prompts and which trust-center citation becomes an evidence record. The risk engine still scores. A trust-center URL is stored and not fetched. The reviewer package is JSON and plain text built from the assessment result. It does not approve the vendor.
