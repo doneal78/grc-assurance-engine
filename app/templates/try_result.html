@@ -17,6 +17,26 @@
 {% else %}<p>No ticket needed: no escalation rule fired, no hard restriction matched, and no evidence gap needs follow-up. A person still reviews the result.</p>{% endif %}
 </section>
 
+<section class="content-section"><h2>Reviewer package</h2>
+<p>Download the intake answers, the evaluation, the policy outcome, the required-clause statuses, and the evidence summary. JSON suits a ticket. The text summary can be read or printed. Neither one is an approval, and neither one is saved.</p>
+<div class="export-actions">
+{% if posted_form %}
+<form method="post" action="{{ url_for('try_demo.assess') }}">
+  {% for key, value in posted_form.items() %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+  <button class="button-link" type="submit" name="export_format" value="json">Download JSON</button>
+  <button class="button-link" type="submit" name="export_format" value="markdown">Download summary</button>
+</form>
+{% elif scenario.scenario_id %}
+<a class="button-link" href="{{ url_for('try_demo.export_scenario', scenario_id=scenario.scenario_id, export_format='json') }}">Download JSON</a>
+<a class="button-link" href="{{ url_for('try_demo.export_scenario', scenario_id=scenario.scenario_id, export_format='markdown') }}">Download summary</a>
+{% endif %}
+</div>
+<details>
+  <summary>Read the text summary</summary>
+  <pre class="payload"><code>{{ package_markdown }}</code></pre>
+</details>
+</section>
+
 <section class="content-section action-panel"><h2>Try another</h2>
 <p><a class="button-link" href="{{ url_for('try_demo.index') }}#intake">Change the inputs</a></p>
 </section>

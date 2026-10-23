@@ -4,10 +4,12 @@ The public "Try it" pages let a visitor describe a fictional vendor or AI
 tool. This module converts that form into the same claims and evidence
 records the evidence validator and risk engine already use, so every result
 comes from the tested application logic rather than demo-only scoring.
-Nothing here writes to the database.
+A trust-center URL is stored with those records. It is not fetched, and it
+is not a separate assurance result. Nothing here writes to the database.
 """
 
 from datetime import timedelta
+from urllib.parse import urlparse
 
 from app.services.control_mapper import map_claims
 from app.services.evidence_validator import validate_assessment
@@ -24,14 +26,6 @@ ASSESSMENT_FIELDS = (
     "external_exposure",
     "retention_deletion",
 )
-
-# Claim topics are limited to the topics the control mapping library covers.
-CLAIM_STATEMENTS = {
-    "authentication": "Organizational users authenticate to the service.",
-    "integration_permissions": "The integration is limited to the access requested.",
-    "transmission_security": "Data is encrypted in transit.",
-    "audit_logging": "Security-relevant events are logged and retained.",
-}
 
 EVIDENCE_OPTIONS = {
     "independent_verified": "Independent report, reviewed",
@@ -96,6 +90,15 @@ def _ids(topic):
     return f"C-{suffix}", f"E-{suffix}"
 
 
+def _days_ago(as_of, days):
+    return (as_of - timedelta(days=days)).isoformat()
+
+
+def _supporting_review(as_of, contradicts=False):
+    return {"reviewer": "Demo reviewer", "reviewed_on": _days_ago(as_of, 5), "relevant": True,
+            "in_scope": True, "supports_claim": True, "contradicts_claim": contradicts}
+
+
 def _evidence_record(topic, option, as_of):
     """Build one synthetic evidence record dated relative to the evaluation date."""
     claim_id, evidence_id = _ids(topic)
@@ -155,8 +158,83 @@ def _clause_evidence_record(clause, option, as_of):
     return None  # "none": the clause has no evidence records
 
 
+def _trust_center_url(value, trust):
+    """Accept an empty URL, or one http(s) URL. Never fetch it."""
+    url = (value or "").strip()
+    if not url:
+        return None, []
+    limit = trust["url_max_length"]
+    if len(url) > limit:
+        return None, [f"Trust center URL must be {limit} characters or fewer."]
+    if not url.isprintable() or any(character.isspace() for character in url):
+        return None, ["Trust center URL contains unsupported characters."]
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        return None, ["Trust center URL must start with http:// or https:// and include a host."]
+    if parsed.username or parsed.password:
+        return None, ["Trust center URL must not include a username or password."]
+    return url, []
+
+
+def _trust_record(pointer, topic, option, as_of, url):
+    """One pasted trust-center citation, dated relative to the evaluation date."""
+    if option == "none":
+        return None
+    claim_id, _ = _ids(topic)
+    evidence_id = f"E-{pointer['pointer_id'].upper()}-{topic.upper().replace('_', '-')}"
+    record = {
+        "evidence_id": evidence_id,
+        "claim_id": claim_id,
+        "artifact_name": pointer["artifact_name"],
+        "artifact_type": pointer["artifact_type"],
+        "source": pointer["source_by_option"][option],
+        "pointer_id": pointer["pointer_id"],
+    }
+    if url:
+        record["trust_center_url"] = url
+    if option == "independent_verified":
+        record["collection_date"] = _days_ago(as_of, 120)
+        record["review"] = _supporting_review(as_of)
+    elif option == "not_reviewed":
+        record["collection_date"] = _days_ago(as_of, 60)
+    elif option == "expired":
+        record["collection_date"] = _days_ago(as_of, 500)
+        record["review"] = _supporting_review(as_of)
+    elif option == "vendor_statement":
+        record["collection_date"] = _days_ago(as_of, 30)
+        record["review"] = _supporting_review(as_of)
+    elif option == "contradicts":
+        record["collection_date"] = _days_ago(as_of, 7)
+        record["review"] = _supporting_review(as_of, contradicts=True)
+    return record
+
+
+def _context_answers(form, questionnaire, choices, problems):
+    """Read scoring answers. Omit model training only when AI use is none."""
+    assessment = {}
+    applicability = {}
+    ai_use = form.get("ai_use", "")
+    for spec in questionnaire["context_questions"]:
+        field = spec["field"]
+        raw = form.get(field, "")
+        if spec["ask"] == "when_ai_use_is_not_none" and ai_use == "none" and raw == "":
+            assessment[field] = "no"
+            applicability[field] = "not_applicable"
+            continue
+        if raw not in choices[field]:
+            label = spec["prompt"].rstrip("?")
+            problems.append(f"{label}: choose one of the listed options.")
+            assessment[field] = raw
+            continue
+        assessment[field] = raw
+    return assessment, applicability
+
+
 def build_intake(form, as_of):
     """Validate the intake form and return claims, evidence, and assessment inputs."""
+    from app.services.intake_questionnaire import load_questionnaire
+
+    questionnaire = load_questionnaire()
     problems = []
     vendor_name = (form.get("vendor_name") or "").strip()
     if not vendor_name:
@@ -167,24 +245,53 @@ def build_intake(form, as_of):
         problems.append("Vendor or tool name contains unsupported characters.")
 
     choices = field_choices()
-    assessment = {}
-    for field in assessment_fields():
+    assessment, applicability = _context_answers(form, questionnaire, choices, problems)
+    for spec in load_org_policy()["intake_fields"]:
+        field = spec["field"]
         value = form.get(field, "")
         if value not in choices[field]:
-            problems.append(f"{field.replace('_', ' ').capitalize()}: choose one of the listed options.")
+            problems.append(f"{spec['prompt']} Choose one of the listed options.")
         assessment[field] = value
 
     claims, evidence = [], []
-    for topic, statement in CLAIM_STATEMENTS.items():
-        option = form.get(f"evidence_{topic}", "")
-        if option not in EVIDENCE_OPTIONS:
-            problems.append(f"Evidence for {topic.replace('_', ' ')}: choose one of the listed options.")
-            continue
-        claim_id, _ = _ids(topic)
-        claims.append({"claim_id": claim_id, "topic": topic, "statement": statement})
-        record = _evidence_record(topic, option, as_of)
+    access = questionnaire["access_evidence"]
+    access_option = form.get(access["field"], "")
+    if access_option not in EVIDENCE_OPTIONS:
+        problems.append("Evidence for the access claim: choose one of the listed options.")
+    else:
+        claim_id, _ = _ids(access["topic"])
+        claims.append({"claim_id": claim_id, "topic": access["topic"],
+                       "statement": access["statement"]})
+        record = _evidence_record(access["topic"], access_option, as_of)
         if record is not None:
             evidence.append(record)
+
+    trust = questionnaire["trust_center"]
+    url, url_problems = _trust_center_url(form.get(trust["url_field"], ""), trust)
+    problems.extend(url_problems)
+    pointers = []
+    for pointer in trust["pointers"]:
+        option = form.get(pointer["field"], "")
+        if option not in trust["evidence_options"]:
+            problems.append(f"{pointer['prompt']}: choose one of the listed options.")
+            continue
+        evidence_ids = []
+        for topic_spec in pointer["topics"]:
+            claim_id, _ = _ids(topic_spec["topic"])
+            claims.append({"claim_id": claim_id, "topic": topic_spec["topic"],
+                           "statement": topic_spec["statement"]})
+            record = _trust_record(pointer, topic_spec["topic"], option, as_of, url)
+            if record is not None:
+                evidence.append(record)
+                evidence_ids.append(record["evidence_id"])
+        pointers.append({
+            "pointer_id": pointer["pointer_id"],
+            "prompt": pointer["prompt"],
+            "option": option,
+            "artifact_type": pointer["artifact_type"],
+            "topics": [topic_spec["topic"] for topic_spec in pointer["topics"]],
+            "evidence_ids": evidence_ids,
+        })
 
     for clause in load_org_policy()["required_contract_clauses"]:
         field = clause_evidence_field(clause["clause_id"])
@@ -198,7 +305,21 @@ def build_intake(form, as_of):
 
     if problems:
         raise IntakeError(problems)
-    return {"vendor_name": vendor_name, "assessment": assessment, "claims": claims, "evidence": evidence}
+    return {
+        "vendor_name": vendor_name,
+        "assessment": assessment,
+        "answer_applicability": applicability,
+        "claims": claims,
+        "evidence": evidence,
+        "questionnaire_version": questionnaire["questionnaire_version"],
+        "trust_center": {
+            "url": url,
+            "fetched": False,
+            "collection": "pasted_metadata",
+            "note": trust["note"],
+            "pointers": pointers,
+        },
+    }
 
 
 def run_intake(intake, as_of):
@@ -215,7 +336,10 @@ def run_intake(intake, as_of):
         "synthetic_data": True,
         "as_of": as_of.isoformat(),
         "scenario_set_version": None,
+        "questionnaire_version": intake["questionnaire_version"],
         "assessment_inputs": intake["assessment"],
+        "answer_applicability": intake["answer_applicability"],
+        "trust_center": intake["trust_center"],
         "evidence_policy_version": checked["evidence_policy_version"],
         "claims": checked["claims"],
         "risk": risk,
@@ -295,10 +419,16 @@ def workflow_events(result):
     else:
         policy_detail = (f"No hard restriction matched ({policy['policy_id']} {policy['policy_version']}). "
                          f"Required contract clauses: {clause_summary}.")
+    evidence_detail = (f"Evidence policy {result['evidence_policy_version']}, evaluated as of "
+                       f"{result['as_of']}: {summary or 'no claims'}.")
+    trust_center = result.get("trust_center")
+    if trust_center and trust_center.get("url"):
+        evidence_detail += " Trust center URL stored and not fetched."
+    elif trust_center:
+        evidence_detail += " Trust center artifact choices are pasted metadata and were not fetched."
     steps = [
         ("Intake received", f"{len(result['claims'])} claims recorded for {result['name']}."),
-        ("Evidence validated", f"Evidence policy {result['evidence_policy_version']}, evaluated as of "
-                               f"{result['as_of']}: {summary or 'no claims'}."),
+        ("Evidence validated", evidence_detail),
         ("Risk evaluated", f"Rule set {risk['rule_set_version']}: inherent {risk['inherent']['tier']}, "
                            f"evidence confidence {risk['evidence_confidence']['level']}, "
                            f"residual {risk['residual']['tier']}."),

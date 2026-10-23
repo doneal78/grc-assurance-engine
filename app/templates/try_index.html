@@ -22,29 +22,45 @@
 
 <section class="content-section" id="intake">
 <h2>Or describe your own</h2>
+<p>The questions follow the rule set. Model training is asked only when AI use is not none, because that answer is not scored otherwise. The decisions question stays on every intake.</p>
 {% if problems %}<div class="inline-warning" role="alert"><strong>Please fix these fields:</strong><ul>{% for problem in problems %}<li>{{ problem }}</li>{% endfor %}</ul></div>{% endif %}
-{% set fields = [
-  ("data_sensitivity", "Data the vendor would handle"),
-  ("integration_permissions", "Integration permissions"),
-  ("ai_use", "AI use"),
-  ("model_training_on_customer_data", "Trains models on customer data"),
-  ("external_exposure", "Exposure"),
-  ("retention_deletion", "Data retention and deletion"),
-] %}
 <form class="action-form intake-form" method="post" action="{{ url_for('try_demo.assess') }}">
   <label class="wide">Vendor or tool name<input name="vendor_name" maxlength="80" required value="{{ form.get('vendor_name', '') }}" placeholder="Example: Northwind AI Notes"></label>
-  {% for field, label in fields %}
-  <label>{{ label }}<select name="{{ field }}">{% for value in choices[field] %}<option value="{{ value }}"{% if form.get(field) == value %} selected{% endif %}>{{ value|replace('_', ' ')|capitalize }}</option>{% endfor %}</select></label>
-  {% if field == 'ai_use' %}
-    {% for spec in policy_fields %}
-    <label class="wide">{{ spec.prompt }}<select name="{{ spec.field }}">{% for value in spec.allowed %}<option value="{{ value }}"{% if form.get(spec.field, spec.allowed[0]) == value %} selected{% endif %}>{{ value|replace('_', ' ')|capitalize }}</option>{% endfor %}</select>{% if spec.help %}<span class="muted">{{ spec.help }}</span>{% endif %}</label>
+  {% for spec in context_questions %}
+  {% if spec.ask == 'when_ai_use_is_not_none' %}<div data-ask-when="ai_not_none">{% endif %}
+  <label class="wide">{{ spec.prompt }}
+    <select name="{{ spec.field }}">{% for value in choices[spec.field] %}<option value="{{ value }}"{% if form.get(spec.field) == value %} selected{% endif %}>{{ value|replace('_', ' ')|capitalize }}</option>{% endfor %}</select>
+    <span class="muted">{{ spec.help }}</span>
+  </label>
+  {% if spec.field == 'ai_use' %}
+    {% for policy_spec in policy_fields %}
+    <label class="wide">{{ policy_spec.prompt }}
+      <select name="{{ policy_spec.field }}">{% for value in policy_spec.allowed %}<option value="{{ value }}"{% if form.get(policy_spec.field, policy_spec.allowed[0]) == value %} selected{% endif %}>{{ value|replace('_', ' ')|capitalize }}</option>{% endfor %}</select>
+      {% if policy_spec.help %}<span class="muted">{{ policy_spec.help }}</span>{% endif %}
+      <span class="muted">{{ policy_question_help }}</span>
+    </label>
     {% endfor %}
   {% endif %}
+  {% if spec.ask == 'when_ai_use_is_not_none' %}</div>{% endif %}
   {% endfor %}
   <fieldset class="evidence-fieldset">
-    <legend>What evidence did the vendor provide for each claim?</legend>
-    {% for topic, statement in claim_topics.items() %}
-    <label>{{ statement }}<select name="evidence_{{ topic }}">{% for key, text in evidence_options.items() %}<option value="{{ key }}"{% if form.get('evidence_' ~ topic) == key %} selected{% endif %}>{{ text }}</option>{% endfor %}</select></label>
+    <legend>{{ access_evidence.prompt }}</legend>
+    <label class="wide">{{ access_evidence.statement }}
+      <select name="{{ access_evidence.field }}">{% for key, text in evidence_options.items() %}<option value="{{ key }}"{% if form.get(access_evidence.field) == key %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>
+      <span class="muted">{{ access_evidence.help }}</span>
+    </label>
+  </fieldset>
+  <fieldset class="evidence-fieldset">
+    <legend>Trust center</legend>
+    <label class="wide">{{ trust_center.prompt }}
+      <input name="{{ trust_center.url_field }}" maxlength="{{ trust_center.url_max_length }}" value="{{ form.get(trust_center.url_field, '') }}" placeholder="https://trust.example.test/northwind">
+      <span class="muted">{{ trust_center.help }}</span>
+    </label>
+    {% for pointer in trust_center.pointers %}
+    <label>{{ pointer.prompt }}
+      <select name="{{ pointer.field }}">{% for key, text in trust_center.evidence_options.items() %}<option value="{{ key }}"{% if form.get(pointer.field) == key %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>
+      <span class="muted">{{ pointer.help }}</span>
+    </label>
     {% endfor %}
   </fieldset>
   <fieldset class="evidence-fieldset">
@@ -55,6 +71,23 @@
   </fieldset>
   <button class="button-link" type="submit">Run assessment</button>
 </form>
-<p class="muted">Evidence dates are set relative to today, so "older than its freshness limit" really is expired under the evidence policy. Try contradicting evidence, unknown answers, or high risk with perfect paperwork, and see which rules respond.</p>
+<p class="muted">Evidence dates are set relative to today, so "older than its freshness limit" really is expired under the evidence policy. A trust-center choice becomes an evidence record. The URL is not opened. Try contradicting evidence, unknown answers, or high risk with a complete trust center, and see which rules respond.</p>
+<script>
+(function () {
+  var ai = document.querySelector("[name=ai_use]");
+  var blocks = document.querySelectorAll("[data-ask-when=ai_not_none]");
+  function sync() {
+    var hide = !ai || ai.value === "none";
+    blocks.forEach(function (block) {
+      block.hidden = hide;
+      block.querySelectorAll("select, input, textarea").forEach(function (field) { field.disabled = hide; });
+    });
+  }
+  if (ai) {
+    ai.addEventListener("change", sync);
+    sync();
+  }
+})();
+</script>
 </section>
 {% endblock %}

@@ -10,6 +10,14 @@
 <section class="content-section"><h2>Organization policy</h2><p class="inline-warning">This saved result has no policy reference. Delete the local database and add the scenario again before recording a decision.</p></section>
 {% endif %}
 <section class="content-section"><h2>Assessment rationale</h2><p>{{ risk.rationale.risk.residual.reason }}</p>{% if risk.rationale.risk.escalations %}{% with escalations=risk.rationale.risk.escalations %}{% include "_escalation_list.html" %}{% endwith %}{% endif %}<h3>Evidence and claim statuses</h3><ul>{% for claim in risk.rationale.claims %}<li>{{ claim.claim_id }} — {{ claim.evidence_status|replace('_', ' ')|title }}: {{ claim.status_reason }}</li>{% endfor %}</ul><h3>Draft control prompts</h3><ul>{% for mapping in risk.rationale.mappings %}<li>{{ mapping.control_id }} — {{ mapping.title }} ({{ mapping.review_status }})</li>{% endfor %}</ul></section>
+<section class="content-section"><h2>Reviewer package</h2>
+<p>Download this saved assessment: intake answers when they were stored, the evaluation, the policy outcome, required-clause statuses, the evidence summary, and the decision on this record. The file is a handoff. It is not an approval.</p>
+{% if risk.rationale.trust_center %}<p class="trust-url">Trust center URL: {% if risk.rationale.trust_center.url %}{{ risk.rationale.trust_center.url }}{% else %}none{% endif %}. Fetched: no.</p>{% else %}<p class="muted">This saved result did not cite a trust center.</p>{% endif %}
+<div class="export-actions">
+  <a class="button-link" href="{{ url_for('risks.export_risk', risk_id=risk.risk_id, export_format='json') }}">Download JSON</a>
+  <a class="button-link" href="{{ url_for('risks.export_risk', risk_id=risk.risk_id, export_format='markdown') }}">Download summary</a>
+</div>
+</section>
 <section class="content-section"><h2>Human decision</h2>
 {% if risk.decision %}
 <article class="claim-card">

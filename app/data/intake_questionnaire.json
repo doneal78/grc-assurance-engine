@@ -1,0 +1,135 @@
+{
+  "questionnaire_version": "1.0.0",
+  "status": "illustrative",
+  "description": "Public intake questions for this portfolio prototype. Allowed values still come from the risk rule set and the org policy. This file holds the prompts, when a question is asked, and how a trust-center citation becomes evidence. It does not score anything. The prototype stores a trust-center URL and does not fetch the page.",
+  "policy_question_help": "Asked on every intake, including when AI use is none. Yes matches HR-001 either way. Unknown is not treated as no and opens ESC-009. The score does not change.",
+  "context_questions": [
+    {
+      "field": "data_sensitivity",
+      "ask": "always",
+      "prompt": "What is the most sensitive data this vendor would handle?",
+      "help": "Feeds INH-DATA. Unknown opens a data-classification review (ESC-005) and keeps the tier provisional. It is not treated as public."
+    },
+    {
+      "field": "integration_permissions",
+      "ask": "always",
+      "prompt": "What access would the integration have in your systems?",
+      "help": "Feeds INH-PERM. Restricted data with read-write or admin access opens a privileged-access review (ESC-001). Unknown access on confidential or restricted data opens an integration access review (ESC-007)."
+    },
+    {
+      "field": "ai_use",
+      "ask": "always",
+      "prompt": "How does the service use AI?",
+      "help": "Feeds INH-AI. None means model training is not scored. Autonomous use with confidential or restricted data opens an AI impact assessment (ESC-002). Unknown AI use on that data opens an AI use determination (ESC-008)."
+    },
+    {
+      "field": "model_training_on_customer_data",
+      "ask": "when_ai_use_is_not_none",
+      "prompt": "Will the vendor train or improve models on your data?",
+      "help": "Asked only when AI use is not none. Feeds INH-TRAIN. Yes or unknown, with assistive or autonomous AI on confidential or restricted data, opens a model-training assessment (ESC-004). This answer is not the CC-001 contract-clause check. An omitted answer is stored as no and marked not applicable. An answer that is actually submitted is kept."
+    },
+    {
+      "field": "external_exposure",
+      "ask": "always",
+      "prompt": "Who can reach the service?",
+      "help": "Feeds INH-EXPO. Customer-facing adds a small inherent score. It does not by itself open a deeper assessment."
+    },
+    {
+      "field": "retention_deletion",
+      "ask": "always",
+      "prompt": "Is retention and deletion documented?",
+      "help": "This does not add points. A retention review (ESC-006) opens only when data is confidential or restricted and this answer is undocumented or unknown."
+    }
+  ],
+  "access_evidence": {
+    "field": "evidence_integration_permissions",
+    "topic": "integration_permissions",
+    "statement": "The integration is limited to the access requested.",
+    "prompt": "What supports the access claim?",
+    "help": "This is the integration's actual access, not a page on the trust center. A contradicting configuration export makes the claim conflicting and opens an evidence conflict review (ESC-003). Nothing provided is missing. That is not a confirmed failure and it is not a safeguard."
+  },
+  "trust_center": {
+    "url_field": "trust_center_url",
+    "url_max_length": 200,
+    "prompt": "Vendor trust center URL",
+    "help": "Optional. Use a fictional URL. The prototype stores it and does not open or download the page. A URL alone creates no evidence and cannot approve the vendor.",
+    "note": "The prototype stores the URL and the artifact choices. It does not retrieve the page. A URL alone is not an evidence record and cannot approve the vendor.",
+    "evidence_options": {
+      "independent_verified": "Reviewed, and the source is not the vendor",
+      "vendor_statement": "Vendor's own description, reviewed",
+      "not_reviewed": "Listed, not reviewed yet",
+      "expired": "Older than the freshness limit",
+      "contradicts": "Reviewed, and it contradicts the claim",
+      "none": "Not listed"
+    },
+    "pointers": [
+      {
+        "pointer_id": "soc2",
+        "field": "trust_soc2",
+        "prompt": "SOC 2 Type II report listed on the trust center",
+        "help": "One choice is cited for authentication and for event logging. The evidence validator scores each claim on its own. The demo does not download the report. Reviewed and not from the vendor uses the auditor as the source, so it can reach verified.",
+        "artifact_type": "soc2_type2_report",
+        "artifact_name": "SOC 2 Type II report cited from the trust center",
+        "source_by_option": {
+          "independent_verified": "independent_auditor",
+          "vendor_statement": "vendor",
+          "not_reviewed": "independent_auditor",
+          "expired": "independent_auditor",
+          "contradicts": "internal_observation"
+        },
+        "topics": [
+          {
+            "topic": "authentication",
+            "statement": "The cited SOC 2 Type II report addresses authentication for organizational users."
+          },
+          {
+            "topic": "audit_logging",
+            "statement": "The cited SOC 2 Type II report addresses security-event logging."
+          }
+        ]
+      },
+      {
+        "pointer_id": "security",
+        "field": "trust_security",
+        "prompt": "Security documentation listed on the trust center",
+        "help": "Cited for transmission protection. The document is the vendor's. A review by someone other than the vendor is an internal observation. The vendor's own description stays self-attested.",
+        "artifact_type": "policy_document",
+        "artifact_name": "Security documentation cited from the trust center",
+        "source_by_option": {
+          "independent_verified": "internal_observation",
+          "vendor_statement": "vendor",
+          "not_reviewed": "internal_observation",
+          "expired": "internal_observation",
+          "contradicts": "internal_observation"
+        },
+        "topics": [
+          {
+            "topic": "transmission_security",
+            "statement": "The cited security documentation addresses transmission protection."
+          }
+        ]
+      },
+      {
+        "pointer_id": "privacy",
+        "field": "trust_privacy",
+        "prompt": "Privacy notice listed on the trust center",
+        "help": "Cited for the privacy claim. Not listed leaves that claim missing. That is not a confirmed failure and it is not treated as verified. No control mapping is attached, because this prototype has no reviewed privacy-control mapping.",
+        "artifact_type": "policy_document",
+        "artifact_name": "Privacy notice cited from the trust center",
+        "source_by_option": {
+          "independent_verified": "internal_observation",
+          "vendor_statement": "vendor",
+          "not_reviewed": "internal_observation",
+          "expired": "internal_observation",
+          "contradicts": "internal_observation"
+        },
+        "topics": [
+          {
+            "topic": "privacy",
+            "statement": "The cited privacy notice describes how customer data is collected, used, and retained."
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,8 +1,9 @@
 """Local risk register and remediation routes."""
 
-from flask import Blueprint, abort, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, redirect, render_template, request, url_for
 
 from app.db import get_db
+from app.services.intake_export import package_from_saved_risk, render_export
 from app.services.workflow_service import (
     DISPOSITIONS, WorkflowInputError, get_risk, list_risks, record_decision, update_action,
 )
@@ -21,6 +22,19 @@ def detail(risk_id):
     if risk is None:
         abort(404)
     return render_template("risk_detail.html", risk=risk, dispositions=DISPOSITIONS)
+
+
+@bp.get("/risks/<risk_id>/export/<export_format>")
+def export_risk(risk_id, export_format):
+    if export_format not in {"json", "markdown"}:
+        abort(404)
+    risk = get_risk(get_db(), risk_id)
+    if risk is None:
+        abort(404)
+    body, mimetype, filename = render_export(package_from_saved_risk(risk), export_format)
+    return Response(body, mimetype=mimetype, headers={
+        "Content-Disposition": f'attachment; filename="{filename}"',
+    })
 
 
 @bp.post("/remediation/<int:action_id>")
