@@ -21,12 +21,17 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
         DEMO_USERNAME=os.environ.get("DEMO_USERNAME", ""),
         DEMO_PASSWORD=os.environ.get("DEMO_PASSWORD", ""),
         TESTING=False,
-        # Reject oversized form posts. The largest real form is well under 2 KB.
-        MAX_CONTENT_LENGTH=16 * 1024,
     )
 
     if test_config is not None:
         app.config.from_mapping(test_config)
+
+    # Flask's own default is None, which would leave uploads uncapped.
+    # Ordinary form posts are capped again in the before-request check below.
+    # The constant lives with the importer so the parser and the HTTP cap match.
+    from app.services.intake_importer import IMPORT_MAX_BYTES
+    if not app.config.get("MAX_CONTENT_LENGTH"):
+        app.config["MAX_CONTENT_LENGTH"] = IMPORT_MAX_BYTES
 
     if app.config["REQUIRE_AUTH"] and not (
         app.config["DEMO_USERNAME"] and app.config["DEMO_PASSWORD"]
@@ -40,6 +45,16 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     # Pages anyone may open without the demo password. The public "Try it"
     # pages run synthetic input through the real services and save nothing.
     PUBLIC_ENDPOINTS = {"health.health", "static"}
+    FORM_MAX_BYTES = 16 * 1024
+    IMPORT_ENDPOINTS = {"try_demo.import_preview", "try_demo.import_confirm"}
+
+    @app.before_request
+    def limit_request_body():
+        """Keep ordinary form posts small, and cap import uploads separately."""
+        endpoint = request.endpoint or ""
+        limit = app.config["MAX_CONTENT_LENGTH"] if endpoint in IMPORT_ENDPOINTS else FORM_MAX_BYTES
+        if request.content_length is not None and request.content_length > limit:
+            return Response("Request body is too large", 413)
 
     @app.before_request
     def require_demo_authentication():

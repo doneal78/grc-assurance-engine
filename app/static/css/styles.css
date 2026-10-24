@@ -57,6 +57,7 @@ code { background:var(--surface); padding:.1rem .25rem; border-radius:4px; overf
 .export-actions { display:flex; flex-wrap:wrap; gap:.75rem; align-items:center; margin:.5rem 0 1rem; }
 .export-actions form { display:flex; flex-wrap:wrap; gap:.75rem; }
 .export-actions .button-link { border:0; cursor:pointer; }
+.import-file { font:inherit; }
 .trust-url { overflow-wrap:anywhere; }
 .evidence-fieldset { grid-column:1 / -1; display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,14rem),1fr)); gap:.8rem; border:1px solid var(--line); border-radius:8px; padding:1rem; margin:0; min-width:0; }
 .evidence-fieldset legend { font-weight:650; padding:0 .3rem; }

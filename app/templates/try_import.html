@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Import a vendor file | GRC Assurance Engine{% endblock %}
+{% block content %}
+<p class="eyebrow"><a href="{{ url_for('try_demo.index') }}">TRY THE DEMO</a> · SYNTHETIC · NOT SAVED</p>
+<h1>Import a vendor file</h1>
+<p class="lead">Upload a questionnaire spreadsheet or a simulated ServiceNow ticket file. The page lists what would be ingested. Scores appear only after you confirm, and they come from the same assessment used by the intake form. Nothing is saved, and ServiceNow is not contacted.</p>
+<section class="notice"><strong>Simulated file import</strong><p>Use made-up vendors. CSV and Excel use the questionnaire columns. JSON, and a second CSV shape, mirror a ServiceNow ticket export. This is not a live connector. A reviewer package or a mock remediation ticket is not an intake file.</p></section>
+
+<section class="content-section">
+<h2>Sample files</h2>
+<p>The samples are synthetic and match the fixtures used by the tests.</p>
+<p class="export-actions">
+  <a class="button-link" href="{{ url_for('try_demo.import_sample', sample_kind='csv') }}">Questionnaire CSV</a>
+  <a class="button-link" href="{{ url_for('try_demo.import_sample', sample_kind='xlsx') }}">Questionnaire Excel</a>
+  <a class="button-link" href="{{ url_for('try_demo.import_sample', sample_kind='json') }}">ServiceNow JSON</a>
+  <a class="button-link" href="{{ url_for('try_demo.import_sample', sample_kind='servicenow-csv') }}">ServiceNow CSV</a>
+</p>
+</section>
+
+<section class="content-section" id="upload">
+<h2>Upload</h2>
+{% if preview and preview.problems %}
+<div class="inline-warning" role="alert"><strong>This file was not imported.</strong><ul>{% for problem in preview.problems %}<li>{{ problem }}</li>{% endfor %}</ul></div>
+{% endif %}
+<form class="action-form intake-form" method="post" action="{{ url_for('try_demo.import_preview') }}" enctype="multipart/form-data">
+  <label class="wide">Intake file
+    <input class="import-file" type="file" name="intake_file" accept=".csv,.xlsx,.json" required>
+    <span class="muted">.csv, .xlsx, or .json. Up to 256 KB. At most 20 vendor rows. UTF-8 for text files.</span>
+  </label>
+  <button class="button-link" type="submit">Preview file</button>
+</form>
+</section>
+
+{% if preview and preview.rows %}
+<section class="content-section">
+<h2>Preview</h2>
+<p>{{ preview.rows|length }} vendor row{% if preview.rows|length != 1 %}s{% endif %} in {{ preview.filename }} ({{ format_labels.get(preview.format, preview.format) }}).{% if preview.blank_rows_skipped %} {{ preview.blank_rows_skipped }} blank row{% if preview.blank_rows_skipped != 1 %}s{% endif %} skipped.{% endif %}</p>
+<p class="muted">No score is shown here. Ticket priority, state, and assignment group are context only. They do not set residual risk.</p>
+{% for row in preview.rows %}
+<article class="claim-card">
+  <div class="claim-heading"><h3>Row {{ row.row_number }} · {{ row.vendor_name or "No vendor name" }}</h3>
+    {% if row.ticket_number %}<span class="status status-draft">Ticket {{ row.ticket_number }}</span>{% endif %}
+  </div>
+  {% if row.problems or row.conflicts %}
+  <div class="inline-warning" role="alert"><ul>
+    {% for problem in row.problems %}<li>{{ problem }}</li>{% endfor %}
+    {% for problem in row.conflicts %}<li>{{ problem }}</li>{% endfor %}
+  </ul></div>
+  {% else %}
+  <p class="muted">Answers are valid for the intake form. Confirming will assess this row.</p>
+  {% endif %}
+  <dl class="meta-list">
+    {% for column in columns %}
+    <dt>{{ column.column }}</dt><dd><code>{{ row.form.get(column.column, "") }}</code></dd>
+    {% endfor %}
+  </dl>
+  {% if row.ticket_context %}
+  <h4>Ticket context</h4>
+  <dl class="meta-list">{% for key, value in row.ticket_context.items() %}<dt>{{ key }}</dt><dd>{{ value }}</dd>{% endfor %}</dl>
+  {% endif %}
+  {% if row.attachments %}
+  <h4>Attachment metadata</h4>
+  <p class="muted">The file names are metadata. The attachment bytes are not in this payload and are not opened.</p>
+  <ul>{% for item in row.attachments %}<li><code>{{ item.file_name }}</code> · {{ item.intake_field }} · {{ item.evidence_option }}{% if item.content_type %} · {{ item.content_type }}{% endif %}{% if item.size_bytes is not none %} · {{ item.size_bytes }} bytes{% endif %}</li>{% endfor %}</ul>
+  {% endif %}
+</article>
+{% endfor %}
+{% if accepted %}
+<form method="post" action="{{ url_for('try_demo.import_confirm') }}">
+  <textarea name="confirmation" hidden readonly>{{ confirmation|tojson }}</textarea>
+  <button class="button-link" type="submit">Assess these vendors</button>
+</form>
+<p class="muted">Confirming runs each row through evidence validation, the risk engine, and control mapping. The result is not written to the risk register.</p>
+{% else %}
+<p class="inline-warning">Fix the file and preview it again. Rows with errors are not assessed, and valid rows in the same file are not imported without them.</p>
+{% endif %}
+</section>
+{% elif preview and not preview.problems %}
+<section class="content-section"><p class="inline-warning">The file did not contain a vendor row to preview.</p></section>
+{% endif %}
+
+<section class="content-section">
+<h2>Questionnaire columns</h2>
+<p>CSV and the first worksheet of an .xlsx file use these names. Order does not matter. Values are case-sensitive. Surrounding spaces are removed. Numbers, dates, and formulas are rejected rather than converted. A blank model-training cell is accepted only when AI use is none.</p>
+<div class="table-wrap"><table>
+  <thead><tr><th>Column</th><th>Accepted values</th></tr></thead>
+  <tbody>{% for column in columns %}<tr><td><code>{{ column.column }}</code></td><td>{{ column.accepted }}</td></tr>{% endfor %}</tbody>
+</table></div>
+</section>
+
+<section class="content-section">
+<h2>Simulated ServiceNow file</h2>
+<p>The JSON object sets <code>import_kind</code> to <code>servicenow_vendor_intake</code> and <code>simulation</code> to true, and includes a note that the file was not retrieved from ServiceNow. <code>result</code> is a list of tickets. <code>number</code>, <code>category</code> (<code>vendor_risk</code>), and <code>attachments</code> are required. Assessment answers and the trust-center URL use a <code>u_</code> prefix, for example <code>u_vendor_name</code> and <code>u_data_sensitivity</code>. Evidence choices are attachment metadata: <code>u_intake_field</code> names the questionnaire evidence column and <code>u_evidence_option</code> is one of the six evidence keys. The CSV form flattens those evidence choices into <code>u_</code> columns on the ticket row.</p>
+<p><code>state</code>, <code>priority</code>, <code>assignment_group</code>, <code>opened_at</code>, <code>short_description</code>, <code>description</code>, and <code>sys_id</code> are shown on the preview and are not scored. <code>opened_at</code> does not change the evaluation date. Two rows for the same vendor are a conflict, including two attachments that give different options for one field. The extra row is reported and is not dropped.</p>
+<p class="muted">Full field list and limitations: <code>docs/import-formats.md</code>.</p>
+</section>
+{% endblock %}

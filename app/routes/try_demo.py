@@ -5,6 +5,7 @@ engine, and control mapper. These routes never write to the database.
 A reviewer package is generated for the page view and is not stored.
 """
 
+import json
 from datetime import date
 
 from flask import Blueprint, Response, abort, render_template, request
@@ -14,12 +15,22 @@ from app.services.intake_builder import (
     clause_evidence_field, field_choices, remediation_payload, run_intake, workflow_events,
 )
 from app.services.intake_export import build_package, render_export, render_markdown
+from app.services.intake_importer import (
+    FORMAT_LABELS, ImportRejected, assess_import, can_import, column_guide,
+    confirmation_document, parse_upload, sample_file,
+)
 from app.services.intake_questionnaire import load_questionnaire
 from app.services.org_policy import load_org_policy
 from app.services.scenario_runner import ScenarioNotFoundError, list_scenarios, run_scenario
 
 bp = Blueprint("try_demo", __name__, url_prefix="/try")
 EXPORT_FORMATS = {"json", "markdown"}
+SAMPLE_FILES = {
+    "csv": ("vendor-intake.csv", "text/csv; charset=utf-8"),
+    "xlsx": ("vendor-intake.xlsx", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+    "json": ("servicenow-intake.json", "application/json; charset=utf-8"),
+    "servicenow-csv": ("servicenow-intake.csv", "text/csv; charset=utf-8"),
+}
 
 
 def _form_context(form=None, problems=None):
@@ -104,3 +115,66 @@ def assess():
     if export_format:
         abort(400)
     return _render_result(result, posted_form=_posted_fields(request.form))
+
+
+def _import_page(preview=None, status=200):
+    accepted = can_import(preview) if preview else False
+    confirmation = confirmation_document(preview) if accepted else None
+    return render_template(
+        "try_import.html",
+        columns=column_guide(),
+        preview=preview,
+        accepted=accepted,
+        confirmation=confirmation,
+        format_labels=FORMAT_LABELS,
+    ), status
+
+
+@bp.get("/import")
+def import_form():
+    return _import_page()[0]
+
+
+@bp.get("/import/sample/<sample_kind>")
+def import_sample(sample_kind):
+    spec = SAMPLE_FILES.get(sample_kind)
+    if spec is None:
+        abort(404)
+    filename, mimetype = spec
+    body = sample_file(sample_kind)
+    return Response(body, mimetype=mimetype, headers={
+        "Content-Disposition": f'attachment; filename="{filename}"',
+    })
+
+
+@bp.post("/import/preview")
+def import_preview():
+    upload = request.files.get("intake_file")
+    if upload is None or not upload.filename:
+        preview = {"format": "unrecognized", "filename": "", "problems": [
+            "Choose a CSV, Excel .xlsx, or simulated ServiceNow JSON file."],
+                   "blank_rows_skipped": 0, "rows": []}
+        return _import_page(preview, 400)
+    preview = parse_upload(upload.filename, upload.read(), date.today())
+    return _import_page(preview, 200 if can_import(preview) else 400)
+
+
+@bp.post("/import/confirm")
+def import_confirm():
+    raw = request.form.get("confirmation", "")
+    try:
+        document = json.loads(raw) if raw else None
+    except json.JSONDecodeError:
+        document = None
+    if document is None:
+        preview = {"format": "unrecognized", "filename": "confirmation", "problems": [
+            "The confirmation could not be read. Preview the file again."],
+                   "blank_rows_skipped": 0, "rows": []}
+        return _import_page(preview, 400)
+    try:
+        results = assess_import(document, date.today())
+    except ImportRejected as exc:
+        return _import_page(exc.preview, 400)
+    imported = [{"result": result, "events": workflow_events(result), "payload": remediation_payload(result)}
+                for result in results]
+    return render_template("try_import_result.html", imported=imported)

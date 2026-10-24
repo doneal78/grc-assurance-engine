@@ -22,6 +22,7 @@
 
 <section class="content-section" id="intake">
 <h2>Or describe your own</h2>
+<p>You can also <a href="{{ url_for('try_demo.import_form') }}">import a questionnaire file or a simulated ServiceNow ticket</a>. The file is previewed before it is assessed, and nothing is saved.</p>
 <p>The questions follow the rule set. Model training is asked only when AI use is not none, because that answer is not scored otherwise. The decisions question stays on every intake.</p>
 {% if problems %}<div class="inline-warning" role="alert"><strong>Please fix these fields:</strong><ul>{% for problem in problems %}<li>{{ problem }}</li>{% endfor %}</ul></div>{% endif %}
 <form class="action-form intake-form" method="post" action="{{ url_for('try_demo.assess') }}">
