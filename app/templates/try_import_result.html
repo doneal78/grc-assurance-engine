@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Imported vendors | Try the demo{% endblock %}
+{% block content %}
+<p class="eyebrow"><a href="{{ url_for('try_demo.import_form') }}">IMPORT</a> · SYNTHETIC · NOT SAVED</p>
+<h1>Imported vendors</h1>
+<p class="lead">Each result was produced by the evidence validator, the risk engine, and the control mapper. This page did not assign a score of its own. Nothing was saved, and nothing was sent to ServiceNow.</p>
+{% for item in imported %}
+<section class="content-section">
+  <p class="eyebrow">ROW {{ item.result.source_row }}{% if item.result.ticket_number %} · TICKET {{ item.result.ticket_number }}{% endif %}</p>
+  <h2>{{ item.result.name }}</h2>
+  <p class="lead">{{ item.result.summary }}</p>
+  {% with scenario=item.result %}{% include "_assessment_result.html" %}{% endwith %}
+  <h3>Workflow event log</h3>
+  <ol class="event-list">{% for event in item.events %}<li><strong>{{ event.title }}</strong> · {{ event.detail }}</li>{% endfor %}</ol>
+  <h3>Remediation ticket</h3>
+  {% if item.payload %}<p>This payload is only displayed. Nothing is sent.</p>
+  <pre class="payload"><code>{{ item.payload|tojson(indent=2) }}</code></pre>
+  {% else %}<p>No ticket needed: no escalation rule fired, no hard restriction matched, and no evidence gap needs follow-up. A person still reviews the result.</p>{% endif %}
+</section>
+{% endfor %}
+<p><a class="button-link" href="{{ url_for('try_demo.import_form') }}">Import another file</a></p>
+{% endblock %}

@@ -1,0 +1,3 @@
+vendor_name,data_sensitivity,integration_permissions,ai_use,model_training_on_customer_data,external_exposure,retention_deletion,decisions_affecting_people,evidence_integration_permissions,trust_center_url,trust_soc2,trust_security,trust_privacy,evidence_clause_CC-001
+Northwind Notes,internal,read_only,none,no,internal_only,documented,no,independent_verified,https://trust.example.test/northwind,independent_verified,independent_verified,independent_verified,independent_verified
+Harbor Assist,confidential,read_write,assistive,no,customer_facing,documented,no,vendor_statement,,vendor_statement,not_reviewed,none,vendor_statement

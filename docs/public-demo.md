@@ -15,6 +15,7 @@ The presentation idea, a guided scenario runner with an event log and a mock tic
 | 3. Event log | The ordered workflow steps for that assessment, including the policy check | Generated from the results for that page view |
 | 4. Remediation ticket | A ServiceNow-style payload labeled as a mock | Built from escalations, a matched hard restriction, or evidence gaps. Never sent anywhere. The public pages do not record the human decision. That form is on a saved risk. |
 | 5. Reviewer package | A JSON download and a text summary for that one vendor | Built from the same result. Intake answers, evaluation, policy outcome, clause statuses, evidence summary, and the decision when one exists on a saved risk. Not an approval. The public download is not saved. |
+| 6. File import | Upload a questionnaire CSV or Excel file, or a simulated ServiceNow JSON or CSV ticket file. The preview lists the parsed answers and any problems. Confirm runs the assessment | `app/services/intake_importer.py` maps the file into the intake form. The risk engine runs only after confirm. Rows are not saved. ServiceNow is not called. See `docs/import-formats.md` |
 
 ## Evidence choices
 
@@ -39,7 +40,7 @@ Model training is omitted from the posted form when AI use is none and the field
 
 ## Status
 
-Built and live: public intake and assessment pages, with nothing saved, and Nginx rate limiting on `/try/` and the rest of the site.
+Built and live: public intake and assessment pages, with nothing saved, and Nginx rate limiting on `/try/` and the rest of the site. File import is in the application at `/try/import`. It is a simulated upload, not a ServiceNow connection. The hosted site shows it after this revision is deployed.
 
 The signed-in password gate was later removed, so the full demo, including the shared synthetic risk register, is also open. A private per-visitor sandbox register remains a possible future improvement.
 
@@ -51,6 +52,7 @@ The signed-in password gate was later removed, so the full demo, including the s
 | Saving visitor input | The public routes never write to the database. A test confirms a public submission does not appear in the risk register. |
 | Real vendor or personal data | The form says synthetic data only. The vendor name is limited to 80 printable characters and is escaped on output. The trust-center URL is limited to 200 characters, must be http or https, and is not fetched. |
 | Treating a trust-center link as assurance | A URL alone creates no evidence record. Artifact choices go through the evidence validator. The reviewer package sets automatic approval to null. |
-| Oversized or forged posts | Form posts over 16 KB are rejected. Cross-site posts are rejected by the same-origin check. |
+| Oversized or forged posts | Intake form posts over 16 KB are rejected. Import uploads over 256 KB are rejected. Cross-site posts are rejected by the same-origin check. |
+| Treating a file as a connector | The ServiceNow payload must set `simulation` to true. Attachment bytes are not in the file and are not downloaded. A reviewer package and a mock remediation ticket are rejected as intake files. |
 | Overstated results | Mappings stay labeled draft, the ticket is labeled a mock, and every result says human review is required. No dollar, time, or percentage figure appears that is not calculated from the result or shown as an adjustable assumption. |
 | Abuse and floods | Nginx limits each visitor to 20 requests a minute on `/try/` and 120 a minute elsewhere, with overall caps, returning HTTP 429 beyond that. |

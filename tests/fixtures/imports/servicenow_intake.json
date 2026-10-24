@@ -1,0 +1,151 @@
+{
+  "import_kind": "servicenow_vendor_intake",
+  "simulation": true,
+  "note": "Synthetic file. Not retrieved from a live ServiceNow instance.",
+  "result": [
+    {
+      "sys_id": "synthetic-ticket-0001",
+      "number": "VEND0010001",
+      "short_description": "Vendor intake: Northwind Notes",
+      "description": "Synthetic vendor intake ticket for the portfolio demo.",
+      "category": "vendor_risk",
+      "state": "2",
+      "priority": "4",
+      "assignment_group": "GRC Review (demo)",
+      "opened_at": "2026-10-01 09:00:00",
+      "u_vendor_name": "Northwind Notes",
+      "u_data_sensitivity": "internal",
+      "u_integration_permissions": "read_only",
+      "u_ai_use": "none",
+      "u_model_training_on_customer_data": "no",
+      "u_external_exposure": "internal_only",
+      "u_retention_deletion": "documented",
+      "u_decisions_affecting_people": "no",
+      "u_trust_center_url": "https://trust.example.test/northwind",
+      "attachments": [
+        {
+          "sys_id": "synthetic-att-0001-evidence_integration_permissions",
+          "file_name": "evidence_integration_permissions.txt",
+          "content_type": "text/plain",
+          "size_bytes": 64,
+          "table_name": "incident",
+          "table_sys_id": "synthetic-ticket-0001",
+          "u_intake_field": "evidence_integration_permissions",
+          "u_evidence_option": "independent_verified"
+        },
+        {
+          "sys_id": "synthetic-att-0001-trust_soc2",
+          "file_name": "trust_soc2.txt",
+          "content_type": "text/plain",
+          "size_bytes": 64,
+          "table_name": "incident",
+          "table_sys_id": "synthetic-ticket-0001",
+          "u_intake_field": "trust_soc2",
+          "u_evidence_option": "independent_verified"
+        },
+        {
+          "sys_id": "synthetic-att-0001-trust_security",
+          "file_name": "trust_security.txt",
+          "content_type": "text/plain",
+          "size_bytes": 64,
+          "table_name": "incident",
+          "table_sys_id": "synthetic-ticket-0001",
+          "u_intake_field": "trust_security",
+          "u_evidence_option": "independent_verified"
+        },
+        {
+          "sys_id": "synthetic-att-0001-trust_privacy",
+          "file_name": "trust_privacy.txt",
+          "content_type": "text/plain",
+          "size_bytes": 64,
+          "table_name": "incident",
+          "table_sys_id": "synthetic-ticket-0001",
+          "u_intake_field": "trust_privacy",
+          "u_evidence_option": "independent_verified"
+        },
+        {
+          "sys_id": "synthetic-att-0001-evidence_clause_CC-001",
+          "file_name": "evidence_clause_CC-001.txt",
+          "content_type": "text/plain",
+          "size_bytes": 64,
+          "table_name": "incident",
+          "table_sys_id": "synthetic-ticket-0001",
+          "u_intake_field": "evidence_clause_CC-001",
+          "u_evidence_option": "independent_verified"
+        }
+      ]
+    },
+    {
+      "sys_id": "synthetic-ticket-0002",
+      "number": "VEND0010002",
+      "short_description": "Vendor intake: Harbor Assist",
+      "description": "Synthetic vendor intake ticket for the portfolio demo.",
+      "category": "vendor_risk",
+      "state": "2",
+      "priority": "4",
+      "assignment_group": "GRC Review (demo)",
+      "opened_at": "2026-10-01 09:00:00",
+      "u_vendor_name": "Harbor Assist",
+      "u_data_sensitivity": "confidential",
+      "u_integration_permissions": "read_write",
+      "u_ai_use": "assistive",
+      "u_model_training_on_customer_data": "no",
+      "u_external_exposure": "customer_facing",
+      "u_retention_deletion": "documented",
+      "u_decisions_affecting_people": "no",
+      "u_trust_center_url": "",
+      "attachments": [
+        {
+          "sys_id": "synthetic-att-0002-evidence_integration_permissions",
+          "file_name": "evidence_integration_permissions.txt",
+          "content_type": "text/plain",
+          "size_bytes": 64,
+          "table_name": "incident",
+          "table_sys_id": "synthetic-ticket-0002",
+          "u_intake_field": "evidence_integration_permissions",
+          "u_evidence_option": "vendor_statement"
+        },
+        {
+          "sys_id": "synthetic-att-0002-trust_soc2",
+          "file_name": "trust_soc2.txt",
+          "content_type": "text/plain",
+          "size_bytes": 64,
+          "table_name": "incident",
+          "table_sys_id": "synthetic-ticket-0002",
+          "u_intake_field": "trust_soc2",
+          "u_evidence_option": "vendor_statement"
+        },
+        {
+          "sys_id": "synthetic-att-0002-trust_security",
+          "file_name": "trust_security.txt",
+          "content_type": "text/plain",
+          "size_bytes": 64,
+          "table_name": "incident",
+          "table_sys_id": "synthetic-ticket-0002",
+          "u_intake_field": "trust_security",
+          "u_evidence_option": "not_reviewed"
+        },
+        {
+          "sys_id": "synthetic-att-0002-trust_privacy",
+          "file_name": "trust_privacy.txt",
+          "content_type": "text/plain",
+          "size_bytes": 64,
+          "table_name": "incident",
+          "table_sys_id": "synthetic-ticket-0002",
+          "u_intake_field": "trust_privacy",
+          "u_evidence_option": "none"
+        },
+        {
+          "sys_id": "synthetic-att-0002-evidence_clause_CC-001",
+          "file_name": "evidence_clause_CC-001.txt",
+          "content_type": "text/plain",
+          "size_bytes": 64,
+          "table_name": "incident",
+          "table_sys_id": "synthetic-ticket-0002",
+          "u_intake_field": "evidence_clause_CC-001",
+          "u_evidence_option": "vendor_statement"
+        }
+      ]
+    }
+  ]
+}

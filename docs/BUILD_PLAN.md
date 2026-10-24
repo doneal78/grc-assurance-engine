@@ -1,6 +1,6 @@
 # GRC Assurance Engine — Build Plan
 
-**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Trust-center citations are pasted evidence, not a live fetch. A per-vendor reviewer package can be exported. General intake that is saved, and observed metrics, remain out of scope. Multi-tenant policy storage is not implemented.
+**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Trust-center citations are pasted evidence, not a live fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow, and it does not save the rows. General intake that is saved, and observed metrics, remain out of scope. Multi-tenant policy storage is not implemented.
 **Project type:** GRC Engineering portfolio application  
 **Development approach:** Local-first, phased implementation, test-driven business logic  
 **Primary IDE:** Cursor  
@@ -693,3 +693,23 @@ The initial MVP is complete when:
 - Automated tests pass.
 - Documentation accurately describes the implementation.
 - The application can be demonstrated without implying that it is production-ready or certified compliant.
+
+## 19. File-based intake import
+
+**Status:** Implemented on the public demo as a preview-then-confirm upload. Rows are assessed by the existing intake builder and are not stored.
+
+### Objective
+
+Let a visitor ingest synthetic vendor intake from a spreadsheet or from a ticket-shaped file without retyping the questionnaire, and without treating that file as a live ServiceNow connection.
+
+### Behavior
+
+- CSV uses the standard-library `csv` module. `.xlsx` uses `openpyxl`. JSON uses the standard library.
+- Questionnaire columns match the public intake form, including trust-center choices and required contract-clause evidence.
+- The ServiceNow shape maps `number`, `category`, custom `u_` fields, and attachment metadata into that same form. Ticket priority, state, and `opened_at` are context. They do not set a score or the evaluation date.
+- The preview lists parsed values and validation problems. It does not show a risk tier. Confirmation runs `run_intake`. A file with any invalid or conflicting row is not partially imported.
+- Missing columns, non-text cells, empty files, duplicate vendors, and disagreeing attachments are reported.
+
+### Out of scope for this increment
+
+Live ServiceNow API calls, attachment downloads, arbitrary PDF or email ingestion, and saving imported vendors to the risk register. See `docs/import-formats.md`.
