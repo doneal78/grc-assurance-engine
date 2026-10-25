@@ -97,10 +97,17 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
         source = request.headers.get("Origin") or request.headers.get("Referer")
         if source and urlparse(source).netloc == request.host:
             return None
+        # Scripts call the JSON API without a browser Origin. Those routes do
+        # not write to the risk register. A cross-site browser request still
+        # sends Origin and is rejected when the host does not match.
+        endpoint = request.endpoint or ""
+        if endpoint.startswith("api.") and not source:
+            return None
         return Response("Cross-site request rejected", 403)
 
     # Register route blueprints. Imported here, inside the factory,
     # so route modules can safely import from the app package later.
+    from app.routes.api import bp as api_bp
     from app.routes.dashboard import bp as dashboard_bp
     from app.routes.demos import bp as demos_bp
     from app.routes.health import bp as health_bp
@@ -108,6 +115,7 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     from app.routes.risks import bp as risks_bp
     from app.routes.try_demo import bp as try_demo_bp
 
+    app.register_blueprint(api_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(demos_bp)
     app.register_blueprint(health_bp)

@@ -1,6 +1,6 @@
 # GRC Assurance Engine — Build Plan
 
-**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Trust-center citations are pasted evidence, not a live fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow, and it does not save the rows. General intake that is saved, and observed metrics, remain out of scope. Multi-tenant policy storage is not implemented.
+**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Trust-center citations are pasted evidence, not a live fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow, and it does not save the rows. A bot JSON contract and CLI run the same intake path and return the engine result without saving it. General intake that is saved, and observed metrics, remain out of scope. Multi-tenant policy storage is not implemented.
 **Project type:** GRC Engineering portfolio application  
 **Development approach:** Local-first, phased implementation, test-driven business logic  
 **Primary IDE:** Cursor  
@@ -713,3 +713,24 @@ Let a visitor ingest synthetic vendor intake from a spreadsheet or from a ticket
 ### Out of scope for this increment
 
 Live ServiceNow API calls, attachment downloads, arbitrary PDF or email ingestion, and saving imported vendors to the risk register. See `docs/import-formats.md`.
+
+## 20. Bot intake contract
+
+**Status:** Implemented as a JSON document, a CLI (`python -m app.cli`), and `GET/POST /api/v1/intake/...`. The assessment is the `run_intake` result. Nothing is written to the risk register.
+
+### Objective
+
+Let a script or agent run the public intake, or preview an intake file the importer already accepts, and read the residual tier, explanations, escalations, and rule-set version from the risk engine.
+
+### Behavior
+
+- The request `form` uses the public intake fields. `model_training_on_customer_data` may be omitted when `ai_use` is `none`. Unknown fields are rejected. Non-text values are rejected.
+- `as_of` is an optional `YYYY-MM-DD`. When it is omitted, the process or server date is used. Evidence ages are calculated from that date.
+- File preview uses `parse_upload` and does not score. `assess-file` scores every row only when the file is valid. Ticket priority stays context.
+- CLI exit codes are 0 for a produced assessment or an assessable preview, 2 for validation failure, and 1 for an unexpected engine error.
+- The HTTP route follows `REQUIRE_AUTH`. The demo default is false. The route does not save a risk and does not record a human decision.
+- The illustrative-model limits are in the JSON document and in `docs/bot-contract.md`.
+
+### Out of scope for this increment
+
+Saved general intake, a recorded decision, a live ServiceNow call, a separate scoring path, and a production API.

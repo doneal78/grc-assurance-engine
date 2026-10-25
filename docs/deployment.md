@@ -42,6 +42,8 @@ The bootstrap downloads the current `main` branch rather than a pinned revision.
 
 File import, when this revision is deployed, reads an uploaded CSV, `.xlsx`, or simulated ServiceNow JSON/CSV file. It does not connect to ServiceNow. Imported rows are not written to the shared risk register. Nginx's default upload limit is 1 MB, which is above the application's 256 KB cap.
 
+`POST /api/v1/intake/assess`, when this revision is deployed, is open because `REQUIRE_AUTH` is false. It runs the intake calculation and does not write to the shared risk register. In `infra/nginx-site.conf`, `/api/` is covered by the general site limit of 120 requests a minute per visitor, not the tighter `/try/` limit. The live host uses whichever nginx file is installed there. See `docs/bot-contract.md`.
+
 ## Operations and limitations
 
 The instance and its daily snapshots incur AWS charges, so set an account budget alert. A snapshot is only a recovery aid until a restore has been tested. SQLite supports this single instance only; do not scale the design horizontally or use it for real vendor records. There is no login: anyone with the link can use the demo and add synthetic records to the shared risk register, so it must never hold real data. Nginx rate limits every page. The health endpoint does not check database readiness. The demo is an illustrative portfolio prototype, not a production GRC service or certification tool.

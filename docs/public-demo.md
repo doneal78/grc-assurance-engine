@@ -16,6 +16,7 @@ The presentation idea, a guided scenario runner with an event log and a mock tic
 | 4. Remediation ticket | A ServiceNow-style payload labeled as a mock | Built from escalations, a matched hard restriction, or evidence gaps. Never sent anywhere. The public pages do not record the human decision. That form is on a saved risk. |
 | 5. Reviewer package | A JSON download and a text summary for that one vendor | Built from the same result. Intake answers, evaluation, policy outcome, clause statuses, evidence summary, and the decision when one exists on a saved risk. Not an approval. The public download is not saved. |
 | 6. File import | Upload a questionnaire CSV or Excel file, or a simulated ServiceNow JSON or CSV ticket file. The preview lists the parsed answers and any problems. Confirm runs the assessment | `app/services/intake_importer.py` maps the file into the intake form. The risk engine runs only after confirm. Rows are not saved. ServiceNow is not called. See `docs/import-formats.md` |
+| 7. Script intake | A JSON request or a CLI command runs one vendor, or previews an intake file | `app/services/bot_intake.py` calls the same builder and risk engine. `POST /api/v1/intake/assess` and `python -m app.cli` return that result. They do not save it. See `docs/bot-contract.md` |
 
 ## Evidence choices
 
@@ -54,5 +55,6 @@ The signed-in password gate was later removed, so the full demo, including the s
 | Treating a trust-center link as assurance | A URL alone creates no evidence record. Artifact choices go through the evidence validator. The reviewer package sets automatic approval to null. |
 | Oversized or forged posts | Intake form posts over 16 KB are rejected. Import uploads over 256 KB are rejected. Cross-site posts are rejected by the same-origin check. |
 | Treating a file as a connector | The ServiceNow payload must set `simulation` to true. Attachment bytes are not in the file and are not downloaded. A reviewer package and a mock remediation ticket are rejected as intake files. |
+| Treating the JSON API as an approval service | The assessment document sets `automatic_approval` to null and `human_review_required` to true. An extra field such as `residual_tier` is rejected. The route does not write a risk or a decision. |
 | Overstated results | Mappings stay labeled draft, the ticket is labeled a mock, and every result says human review is required. No dollar, time, or percentage figure appears that is not calculated from the result or shown as an adjustable assumption. |
 | Abuse and floods | Nginx limits each visitor to 20 requests a minute on `/try/` and 120 a minute elsewhere, with overall caps, returning HTTP 429 beyond that. |
