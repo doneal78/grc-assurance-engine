@@ -4,7 +4,7 @@
 
 As of October 14, 2026, the demo is live and open at `https://grc-assurance.davidoneal.dev`, with no login. The password gate was removed on purpose: every record is synthetic, and the demo is shared by link. The DNS record is proxied through Cloudflare, a Configuration Rule sets SSL to Full (strict) for this hostname only, and Nginx serves HTTPS at the origin with a Cloudflare Origin CA certificate. These checks passed from outside the server on that date: `/health` returned the health JSON over HTTPS, `http://` requests redirected to `https://`, the public certificate was issued by Google Trust Services, and Nginx returned HTTP 429 once a single visitor exceeded the rate limit.
 
-This repository revision changes the health JSON, the bootstrap, and `infra/nginx-site.conf`. Those edits do not change the running host. A person has to install them with the manual runbook below. The October 14 checks describe the host as it was then. They are not a new verification of this revision, and they do not show that the live `/health` body, Nginx limits, service account, or installed commit match this file.
+`infra/deploy-app-revision.sh` installs one full commit SHA on the host that is already running. `.github/workflows/deploy-lightsail.yml` can run that script, and only when someone starts it by hand. Committing these files does not install them. This change did not SSH to the instance, did not create GitHub secrets, and did not change the CloudFormation stack. The October 14 checks describe the host as it was then. They are not a verification of the commit installed now, and they do not show that the live `/health` body, Nginx limits, service account, or installed commit match this file.
 
 ## Hosting design
 
@@ -18,7 +18,7 @@ The hostname is a first-level subdomain on purpose. Cloudflare's free Universal 
 
 The Lightsail SSH key pair must exist in `us-east-2` before the stack is created. Keep the private key outside the repository with user-only permissions.
 
-`AppRevision` is the full 40-character commit SHA to install. Use a commit that contains this pinned bootstrap. A short SHA or a branch name is rejected. Creating a stack applies the template, including user data. Updating user data on the existing `grc-assurance-engine-demo` instance can replace that instance. Use the manual runbook for the host that is already running, and leave the existing stack unchanged.
+`AppRevision` is the full 40-character commit SHA to install. Use a commit that contains this pinned bootstrap. A short SHA or a branch name is rejected. Creating a stack applies the template, including user data. Updating user data on the existing `grc-assurance-engine-demo` instance can replace that instance. For the host that is already running, install a reviewed SHA with `infra/deploy-app-revision.sh`, described under Updating and rolling back. Leave the existing stack unchanged.
 
 ```powershell
 aws cloudformation validate-template --template-body file://infra/aws-lightsail.yaml --region us-east-2
@@ -32,54 +32,74 @@ aws cloudformation describe-stacks --stack-name grc-assurance-engine-demo --regi
 1. The bootstrap installs the pinned revision, Nginx, and Gunicorn. When no site file exists yet, Nginx returns a setup placeholder. The demo password is never placed in CloudFormation user data. The unit sets `REQUIRE_AUTH=false`.
 2. The service runs with `REQUIRE_AUTH=false`, so no login is needed. To put the optional password gate back, set `REQUIRE_AUTH=true` and add `DEMO_USERNAME` and a unique, randomly generated `DEMO_PASSWORD` to `/etc/grc-assurance-engine.env`, owned by root with mode `0600`. Never put these values in Git, CloudFormation parameters, or terminal transcripts.
 3. In Cloudflare, create an Origin CA certificate for `grc-assurance.davidoneal.dev`. On the server, save the certificate as `/etc/ssl/cloudflare/grc-assurance.davidoneal.dev.pem` and the private key as `/etc/ssl/cloudflare/grc-assurance.davidoneal.dev.key`, owned by root, with the key at mode `0600`. The private key never goes in Git or transcripts.
-4. Copy `infra/nginx-site.conf` to `/etc/nginx/sites-available/grc-assurance-engine`, run `nginx -t`, and reload Nginx. Port 80 redirects to HTTPS, and unknown hostnames are rejected. In this file, `/try/` and `/api/` each allow 20 requests a minute per visitor, and other pages allow 120. The bootstrap does not copy this file over an existing site. The live host keeps its installed Nginx file until this copy and reload.
+4. Copy `infra/nginx-site.conf` to `/etc/nginx/sites-available/grc-assurance-engine`, run `nginx -t`, and reload Nginx. Port 80 redirects to HTTPS, and unknown hostnames are rejected. In this file, `/try/` and `/api/` each allow 20 requests a minute per visitor, and other pages allow 120. The bootstrap does not copy this file over an existing site. Later updates copy it only when `deploy-app-revision.sh` is run with `--update-nginx`. The default deploy leaves the installed site file alone.
 5. In Cloudflare, add a Configuration Rule that sets SSL to Full (strict) for `grc-assurance.davidoneal.dev`, then add a proxied `A` record for that name pointing to the stack's `PublicIp` output. Do not change the zone-wide SSL mode, the existing `labs.davidoneal.dev` record, or the root records.
 6. Verify that `/health` returns HTTP 200 and JSON with `"status": "ok"` and `"database": "reachable"`. Pages load over HTTPS, and an `http://` request redirects to `https://`. Then check the phone-width layout and save a synthetic scenario to the risk register. A database the process cannot read returns HTTP 503 and `"database": "unreachable"`, with no filesystem path and no driver message.
 
 ## Updating and rolling back
 
-There is no automated deployment pipeline. Update the running host by hand.
+Routine updates use `infra/deploy-app-revision.sh`. It is the app-revision path for a host that already has the systemd unit, `/opt/grc-assurance-engine/.venv`, and `/var/lib/grc-assurance/grc_assurance.sqlite3`.
 
-1. Back up the database with SQLite's online backup. From the host:
+`infra/lightsail-bootstrap.sh` remains the first-install path. A re-run of the bootstrap also runs `apt-get`, creates the `grc-assurance` account when it is missing, rewrites the systemd unit, and reloads Nginx without replacing an existing site file. It does not back up SQLite and it does not check `/health`. Use it when the unit or the service account still has to be created. Do not use it as the ordinary way to install a new commit on the host that is already serving the demo.
 
-```bash
-sudo sqlite3 /var/lib/grc-assurance/grc_assurance.sqlite3 ".backup /var/lib/grc-assurance/pre-update.sqlite3"
-```
+The app-revision script:
 
-2. Install one reviewed commit. The command downloads the bootstrap script from that same commit and passes the SHA. The script refuses a branch name. It records the SHA in `/etc/grc-assurance-revision` after the tree and dependencies are installed. A later re-run without `GRC_REVISION` installs that recorded SHA again.
+- Requires `--revision` or `GRC_REVISION` to be a full 40-character commit SHA. A branch name or a short SHA is refused. It does not read `/etc/grc-assurance-revision` to decide what to install. The bootstrap still does that on a re-run with no `GRC_REVISION`.
+- Backs up the live SQLite file with the `sqlite3` `.backup` command, which uses SQLite's online backup API, before it changes the app tree. Each backup is a new file under `/var/lib/grc-assurance/backups/`. The script does not delete old backups, and it does not delete `/var/lib/grc-assurance/` or `grc_assurance.sqlite3`. Those files are on the same disk as the demo. They are not a substitute for the Lightsail snapshot, and the snapshot restore drill below is still untested.
+- Downloads `https://github.com/doneal78/grc-assurance-engine/archive/<sha>.tar.gz` and replaces `/opt/grc-assurance-engine` through the bootstrap's `replace_app_tree`. That keeps `.venv` and `instance/`.
+- Reinstalls Python dependencies with the existing `.venv`. It does not create the virtualenv.
+- Restarts `grc-assurance-engine` as the `User=` already set on the unit. It does not create an account and it does not rewrite the unit. If the unit still runs as `ubuntu`, it stays `ubuntu`.
+- Writes the SHA to `/etc/grc-assurance-revision`, the same file the bootstrap uses, only after `http://127.0.0.1:8000/health` returns `"status":"ok"` and `"database":"reachable"`. There is no `DEPLOYED_COMMIT` file. A failed health check leaves the previous pin in place even if the tree on disk already changed. Re-run the previous SHA to put that tree back. Do not delete the SQLite file.
+- Leaves Nginx alone unless `--update-nginx` is set. That flag installs `infra/nginx-site.conf` from the same tarball, runs `nginx -t`, and reloads. If `nginx -t` fails, the previous site file is restored and Nginx is not reloaded. The script does not create `/etc/nginx/sites-available/grc-assurance-engine` when it is missing.
 
-```bash
-curl -fsSL "https://raw.githubusercontent.com/doneal78/grc-assurance-engine/<40-character-sha>/infra/lightsail-bootstrap.sh" -o /tmp/grc-assurance-bootstrap.sh
-sudo GRC_REVISION=<40-character-sha> bash /tmp/grc-assurance-bootstrap.sh
-```
+The script refuses to restart when `/etc/grc-assurance-engine.env` sets `REQUIRE_AUTH=true` without a non-empty `DEMO_USERNAME` and `DEMO_PASSWORD`. It does not print those values. The unit sets `REQUIRE_AUTH=false`. The env file overrides the unit. The open demo should keep the gate off.
 
-The script replaces `/opt/grc-assurance-engine` with that tarball. It keeps `.venv` and `instance/`, then reinstalls Python dependencies into `.venv`. It does not delete `/var/lib/grc-assurance/` or `grc_assurance.sqlite3`. It creates the local account `grc-assurance` when that account is missing, gives that account the app tree and the data directory, and restarts `grc-assurance-engine` as that user. SSH stays on the `ubuntu` account. The account is a separate service user. It is not a locked-down sandbox, and the unit keeps `REQUIRE_AUTH=false`.
-
-Before running it on the existing host, confirm `/etc/grc-assurance-engine.env` does not set `REQUIRE_AUTH=true` unless `DEMO_USERNAME` and `DEMO_PASSWORD` are also set. That file overrides the unit. If the service fails to start, the script exits non-zero and the log is `/var/log/grc-assurance-bootstrap.log`. The data directory may already belong to `grc-assurance` at that point. Fix the unit or the env file and re-run the same SHA. Do not delete the SQLite file.
-
-Re-running the script leaves the existing Nginx site file in place. It does not publish the tighter `/api/` limit.
-
-3. Install the Nginx file from the same commit when that file should change, then reload:
+Run this on the host, in an SSH session that can already reach the instance. Replace the placeholder with the full SHA. The SHA has to be a commit that contains `infra/deploy-app-revision.sh`.
 
 ```bash
-curl -fsSL "https://raw.githubusercontent.com/doneal78/grc-assurance-engine/<40-character-sha>/infra/nginx-site.conf" -o /tmp/grc-assurance-nginx.conf
-sudo cp /tmp/grc-assurance-nginx.conf /etc/nginx/sites-available/grc-assurance-engine
-sudo nginx -t && sudo systemctl reload nginx
+sudo bash -c 'set -euo pipefail
+SHA=replace-with-40-character-sha
+work=$(mktemp -d)
+trap "rm -rf -- \"\$work\"" EXIT
+curl -fsSL "https://github.com/doneal78/grc-assurance-engine/archive/${SHA}.tar.gz" -o "$work/src.tar.gz"
+tar -xzf "$work/src.tar.gz" -C "$work" --strip-components=1
+bash "$work/infra/deploy-app-revision.sh" --revision "$SHA"'
 ```
 
-4. On the host, `curl -fsS http://127.0.0.1:8000/health` should return `"database": "reachable"`. Check the public HTTPS URL as well. Save nothing but synthetic data.
+Add `--update-nginx` immediately after `"$SHA"`, before the closing quote, only when the site file from that same SHA should replace `/etc/nginx/sites-available/grc-assurance-engine`. The symlink in `sites-enabled` stays as it is.
 
-To roll back, repeat the steps with the previous reviewed SHA. Leave the SQLite file in place. A code rollback does not reverse schema changes already applied to that file. Migrations in this application add columns and rebuild the decisions table in place; they do not drop saved rows.
+After the script is on the host, this shorter command runs the copy that was installed with the previous SHA. Use it to roll back to a commit that does not contain the script. The script logic is then the copy you invoked, and the app tree is still the tarball for the SHA you pass.
 
-A failed bootstrap can leave a partial app tree. Re-run it with the same SHA. The log is `/var/log/grc-assurance-bootstrap.log`. That log is a local file. It is not an immutable audit trail.
+```bash
+sudo bash /opt/grc-assurance-engine/infra/deploy-app-revision.sh --revision replace-with-40-character-sha
+```
+
+The log is `/var/log/grc-assurance-deploy.log`. A second deploy waits on `/var/lock/grc-assurance-deploy.lock`. The log and the lock are local files. They are not an immutable audit trail. `sqlite3` has to be installed already; this script does not install OS packages. If the health check fails, the log names the backup path. Fix the unit or the env file and re-run the same SHA, or re-run the previous SHA. A code rollback does not reverse schema changes already applied to the SQLite file. Migrations in this application add columns and rebuild the decisions table in place; they do not drop saved rows.
+
+Check the public HTTPS URL after the local health check succeeds. Save nothing but synthetic data.
+
+### GitHub Actions
+
+`.github/workflows/deploy-lightsail.yml` is `workflow_dispatch` only. It does not run on a push or a pull request. The inputs are the same SHA and an optional Nginx boolean. The workflow copies `deploy-app-revision.sh` and `lightsail-bootstrap.sh` from the workflow commit, then the script on the host downloads the application tarball for the SHA. Dispatch it from the branch whose script you want to run, and pass the application SHA as the input. That can be an older SHA that does not contain the script.
+
+The job SSHes only when these repository secrets exist. This repository does not contain their values, and this change did not create them. An empty secret fails the job before any SSH connection.
+
+| Secret | Required | What to store |
+| --- | --- | --- |
+| `LIGHTSAIL_SSH_KEY` | yes | Private key for the Lightsail SSH account, as a PEM, including line breaks. Not the Lightsail key-pair name. |
+| `LIGHTSAIL_HOST` | yes | Static IP of the instance. Not `grc-assurance.davidoneal.dev`. Cloudflare proxies that name to Nginx, and it does not answer SSH. |
+| `LIGHTSAIL_KNOWN_HOSTS` | yes | Output of `ssh-keyscan -H <static-ip>` from a machine that can already reach the host. The workflow uses that file and does not accept a different key. |
+| `LIGHTSAIL_SSH_USER` | no | SSH account. The default is `ubuntu`. That account needs passwordless `sudo`. |
+
+The Lightsail firewall allows SSH only from the administrator `/32` in the CloudFormation `AdminCidr` parameter. A GitHub-hosted runner uses a different address. This workflow does not change that rule, and it does not open port 22. Until SSH from the runner is allowed, a dispatch that has the secrets still fails at the SSH step. The host command above does not have that limit, because it runs inside a session that is already allowed. No deploy has been run from Actions for this change.
 
 ## Known gaps
 
 ### Fixed in this revision's files, still pending on the live host
 
-The running host changes only when a person completes the manual runbook. This repository change did not SSH to the instance, reload Nginx, or update the CloudFormation stack.
+The running host changes only when someone runs the app-revision script on the host, or the manual workflow actually SSHes. This repository change did not SSH to the instance, reload Nginx, or update the CloudFormation stack.
 
-| Gap | In this revision | On the live host until the runbook is done |
+| Gap | In this revision | On the live host until a pinned SHA is installed |
 | --- | --- | --- |
 | Bootstrap revision | The script installs a full 40-character SHA from `GRC_REVISION` or `/etc/grc-assurance-revision`. It does not download the moving `main` branch. A new stack's user data passes `AppRevision` and downloads the bootstrap script from that SHA. | The host still runs whatever revision was installed earlier. |
 | Stale app files | A re-run deletes app-tree files that are not in the pinned tarball. It keeps `.venv` and `instance/`. The SQLite path stays outside the app tree. | Older files remain until the bootstrap is re-run. |
@@ -97,7 +117,7 @@ There is no login. `REQUIRE_AUTH` stays false on purpose for the open demo. Anyo
 
 SQLite supports this single instance only. There is no second host, no replica, and no highly available database.
 
-There is no automated deployment pipeline. The manual runbook above is the update path.
+The app-revision script and the manual workflow are the update path for a host that is already bootstrapped. The workflow does not run on push. It cannot SSH until the secrets in Updating and rolling back exist, and the instance SSH rule is still the administrator `/32`. Nginx changes only when `--update-nginx` is passed. The bootstrap remains the first-install path.
 
 The dedicated account, the read-only health check, and the tighter `/api/` limit are ordinary host hygiene. They are not a production hardening claim.
 
@@ -120,8 +140,8 @@ This drill has not been executed. Running it creates a second Lightsail instance
 
 ## Operations and limitations
 
-The instance and its daily snapshots incur AWS charges, so set an account budget alert. A snapshot is a recovery point for this one disk. It becomes a tested recovery path only after the drill above has been run and recorded. SQLite supports this single instance only; do not scale the design horizontally or use it for real vendor records. There is no login: anyone with the link can use the demo and add synthetic records to the shared risk register, so it must never hold real data. Nginx rate limits are whatever site file is installed on the host. The repository file limits `/try/` and `/api/` more tightly than other pages, and the live file matches that only after a person installs it. `/health` in this revision checks that the SQLite file can be read. That check is not a production readiness test. The demo is an illustrative portfolio prototype, not a production GRC service or certification tool.
+The instance and its daily snapshots incur AWS charges, so set an account budget alert. A snapshot is a recovery point for this one disk. It becomes a tested recovery path only after the drill above has been run and recorded. SQLite supports this single instance only; do not scale the design horizontally or use it for real vendor records. There is no login: anyone with the link can use the demo and add synthetic records to the shared risk register, so it must never hold real data. Nginx rate limits are whatever site file is installed on the host. The repository file limits `/try/` and `/api/` more tightly than other pages, and the live file matches that only after a person installs it. `deploy-app-revision.sh` does that only with `--update-nginx`. `/health` in this revision checks that the SQLite file can be read. That check is not a production readiness test. The demo is an illustrative portfolio prototype, not a production GRC service or certification tool.
 
 ## Local verification
 
-Run `python -m pytest` from the repository root. The local `run.py` entry point stays bound to loopback and is not a production server.
+Run `python -m pytest` from the repository root. The deploy-script tests source the shell helpers and do not open an SSH connection or a Lightsail session. The local `run.py` entry point stays bound to loopback and is not a production server.

@@ -9,6 +9,11 @@
 # grc-assurance when it is missing and runs the service as that account.
 # Does not replace an existing Nginx site file.
 #
+# Routine updates of a host that already has the unit, the virtualenv, and
+# the data directory should use infra/deploy-app-revision.sh. This bootstrap
+# also apt-get installs packages, creates the service account, and rewrites
+# the systemd unit. It does not back up SQLite or check /health.
+#
 # Run as root. The functions above main can be sourced by tests.
 set -Eeuo pipefail
 
