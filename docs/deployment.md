@@ -44,6 +44,8 @@ File import, when this revision is deployed, reads an uploaded CSV, `.xlsx`, or 
 
 `POST /api/v1/intake/assess`, when this revision is deployed, is open because `REQUIRE_AUTH` is false. Assess alone does not write. A body with `persist` true and a human disposition does write a synthetic row to the shared register. Do not send real vendor data. In `infra/nginx-site.conf`, `/api/` is covered by the general site limit of 120 requests a minute per visitor, not the tighter `/try/` limit. The live host uses whichever nginx file is installed there. See `docs/bot-contract.md`.
 
+The dashboard, when this revision is deployed, counts whatever synthetic rows are in the shared SQLite file. Those counts are observed for that file. They are not a baseline study, a monthly rate, or cash savings. The cost panel remains the illustrative formula in `app/data/cost_assumptions.json`. Human handling time is still unmeasured. A same-second intake and disposition is a 0-second elapsed span in that file, which is the clock record of the save.
+
 ## Operations and limitations
 
 The instance and its daily snapshots incur AWS charges, so set an account budget alert. A snapshot is only a recovery aid until a restore has been tested. SQLite supports this single instance only; do not scale the design horizontally or use it for real vendor records. There is no login: anyone with the link can use the demo and add synthetic records to the shared risk register, so it must never hold real data. Nginx rate limits every page. The health endpoint does not check database readiness. The demo is an illustrative portfolio prototype, not a production GRC service or certification tool.

@@ -64,3 +64,7 @@ code { background:var(--surface); padding:.1rem .25rem; border-radius:4px; overf
 .evidence-fieldset label { display:grid; gap:.3rem; font-size:.85rem; font-weight:650; min-width:0; }
 .evidence-fieldset select { width:100%; box-sizing:border-box; }
 .payload { overflow-x:auto; max-width:100%; border:1px solid var(--line); border-radius:8px; padding:1rem; font-size:.8rem; line-height:1.45; white-space:pre; }
+.observed-panel { border:1px solid var(--line); border-radius:10px; padding:1.1rem 1.2rem 1.2rem; }
+.cost-panel { border:1px solid #e9cd85; border-radius:10px; padding:1.1rem 1.2rem 1.2rem; background:var(--warning-soft); }
+.metric-table { margin:.2rem 0 1.2rem; }
+.metric-table caption { caption-side:top; text-align:left; font-weight:650; padding:0 0 .55rem; }
