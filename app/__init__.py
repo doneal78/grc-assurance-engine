@@ -115,6 +115,7 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     from app.routes.dashboard import bp as dashboard_bp
     from app.routes.demos import bp as demos_bp
     from app.routes.health import bp as health_bp
+    from app.routes.mappings import bp as mappings_bp
     from app.routes.methodology import bp as methodology_bp
     from app.routes.risks import bp as risks_bp
     from app.routes.try_demo import bp as try_demo_bp
@@ -123,6 +124,7 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(demos_bp)
     app.register_blueprint(health_bp)
+    app.register_blueprint(mappings_bp)
     app.register_blueprint(methodology_bp)
     app.register_blueprint(risks_bp)
     app.register_blueprint(try_demo_bp)

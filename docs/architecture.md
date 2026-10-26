@@ -6,7 +6,7 @@ The application uses the Flask factory in `app/__init__.py` to register web blue
 
 | Responsibility | Current location | Notes |
 | --- | --- | --- |
-| HTTP routes | `app/routes/` | Health, dashboard, synthetic scenario pages, and the JSON intake API under `/api/v1`. |
+| HTTP routes | `app/routes/` | Health, dashboard, synthetic scenario pages, the control-mapping library at `/mappings`, and the JSON intake API under `/api/v1`. |
 | Business logic | `app/services/` | Risk evaluation, the single org-policy check, evidence validation, control mapping, scenario orchestration, local workflow persistence, human decisions, observed workflow metrics, cost calculations, the reviewer package, file import, and the bot intake contract. |
 | Database | `app/db.py`, `app/schema.sql` | SQLite schema and request-scoped connections for risks, remediation actions, human decisions, and workflow events. `DATABASE_PATH` can place the file on a persistent host volume. Startup adds policy columns to a risk table created before those columns existed. |
 | Versioned rules/data | `app/data/` | Risk rules, the single org policy profile, the public intake questionnaire, evidence freshness policy, mappings, and fixed-date demo scenarios. |
@@ -33,7 +33,7 @@ Scenario runs are deterministic examples, not vendor records. File import on `/t
 - Standard-library JSON, CSV, and SQLite are preferred for the prototype. `openpyxl` is the one added library, and it only reads `.xlsx` workbooks.
 - Flask remains at the route and presentation boundary; core functions can be tested directly.
 - Static JSON makes every demonstration input inspectable and repeatable.
-- Mapping results retain source, version, claim, and evidence references while remaining visibly draft.
+- Mapping results retain source, version, claim, and evidence references while remaining visibly draft. `/mappings` lists the whole library from `list_library`. ISO/IEC 27001 and ISO/IEC 42001 are not in that library.
 - No external AI service participates in scoring or approval decisions.
 - One org policy file is enough. There is no tenant selector.
 - The policy outcome is calculated in the risk engine. Templates display it. They do not decide it.

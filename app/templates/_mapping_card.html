@@ -1,0 +1,30 @@
+<article class="mapping-card">
+  <div class="claim-heading">
+    <h3><code>{{ mapping.control_id }}</code> · {{ mapping.title }}</h3>
+    <span class="status status-{{ mapping.review_status }}">{{ mapping.review_status|title }}</span>
+  </div>
+  <dl class="meta-list">
+    <dt>Framework</dt>
+    <dd>{{ mapping.framework }}</dd>
+    <dt>Framework version</dt>
+    <dd>{{ mapping.framework_version }}</dd>
+    <dt>Applicability</dt>
+    <dd>{{ mapping.applicability|replace('_', ' ')|title }}{% if mapping.applicability_note %}. {{ mapping.applicability_note }}{% endif %}</dd>
+    <dt>Rationale</dt>
+    <dd>{{ mapping.rationale }}</dd>
+    <dt>Related claim topics</dt>
+    <dd>{{ mapping.claim_topics|join(', ') }}</dd>
+    <dt>Source reference</dt>
+    <dd><a href="{{ mapping.source_reference }}" rel="noreferrer noopener">{{ mapping.source_reference }}</a></dd>
+    <dt>Review status</dt>
+    <dd>{{ mapping.review_status|title }}</dd>
+    <dt>Mapping-set version</dt>
+    <dd>{{ mapping.mapping_set_version }}</dd>
+    {% if mapping.related_claims is defined %}
+    <dt>Related claims</dt>
+    <dd>{% if mapping.related_claims %}{% for claim in mapping.related_claims %}<code>{{ claim.claim_id }}</code> ({{ claim.evidence_status|replace('_', ' ') }}){% if not loop.last %}, {% endif %}{% endfor %}{% else %}None linked{% endif %}</dd>
+    <dt>Related evidence</dt>
+    <dd>{% if mapping.related_evidence %}{% for item in mapping.related_evidence %}<code>{{ item.evidence_id }}</code> ({{ item.status|replace('_', ' ') }}){% if not loop.last %}, {% endif %}{% endfor %}{% else %}None linked{% endif %}</dd>
+    {% endif %}
+  </dl>
+</article>

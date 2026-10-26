@@ -27,6 +27,8 @@ Claims may include an explicit `topic`. `app/services/control_mapper.py` matches
 
 Each mapping record includes the framework and version, identifier, title, applicability note, rationale, related claim topics, source reference, and review status. The mapping-set version is returned with each match so results can be tied to the data version.
 
+`list_library` in `app/services/control_mapper.py` returns the full library, including the mapping-set version and source note, without matching claims and without changing review status. The Control mappings page at `/mappings` renders that result. Assessment and saved-risk pages render only the matched prompts, using the same field labels and the same stored review status. The templates do not add mappings and do not mark a draft entry as reviewed.
+
 ## Review policy and limitations
 
 All current mappings remain `draft`. Verifying an identifier and title at NIST does not validate the project's applicability judgment or rationale. A human reviewer should check the actual service context, claim wording, supporting evidence, and the applicable organizational control-selection method before changing a status to `reviewed`. If any reference, applicability decision, or rationale cannot be supported, keep it draft or mark it unverified.

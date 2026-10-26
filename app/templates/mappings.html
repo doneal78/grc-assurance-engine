@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Control mappings | GRC Assurance Engine{% endblock %}
+{% block content %}
+<p class="eyebrow">REVIEW AID · MAPPING SET {{ library.mapping_set_version }}</p>
+<h1>Control mappings</h1>
+<p class="lead">Every entry in the mapping library, loaded from the versioned mapping set. Use these records to see which claim topics the prototype can prompt a reviewer to discuss.</p>
+<section class="notice">
+  <strong>Draft portfolio mappings · Human review required</strong>
+  <p>{{ library.source_note }}</p>
+  <p>A mapping is a review prompt. It does not show that a vendor implemented a control, that evidence is sufficient, or that a vendor or organization conforms to a framework. This page does not certify a vendor or an organization. It does not treat one framework as equivalent to another.</p>
+  <p>ISO/IEC 27001 and ISO/IEC 42001 are not in this library. Identifiers and titles that were checked against a catalog stay draft until a person reviews the applicability decision and the rationale.</p>
+</section>
+<section class="content-section">
+  <h2>{{ library.mappings|length }} library {{ 'entry' if library.mappings|length == 1 else 'entries' }}</h2>
+  {% if library.mappings %}
+  <div class="mapping-list">
+    {% for mapping in library.mappings %}
+    {% include "_mapping_card.html" %}
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="empty-state">The mapping library has no entries.</p>
+  {% endif %}
+  <p class="muted">Matching on an assessment uses the same records and keeps the stored review status. See <code>docs/control-mapping-methodology.md</code> and <a href="{{ url_for('methodology.index') }}">Methods</a>.</p>
+</section>
+{% endblock %}

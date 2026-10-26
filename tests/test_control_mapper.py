@@ -4,7 +4,7 @@ import copy
 
 import pytest
 
-from app.services.control_mapper import MappingInputError, load_mappings, map_claims
+from app.services.control_mapper import MappingInputError, list_library, load_mappings, map_claims
 
 
 def test_claim_topic_maps_to_catalog_item_and_preserves_trace_links():
@@ -54,3 +54,32 @@ def test_invalid_mapping_review_status_is_rejected():
     mapping_set["mappings"][0]["review_status"] = "approved"
     with pytest.raises(MappingInputError):
         map_claims([], mapping_set)
+
+
+def test_list_library_returns_every_mapping_and_leaves_review_status_unchanged():
+    raw = load_mappings()
+    library = list_library(raw)
+    assert library["mapping_set_version"] == raw["mapping_set_version"]
+    assert library["source_note"] == raw["source_note"]
+    assert [item["mapping_id"] for item in library["mappings"]] == [
+        item["mapping_id"] for item in raw["mappings"]
+    ]
+    assert all(item["review_status"] == "draft" for item in library["mappings"])
+    assert all(item["mapping_set_version"] == raw["mapping_set_version"] for item in library["mappings"])
+    assert "related_claims" not in library["mappings"][0]
+    assert "mapping_set_version" not in raw["mappings"][0]
+
+
+def test_list_library_rejects_a_missing_or_non_string_version():
+    missing = load_mappings()
+    del missing["mapping_set_version"]
+    with pytest.raises(MappingInputError):
+        list_library(missing)
+    blank = load_mappings()
+    blank["mapping_set_version"] = "  "
+    with pytest.raises(MappingInputError):
+        list_library(blank)
+    noted = load_mappings()
+    noted["source_note"] = 12
+    with pytest.raises(MappingInputError):
+        list_library(noted)
