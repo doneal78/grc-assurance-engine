@@ -24,6 +24,28 @@
 {% endfor %}
 </div>
 <section class="section-heading"><div><p class="eyebrow">FOLLOW-UP</p><h2>Risk register and remediation</h2></div><a class="text-link" href="{{ url_for('risks.index') }}">Open register →</a></section>
-<section class="content-section cost-panel"><p class="eyebrow">MODELED EXAMPLE · VERSION {{ cost.model_version }}</p><h2>Cost of assurance</h2><div class="result-grid"><article class="result-card"><p class="eyebrow">GROSS CAPACITY</p><strong>{{ cost.gross_capacity_hours }} hours</strong><p>${{ '%.2f'|format(cost.gross_capacity_value) }} modeled value / month</p></article><article class="result-card"><p class="eyebrow">AFTER REVIEW + MAINTENANCE</p><strong>{{ cost.net_capacity_hours }} hours</strong><p>${{ '%.2f'|format(cost.net_capacity_value) }} modeled value / month</p></article></div><p class="muted">Assumptions: {{ cost.assumptions.assessments_per_month|int }} assessments/month, {{ cost.assumptions.baseline_handling_hours_per_assessment }} baseline hours, {{ cost.assumptions.assisted_handling_hours_per_assessment }} assisted hours, {{ cost.assumptions.review_hours_per_assessment }} review hours per assessment, {{ cost.assumptions.monthly_maintenance_hours }} monthly maintenance hours, and ${{ cost.assumptions.loaded_hourly_labor_rate }}/hour. This estimates labor capacity only. Cash savings are not measured. One-time development cost is unknown and excluded. <a href="{{ url_for('methodology.index') }}">See formulas and limitations</a>.</p></section>
-<p class="muted">Risk register records and remediation actions are local SQLite data. Workflow-event timestamps are not human handling-time measurements. Broader intake and observed operational metrics are not implemented.</p>
+<section class="content-section observed-panel" aria-labelledby="observed-heading">
+  <p class="eyebrow">OBSERVED · LOCAL REGISTER · DEFINITION {{ observed.definition_version }}</p>
+  <h2 id="observed-heading">Measured from saved records</h2>
+  <p class="muted">These counts and this elapsed time come from the local SQLite register. An unsaved public try is absent. An empty register shows zeros. <a href="{{ url_for('methodology.index') }}">Definitions, rounding, and unmeasured quantities</a>.</p>
+  {% include "_observed_metrics.html" %}
+</section>
+<section class="content-section cost-panel" aria-labelledby="modeled-cost">
+  <p class="eyebrow">MODELED EXAMPLE · VERSION {{ cost.model_version }}</p>
+  <h2 id="modeled-cost">Cost of assurance</h2>
+  <p>These hours and dollars are the versioned example in <code>app/data/cost_assumptions.json</code>. They stay the same when the register above changes.</p>
+  <div class="result-grid">
+    <article class="result-card">
+      <p class="eyebrow">GROSS CAPACITY</p>
+      <strong>{{ cost.gross_capacity_hours }} hours</strong>
+      <p>${{ '%.2f'|format(cost.gross_capacity_value) }} modeled value / month</p>
+    </article>
+    <article class="result-card">
+      <p class="eyebrow">AFTER REVIEW + MAINTENANCE</p>
+      <strong>{{ cost.net_capacity_hours }} hours</strong>
+      <p>${{ '%.2f'|format(cost.net_capacity_value) }} modeled value / month</p>
+    </article>
+  </div>
+  <p class="muted">Assumptions: {{ cost.assumptions.assessments_per_month|int }} assessments/month, {{ cost.assumptions.baseline_handling_hours_per_assessment }} baseline hours, {{ cost.assumptions.assisted_handling_hours_per_assessment }} assisted hours, {{ cost.assumptions.review_hours_per_assessment }} review hours per assessment, {{ cost.assumptions.monthly_maintenance_hours }} monthly maintenance hours, and ${{ cost.assumptions.loaded_hourly_labor_rate }}/hour. This estimates labor capacity only. Cash savings are not measured. One-time development cost is unknown and excluded. <a href="{{ url_for('methodology.index') }}">See formulas and limitations</a>.</p>
+</section>
 {% endblock %}

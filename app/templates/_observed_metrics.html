@@ -1,0 +1,88 @@
+<!-- observed-metrics-start -->
+<p>{{ observed.cycle_time.definition }}</p>
+<div class="result-grid">
+  <article class="result-card">
+    <p class="eyebrow">ASSESSMENT VOLUME</p>
+    <strong>{{ observed.assessment_volume.total }}</strong>
+    <p>Saved assessments: {{ observed.assessment_volume.total }}. General intake: {{ observed.assessment_volume.general_intake }}. Scenario fixtures: {{ observed.assessment_volume.scenario_fixture }}.</p>
+  </article>
+  <article class="result-card">
+    <p class="eyebrow">OPEN REMEDIATION</p>
+    <strong>{{ observed.remediation.not_completed }}</strong>
+    <p>Open remediation: {{ observed.remediation.not_completed }}. {% for row in observed.remediation.by_status %}{{ row.count }} {{ row.name|replace('_', ' ') }}{% if not loop.last %} · {% endif %}{% endfor %}.</p>
+  </article>
+  <article class="result-card">
+    <p class="eyebrow">PERSISTED DISPOSITIONS</p>
+    <strong>{{ observed.dispositions.recorded }}</strong>
+    <p>Persisted dispositions: {{ observed.dispositions.recorded }}. Saved assessments with no decision row: {{ observed.dispositions.risks_without_decision }}.</p>
+  </article>
+  <article class="result-card">
+    <p class="eyebrow">ELAPSED CYCLE TIME</p>
+    {% if observed.cycle_time.measured_count %}
+    <strong>{{ observed.cycle_time.median_label }}</strong>
+    <p>Median {{ observed.cycle_time.median_label }} across {{ observed.cycle_time.measured_count }} saved intake{% if observed.cycle_time.measured_count != 1 %}s{% endif %}. Total {{ observed.cycle_time.total_label }}. Mean {{ observed.cycle_time.mean_label }}. Shortest {{ observed.cycle_time.minimum_label }}. Longest {{ observed.cycle_time.maximum_label }}.</p>
+    {% else %}
+    <strong>Not measured</strong>
+    <p>No saved row has both an intake event and a usable disposition event.</p>
+    {% endif %}
+  </article>
+</div>
+<p class="muted">Excluded from the cycle-time series: {{ observed.cycle_time.excluded.no_intake_event }} without an intake event, {{ observed.cycle_time.excluded.no_disposition_event }} without a disposition event, {{ observed.cycle_time.excluded.unusable_timestamps }} with an unusable timestamp.</p>
+{% if observed.cycle_time.zero_span_count %}
+<p class="muted">{{ observed.cycle_time.zero_span_count }} measured span{% if observed.cycle_time.zero_span_count != 1 %}s{% endif %} share a timestamp, so the elapsed time is 0 seconds. That clock record is a 0-second elapsed span. Human handling time stays unmeasured.</p>
+{% endif %}
+{% if observed.decision_event_count != observed.dispositions.recorded %}
+<p class="muted">Decision events in the log: {{ observed.decision_event_count }}. The disposition count is the current row for each risk. A replacement adds an event and keeps one row.</p>
+{% endif %}
+<div class="table-wrap">
+  <table class="metric-table">
+    <caption>Residual tier on saved assessments</caption>
+    <thead><tr><th scope="col">Tier</th><th scope="col">Assessments</th></tr></thead>
+    <tbody>
+    {% for row in observed.residual_tiers %}
+      <tr><td>{{ row.name|replace('_', ' ')|title }}</td><td>{{ row.count }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="table-wrap">
+  <table class="metric-table">
+    <caption>Claim evidence status ({{ observed.claim_count }} claim records)</caption>
+    <thead><tr><th scope="col">Status</th><th scope="col">Claims</th></tr></thead>
+    <tbody>
+    {% for row in observed.evidence_statuses %}
+      <tr><td>{{ row.name|replace('_', ' ')|title }}</td><td>{{ row.count }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="table-wrap">
+  <table class="metric-table">
+    <caption>Required-clause evidence status ({{ observed.clause_count }} clause records)</caption>
+    <thead><tr><th scope="col">Status</th><th scope="col">Clauses</th></tr></thead>
+    <tbody>
+    {% for row in observed.clause_evidence_statuses %}
+      <tr><td>{{ row.name|replace('_', ' ')|title }}</td><td>{{ row.count }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+<div class="table-wrap">
+  <table class="metric-table">
+    <caption>Current human disposition</caption>
+    <thead><tr><th scope="col">Disposition</th><th scope="col">Assessments</th></tr></thead>
+    <tbody>
+    {% for row in observed.dispositions.by_disposition %}
+      <tr><td>{{ row.name|replace('_', ' ')|title }}</td><td>{{ row.count }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% if observed.rationale_unreadable or observed.claims_unreadable or observed.claims_missing_status %}
+<p class="muted">{{ observed.rationale_unreadable }} saved assessments have a rationale that could not be read. {{ observed.claims_unreadable }} have no claim list. {{ observed.claims_missing_status }} claims have no evidence status. Those assessments still count in the volume. Their missing claim rows stay out of the evidence table.</p>
+{% endif %}
+{% if observed.clause_records_absent or observed.clause_records_unreadable or observed.clause_status_missing %}
+<p class="muted">{{ observed.clause_records_absent }} saved assessments have no stored clause list. {{ observed.clause_records_unreadable }} have a clause list that could not be read. {{ observed.clause_status_missing }} clauses have no evidence status.</p>
+{% endif %}
+<p class="inline-warning">{{ observed.cost_mapping }} {{ observed.unmeasured_summary }}</p>
+<!-- observed-metrics-end -->

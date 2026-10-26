@@ -2,11 +2,13 @@
 
 from flask import Blueprint, render_template
 
+from app.db import get_db
 from app.services.cost_model import calculate_cost
 from app.services.evidence_validator import load_policy
 from app.services.intake_questionnaire import load_questionnaire
 from app.services.org_policy import load_org_policy
 from app.services.risk_engine import load_rules
+from app.services.workflow_metrics import observed_metrics
 
 bp = Blueprint("methodology", __name__)
 
@@ -15,6 +17,7 @@ bp = Blueprint("methodology", __name__)
 def index():
     rules = load_rules()
     return render_template("methodology.html", cost=calculate_cost(),
+                           observed=observed_metrics(get_db()),
                            risk_model_version=rules["rule_set_version"],
                            escalation_rules=rules["escalation_rules"],
                            org_policy=load_org_policy(),

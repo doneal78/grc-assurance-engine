@@ -1,6 +1,6 @@
 # GRC Assurance Engine — Build Plan
 
-**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Trust-center citations are pasted evidence, not a live fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow. Preview and confirm do not save. A person can then save one synthetic row with a disposition and rationale. A bot JSON contract and CLI run the same intake path. Assess alone does not save. `persist: true` with a human disposition does. Observed metrics remain out of scope. Multi-tenant policy storage is not implemented.
+**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Trust-center citations are pasted evidence, not a live fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow. Preview and confirm do not save. A person can then save one synthetic row with a disposition and rationale. A bot JSON contract and CLI run the same intake path. Assess alone does not save. `persist: true` with a human disposition does. The dashboard reports observed register counts and elapsed intake-to-disposition time, kept separate from the illustrative cost formula. Human handling time remains unmeasured. Multi-tenant policy storage is not implemented.
 **Project type:** GRC Engineering portfolio application  
 **Development approach:** Local-first, phased implementation, test-driven business logic  
 **Primary IDE:** Cursor  
@@ -470,7 +470,7 @@ Do not connect to a live ServiceNow instance or require credentials for the MVP.
 
 ## 11. Phase 6 — Workflow Metrics and Cost of Assurance
 
-**Status:** An independent cost service and dashboard/methodology example calculate illustrative labor capacity, including added review and ongoing maintenance assumptions. No observed handling-time or cycle-time measurement is implemented; the model does not claim cash savings. One-time development cost is excluded because no source input is available.
+**Status:** `app/services/workflow_metrics.py` counts saved assessments, open remediation, residual tiers, claim and clause evidence statuses, and current dispositions from the local register. It measures elapsed intake-to-disposition time only when both `intake_received` and `decision_recorded` exist. The dashboard and methods page show those figures apart from `calculate_cost()`. Human handling time, a monthly rate, rework duration, and cash savings remain unmeasured. The illustrative formula, including added review and maintenance assumptions, is unchanged. One-time development cost is excluded because no source input is available. See section 22.
 
 ### Objective
 
@@ -537,7 +537,7 @@ Do not monetize hypothetical avoided security incidents in the MVP.
 
 ## 12. Phase 7 — Dashboard and User Experience
 
-**Status:** Local demo landing, scenario detail, risk register, remediation, and methods pages are implemented for the synthetic fixtures. The public form, file import, and JSON/CLI intake assess a vendor. Saving that assessment is opt-in. Observed workflow metrics and full dashboard reporting remain unimplemented.
+**Status:** Local demo landing, scenario detail, risk register, remediation, and methods pages are implemented for the synthetic fixtures. The public form, file import, and JSON/CLI intake assess a vendor. Saving that assessment is opt-in. The dashboard shows observed volume, open remediation, residual-tier and evidence-status distributions, persisted disposition counts, and elapsed intake-to-disposition cycle time from stored events. Human handling effort and rework time remain unmeasured, and the page says so. The illustrative cost panel stays separate.
 
 ### Objective
 
@@ -755,4 +755,26 @@ Let a confirmed import, or an explicit API or CLI decision, put one synthetic ve
 
 ### Out of scope for this increment
 
-Observed handling time, a per-visitor register, an authenticated decider, and a live ServiceNow write. The hosted demo's register is still shared by everyone with the link. Do not put real vendor data in it.
+Observed human handling time, a per-visitor register, an authenticated decider, and a live ServiceNow write. Elapsed intake-to-disposition time is reported from workflow events when both milestones exist. See section 22. The hosted demo's register is still shared by everyone with the link. Do not put real vendor data in it.
+
+## 22. Observed workflow metrics
+
+**Status:** Implemented in `app/services/workflow_metrics.py` and shown on the dashboard and the methods page.
+
+### Objective
+
+Show what the local register can actually support, and keep those figures apart from the illustrative cost assumptions.
+
+### Behavior
+
+- Assessment volume is the number of rows in `risks`. An unsaved public try is absent. A `scenario_id` that starts with `intake-`, or a stored `intake_origin` of `general_intake`, counts as general intake. Other rows are scenario fixtures.
+- Open remediation is the number of `remediation_actions` whose status is not `completed`. `in_progress` remains open.
+- Residual tier counts use `risks.residual_tier`.
+- Claim evidence counts use each stored claim's `evidence_status`. Clause evidence counts use the stored required-clause statuses and stay in their own list. A missing claim status is an evidence gap, not a confirmed control failure.
+- Disposition counts use the current `decisions` row. `decision_recorded` events are counted separately, so a replacement does not add a second current disposition.
+- Cycle time is the elapsed seconds from the earliest `intake_received` timestamp to the earliest `decision_recorded` timestamp on that same risk. The mean is rounded half up to two decimal places. A shared timestamp is a measured span of 0 elapsed seconds. A scenario with no intake event, a row with no disposition event, and a row whose timestamps are reversed or unreadable stay out of the average.
+- The illustrative cost formula is still `calculate_cost()` from `app/data/cost_assumptions.json`. Observed volume is a count of saved rows, and elapsed cycle time is a clock span, so neither value is copied into that formula.
+
+### Out of scope for this increment
+
+Human handling time, manual touches, handoffs, rework duration, cash savings, and monetized avoided incidents. The event log is still a local trace. It can be edited by someone with access to the database.
