@@ -85,9 +85,9 @@ A browser request whose `Origin` or `Referer` host does not match the site is re
 
 `contract_version` may be omitted. When it is present it must be `1.0.0`. Unknown request fields and unknown form fields are rejected and are not dropped. A reviewer package (`kind` of `vendor_intake_package`) or a simulated ServiceNow file is rejected here. Pass the file to `preview` or `assess-file`.
 
-Form keys are the public intake fields. Values are text. Numbers and booleans are rejected rather than turned into text, matching the file importer. Allowed values are the rule set and the org policy. `model_training_on_customer_data` may be omitted when `ai_use` is `none`, because the public form does not submit that disabled field. Any other omitted field is a validation error. An empty `vendor_name` is a validation error.
+Form keys are the public intake fields. Values are text. Numbers and booleans are rejected rather than turned into text, matching the file importer. Allowed values are the rule set and the org policy. `model_training_on_customer_data` may be omitted when `ai_use` is `none`, because the public form does not submit that disabled field. `fetch_trust_center` may be omitted, and that means do not fetch. Any other omitted field is a validation error. An empty `vendor_name` is a validation error.
 
-`trust_center_url` may be an empty string. The URL is not fetched.
+`trust_center_url` may be an empty string. `fetch_trust_center` is optional. Omitted and `no` store the URL and do not fetch it. `yes` performs one HTTP GET of that URL. The response is vendor-published material for human review. The evidence status on a successful fetch is `not_reviewed`. It is not a scored claim, it is not `verified`, and it does not approve the vendor. An HTTP error or a timeout is `fetch.outcome` `failed` and evidence status `missing`. A private, link-local, or metadata target is rejected and nothing is fetched. File import does not include this field and does not fetch.
 
 Sending `residual_tier` or any other extra field fails validation. The response tier comes from the risk engine after a valid form is accepted.
 
@@ -124,7 +124,7 @@ An invalid disposition is rejected before a risk row is written. Approving a pro
 | `claims` | claim id, topic, statement, evidence status, status reason, and evidence-record status |
 | `mappings` | mapper id, framework, control, rationale, and `review_status` |
 
-`persisted` is false unless this request saved the vendor. `risk_id` and `decision` are null when nothing was saved. When a save succeeds, `risk_id` is the register id and `decision` copies the stored disposition, rationale, decider, policy reference, rule set version, and `prohibited_at_decision`. `decision.separate_from_score` is true. The residual tier is not copied into the disposition. `human_review_required` is true. `automatic_approval` is null. `synthetic_data` is taken from the intake result. `trust_center.fetched` is copied from that result and is false for this intake path.
+`persisted` is false unless this request saved the vendor. `risk_id` and `decision` are null when nothing was saved. When a save succeeds, `risk_id` is the register id and `decision` copies the stored disposition, rationale, decider, policy reference, rule set version, and `prohibited_at_decision`. `decision.separate_from_score` is true. The residual tier is not copied into the disposition. `human_review_required` is true. `automatic_approval` is null. `synthetic_data` is taken from the intake result. `trust_center.fetched` is copied from that result. It is false when fetch was not requested or did not succeed. `trust_center.fetch` copies the outcome, timestamp, summary, excerpt, error, and evidence status from the same result.
 
 The explanations are the engine's own text: `residual.reason`, each inherent factor, each escalation's `reason`, each claim and clause `status_reason`, and each matched restriction. The route does not write a second narrative or a second score.
 
@@ -159,4 +159,4 @@ A yes answer on `decisions_affecting_people` returns policy outcome `prohibited`
 - The saved row is synthetic demonstration data in the local SQLite register. Saving the same request again adds another row. The decider text is not checked against a directory.
 - Draft control mappings are review prompts. A mapping does not show that a control is implemented or that a framework is met.
 - The local event log and the mock remediation ticket on the web page are separate views of an assessment. They are not part of this JSON document.
-- The CLI and the API do not call ServiceNow and do not open attachment bytes or trust-center pages.
+- The CLI and the API do not call ServiceNow and do not open attachment bytes. They GET a trust-center URL only when `fetch_trust_center` is `yes`. That GET is not independent verification. File commands (`preview`, `assess-file`) do not fetch.

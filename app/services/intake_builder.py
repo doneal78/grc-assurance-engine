@@ -4,17 +4,19 @@ The public "Try it" pages let a visitor describe a fictional vendor or AI
 tool. This module converts that form into the same claims and evidence
 records the evidence validator and risk engine already use, so every result
 comes from the tested application logic rather than demo-only scoring.
-A trust-center URL is stored with those records. It is not fetched, and it
-is not a separate assurance result. Nothing here writes to the database.
+A trust-center URL is stored with those records. Fetching it is optional.
+A fetch is one HTTP GET of vendor-published material. It is not a separate
+score, and it is not verified evidence. Nothing here writes to the database.
 """
 
-from datetime import timedelta
+from datetime import datetime, time, timedelta, timezone
 from urllib.parse import urlparse
 
 from app.services.control_mapper import map_claims
-from app.services.evidence_validator import validate_assessment
+from app.services.evidence_validator import validate, validate_assessment
 from app.services.org_policy import load_org_policy
 from app.services.risk_engine import evaluate, load_rules
+from app.services.trust_center_fetch import fetch_trust_center
 
 MAX_VENDOR_NAME = 80
 
@@ -46,6 +48,9 @@ CLAUSE_EVIDENCE_OPTIONS = {
 }
 
 GAP_STATUSES = {"missing", "expired", "not_reviewed", "conflicting"}
+FETCH_CLAIM_ID = "C-TRUST-CENTER-PAGE"
+FETCH_EVIDENCE_ID = "E-TRUST-CENTER-PAGE"
+FETCH_TOPIC = "trust_center_page"
 
 PRIORITY_BY_RESIDUAL_TIER = {
     "critical": "1 - Critical",
@@ -159,7 +164,7 @@ def _clause_evidence_record(clause, option, as_of):
 
 
 def _trust_center_url(value, trust):
-    """Accept an empty URL, or one http(s) URL. Never fetch it."""
+    """Accept an empty URL, or one http(s) URL. Do not fetch it here."""
     url = (value or "").strip()
     if not url:
         return None, []
@@ -209,6 +214,116 @@ def _trust_record(pointer, topic, option, as_of, url):
     return record
 
 
+def _fetch_choice(form, trust, problems):
+    """Return whether this intake asked for a GET. Omitted or no does not fetch."""
+    raw = (form.get(trust["fetch_field"]) or "").strip()
+    if raw == "" or raw == "no":
+        return False
+    if raw != "yes":
+        prompt = trust["fetch_prompt"].rstrip("?")
+        problems.append(f"{prompt}: choose yes or no.")
+        return False
+    return True
+
+
+def _empty_fetch():
+    return {
+        "requested": False,
+        "outcome": "not_requested",
+        "http_status": None,
+        "fetched_at": None,
+        "content_type": None,
+        "summary": None,
+        "excerpt": None,
+        "error": None,
+        "byte_length": None,
+        "final_url": None,
+        "source": None,
+        "evidence_status": None,
+        "status_reason": None,
+        "evidence_id": None,
+    }
+
+
+def _fetch_inputs(url, outcome, as_of):
+    """Claim and evidence for the validator. A failed GET has no evidence record."""
+    claim = {
+        "claim_id": FETCH_CLAIM_ID,
+        "topic": FETCH_TOPIC,
+        "statement": (
+            "The fetched trust-center page is vendor-published material for human review. "
+            "It does not show that a control is in place."
+        ),
+    }
+    if not outcome["ok"]:
+        return claim, []
+    record = {
+        "evidence_id": FETCH_EVIDENCE_ID,
+        "claim_id": FETCH_CLAIM_ID,
+        "artifact_name": "Trust center page fetched for human review",
+        "artifact_type": "vendor_statement",
+        "source": "vendor",
+        "collection_date": as_of.isoformat(),
+        "trust_center_url": outcome.get("final_url") or url,
+        "fetched_at": outcome.get("fetched_at") or "",
+        "content_summary": outcome.get("summary") or "",
+        "excerpt": outcome.get("excerpt") or "",
+    }
+    return claim, [record]
+
+
+def _apply_fetch(url, trust, as_of, open_url, resolver, problems):
+    """GET the URL when requested. A refusal is a form error. A transport failure is a gap."""
+    notes = trust["result_notes"]
+    base = _empty_fetch()
+    if not url:
+        problems.append("A trust center URL is required when fetch is yes.")
+        return None, "fetch_failed", notes["failed"], base, None, []
+    clock = datetime.combine(as_of, time.min, tzinfo=timezone.utc)
+    outcome = fetch_trust_center(url, open_url=open_url, resolver=resolver, clock=clock)
+    recorded = {
+        **base,
+        "requested": True,
+        "outcome": "retrieved" if outcome["ok"] else "failed",
+        "http_status": outcome["http_status"],
+        "fetched_at": outcome["fetched_at"],
+        "content_type": outcome["content_type"],
+        "summary": outcome["summary"],
+        "excerpt": outcome["excerpt"],
+        "error": outcome["error"],
+        "byte_length": outcome["byte_length"],
+        "final_url": outcome["final_url"],
+        "source": "vendor" if outcome["ok"] else None,
+    }
+    if outcome["refused"]:
+        problems.append(outcome["error"])
+        return False, "fetch_failed", notes["failed"], recorded, None, []
+    claim, evidence = _fetch_inputs(url, outcome, as_of)
+    if outcome["ok"]:
+        return True, "http_get", notes["retrieved"], recorded, claim, evidence
+    return False, "fetch_failed", notes["failed"], recorded, claim, evidence
+
+
+def _review_fetch(trust, as_of):
+    """Let the evidence validator status the fetch. Leave it off the scored claims."""
+    trust = {**trust, "fetch": dict(trust.get("fetch") or _empty_fetch())}
+    claim = trust.pop("fetch_claim", None)
+    evidence = trust.pop("fetch_evidence", [])
+    fetch = trust["fetch"]
+    if claim is None:
+        trust["artifact"] = None
+        return trust
+    checked = validate([claim], evidence, as_of)
+    artifact = checked["claims"][0]
+    if artifact["evidence_status"] == "verified" or any(item["status"] == "verified" for item in artifact["evidence"]):
+        raise ValueError("A trust-center fetch cannot be verified evidence.")
+    fetch["evidence_status"] = artifact["evidence_status"]
+    fetch["status_reason"] = artifact["status_reason"]
+    fetch["evidence_id"] = artifact["evidence"][0]["evidence_id"] if artifact["evidence"] else None
+    trust["artifact"] = artifact
+    return trust
+
+
 def _context_answers(form, questionnaire, choices, problems):
     """Read scoring answers. Omit model training only when AI use is none."""
     assessment = {}
@@ -230,8 +345,12 @@ def _context_answers(form, questionnaire, choices, problems):
     return assessment, applicability
 
 
-def build_intake(form, as_of):
-    """Validate the intake form and return claims, evidence, and assessment inputs."""
+def build_intake(form, as_of, *, open_url=None, resolver=None):
+    """Validate the intake form and return claims, evidence, and assessment inputs.
+
+    ``open_url`` and ``resolver`` are test hooks for a requested trust-center
+    fetch. When they are omitted and fetch is yes, the standard library is used.
+    """
     from app.services.intake_questionnaire import load_questionnaire
 
     questionnaire = load_questionnaire()
@@ -269,6 +388,7 @@ def build_intake(form, as_of):
     trust = questionnaire["trust_center"]
     url, url_problems = _trust_center_url(form.get(trust["url_field"], ""), trust)
     problems.extend(url_problems)
+    fetch_requested = _fetch_choice(form, trust, problems)
     pointers = []
     for pointer in trust["pointers"]:
         option = form.get(pointer["field"], "")
@@ -303,6 +423,16 @@ def build_intake(form, as_of):
         if record is not None:
             evidence.append(record)
 
+    fetched = False
+    collection = "pasted_metadata"
+    note = trust["result_notes"]["not_requested"]
+    fetch = _empty_fetch()
+    fetch_claim = None
+    fetch_evidence = []
+    if fetch_requested and not problems:
+        fetched, collection, note, fetch, fetch_claim, fetch_evidence = _apply_fetch(
+            url, trust, as_of, open_url, resolver, problems)
+
     if problems:
         raise IntakeError(problems)
     return {
@@ -314,10 +444,13 @@ def build_intake(form, as_of):
         "questionnaire_version": questionnaire["questionnaire_version"],
         "trust_center": {
             "url": url,
-            "fetched": False,
-            "collection": "pasted_metadata",
-            "note": trust["note"],
+            "fetched": bool(fetched),
+            "collection": collection,
+            "note": note,
             "pointers": pointers,
+            "fetch": fetch,
+            "fetch_claim": fetch_claim,
+            "fetch_evidence": fetch_evidence,
         },
     }
 
@@ -329,6 +462,7 @@ def run_intake(intake, as_of):
                                   policy["required_contract_clauses"])
     risk = evaluate({**intake["assessment"], "claims": checked["claims"]},
                     clause_check=checked["clause_check"])
+    trust_center = _review_fetch(intake["trust_center"], as_of)
     return {
         "scenario_id": None,
         "name": intake["vendor_name"],
@@ -339,7 +473,7 @@ def run_intake(intake, as_of):
         "questionnaire_version": intake["questionnaire_version"],
         "assessment_inputs": intake["assessment"],
         "answer_applicability": intake["answer_applicability"],
-        "trust_center": intake["trust_center"],
+        "trust_center": trust_center,
         "evidence_policy_version": checked["evidence_policy_version"],
         "claims": checked["claims"],
         "risk": risk,
@@ -358,7 +492,9 @@ def remediation_payload(result):
     gaps = [c for c in result["claims"] if c["evidence_status"] in GAP_STATUSES]
     clause_gaps = _clause_gaps(risk)
     prohibited = risk["policy_outcome"]["status"] == "prohibited"
-    if not risk["escalations"] and not gaps and not prohibited and not clause_gaps:
+    fetch = (result.get("trust_center") or {}).get("fetch") or {}
+    fetch_failed = fetch.get("outcome") == "failed"
+    if not risk["escalations"] and not gaps and not prohibited and not clause_gaps and not fetch_failed:
         return None
     if prohibited:
         priority = "Policy restriction — human decision required"
@@ -382,7 +518,11 @@ def remediation_payload(result):
             {"claim_id": c["claim_id"], "status": c["evidence_status"],
              "request": f"Provide current, reviewable evidence for: {c['statement']}"}
             for c in gaps
-        ],
+        ] + ([
+            {"claim_id": FETCH_CLAIM_ID, "status": "missing",
+             "request": (f"Trust center fetch failed: {fetch.get('error')} "
+                         "This is an evidence gap, not a verified control.")}
+        ] if fetch_failed else []),
         "contract_clauses": [
             {"clause_id": clause["clause_id"], "status": clause["evidence_status"],
              "request": (f"Provide current, reviewable evidence for required clause {clause['clause_id']}: "
@@ -422,7 +562,14 @@ def workflow_events(result):
     evidence_detail = (f"Evidence policy {result['evidence_policy_version']}, evaluated as of "
                        f"{result['as_of']}: {summary or 'no claims'}.")
     trust_center = result.get("trust_center")
-    if trust_center and trust_center.get("url"):
+    fetch = (trust_center or {}).get("fetch") or {}
+    if fetch.get("outcome") == "retrieved":
+        evidence_detail += (" Trust center page fetched for review and marked not yet reviewed. "
+                            "It is not verified evidence.")
+    elif fetch.get("outcome") == "failed":
+        evidence_detail += (f" Trust center fetch failed: {fetch.get('error')} "
+                            "This is an evidence gap, not a successful collection.")
+    elif trust_center and trust_center.get("url"):
         evidence_detail += " Trust center URL stored and not fetched."
     elif trust_center:
         evidence_detail += " Trust center artifact choices are pasted metadata and were not fetched."

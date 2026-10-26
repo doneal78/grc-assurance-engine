@@ -81,15 +81,17 @@ A required clause from `app/data/org_policy.json` is checked as a claim. The evi
 
 The risk engine records that status, the reason, and the evidence basis. It does not add the clause to the claim list, so the clause does not change evidence confidence or fire ESC-003. See `docs/risk-model.md`.
 
-## Trust-center citations
+## Trust-center citations and fetch
 
-Intake questionnaire 1.0.0 can store a vendor trust-center URL and three pasted artifact choices: a SOC 2 Type II report, security documentation, and a privacy notice. The prototype does not open or download the URL. There is no scraper and no new runtime dependency.
+Intake questionnaire 1.0.0 can store a vendor trust-center URL and three pasted artifact choices: a SOC 2 Type II report, security documentation, and a privacy notice. Leaving `fetch_trust_center` omitted or `no` does not open the URL. There is no scraper and no new runtime dependency. The GET, when requested, uses `urllib` in `app/services/trust_center_fetch.py`.
 
-A URL with no artifact choice creates no evidence record. It cannot raise evidence confidence, satisfy a contract clause, or approve the vendor. Each artifact choice becomes one or more ordinary evidence records, and `validate` assigns the status. The SOC choice is cited for the authentication claim and the logging claim. The validator scores those claims separately. The security document is cited for transmission protection. The privacy notice is its own claim and has no control mapping.
+A URL with no artifact choice and no fetch creates no scored evidence record. It cannot raise evidence confidence, satisfy a contract clause, or approve the vendor. Each pasted artifact choice becomes one or more ordinary evidence records, and `validate` assigns the status. The SOC choice is cited for the authentication claim and the logging claim. The validator scores those claims separately. The security document is cited for transmission protection. The privacy notice is its own claim and has no control mapping.
 
-No new artifact type was added. The SOC report uses `soc2_type2_report` (365 days). The security document and the privacy notice use `policy_document` (365 days). A reviewed SOC whose source is the auditor can reach verified. A reviewed privacy notice or security document is an internal observation when someone other than the vendor checked the published page, because the page itself is the vendor's. The vendor's own description stays self-attested. The claim text says what the cited document addresses. Verified means that review passed. It does not mean the practice was independently tested, and it does not approve the vendor.
+No new artifact type was added for those pasted choices. The SOC report uses `soc2_type2_report` (365 days). The security document and the privacy notice use `policy_document` (365 days). A reviewed SOC whose source is the auditor can reach verified. A reviewed privacy notice or security document is an internal observation when someone other than the vendor checked the published page, because the page itself is the vendor's. The vendor's own description stays self-attested. The claim text says what the cited document addresses. Verified means that review passed. It does not mean the practice was independently tested, and it does not approve the vendor.
 
-The result copies `pointer_id` and `trust_center_url` onto the evidence view when the record has them. Those fields do not change the status rules above.
+A requested fetch is a different record. It uses artifact type `vendor_statement`, source `vendor`, and no review. `validate` therefore returns `not_reviewed`: the page was collected and nobody has checked it. The record cannot become `verified` under these inputs, because a vendor source stops at `self_attested` even if a review were present, and this record has no review. The fetch claim is not added to the scored claim list, so it does not change evidence confidence. A failed GET produces no evidence record. The same validator reports that claim as `missing`. That is an evidence gap, not a confirmed control failure and not a successful collection.
+
+The result copies `pointer_id`, `trust_center_url`, `fetched_at`, `content_summary`, and `excerpt` onto the evidence view when the record has them. Those fields do not change the status rules above. A file hash is still not required for a fetch. The excerpt is a review aid. It does not prove the page is authentic, complete, or sufficient, and it does not certify the vendor.
 
 ## Connection to the risk engine
 

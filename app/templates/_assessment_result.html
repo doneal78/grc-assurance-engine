@@ -24,7 +24,17 @@
 <p>{{ scenario.trust_center.note }}</p>
 {% if scenario.trust_center.url %}<p class="trust-url">URL: <a href="{{ scenario.trust_center.url }}" rel="noreferrer noopener">{{ scenario.trust_center.url }}</a></p>{% else %}<p>No trust center URL was provided.</p>{% endif %}
 <ul>{% for pointer in scenario.trust_center.pointers %}<li>{{ pointer.prompt }} — {{ pointer.option|replace('_', ' ') }}{% if pointer.evidence_ids %} · {{ pointer.evidence_ids|join(', ') }}{% else %} · no evidence record{% endif %}</li>{% endfor %}</ul>
-<p class="muted">Fetched: no. Collection: {{ scenario.trust_center.collection|replace('_', ' ') }}. The evidence statuses above come from the evidence validator.</p>
+<p class="muted">Fetched: {{ 'yes' if scenario.trust_center.fetched else 'no' }}. Collection: {{ scenario.trust_center.collection|replace('_', ' ') }}. The claim statuses above come from the evidence validator. A fetch uses that same validator and stays off the scored claims, so it does not change evidence confidence.</p>
+{% if scenario.trust_center.fetch and scenario.trust_center.fetch.requested %}
+  {% if scenario.trust_center.fetch.outcome == 'retrieved' %}
+  <p>Fetch status: <span class="status status-{{ scenario.trust_center.fetch.evidence_status|replace('_', '-') }}">{{ scenario.trust_center.fetch.evidence_status|replace('_', ' ')|title }}</span>. {{ scenario.trust_center.fetch.status_reason }}</p>
+  <p>Fetched at {{ scenario.trust_center.fetch.fetched_at }}{% if scenario.trust_center.fetch.http_status %} · HTTP {{ scenario.trust_center.fetch.http_status }}{% endif %}. Source: vendor. This page is not verified evidence.</p>
+  {% if scenario.trust_center.fetch.summary %}<p>{{ scenario.trust_center.fetch.summary }}</p>{% endif %}
+  {% if scenario.trust_center.fetch.excerpt %}<p class="muted">{{ scenario.trust_center.fetch.excerpt }}</p>{% endif %}
+  {% elif scenario.trust_center.fetch.outcome == 'failed' %}
+  <p class="inline-warning">The fetch failed: {{ scenario.trust_center.fetch.error }} This is an evidence gap, not a successful collection and not a verified control.{% if scenario.trust_center.fetch.evidence_status %} Evidence status: {{ scenario.trust_center.fetch.evidence_status|replace('_', ' ') }}.{% endif %}</p>
+  {% endif %}
+{% endif %}
 </section>
 {% endif %}
 

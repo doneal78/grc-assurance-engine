@@ -93,13 +93,14 @@ def _evidence_status(ev, as_of, policy):
 def _evidence_view(ev, status, reason):
     """Status plus the reference fields a reviewer needs to trace the record.
 
-    A trust-center URL and pointer id are copied through when the intake
-    stored them. They do not change the status. The validator still does
-    not fetch anything.
+    A trust-center URL, pointer id, fetch time, and content summary are
+    copied through when the intake stored them. They do not change the
+    status. This function does not fetch anything.
     """
     item = {"evidence_id": ev["evidence_id"], "status": status,
             "reason": reason, "file_sha256": ev.get("file_sha256")}
-    for key in ("artifact_name", "artifact_type", "source", "pointer_id", "trust_center_url"):
+    for key in ("artifact_name", "artifact_type", "source", "pointer_id",
+                "trust_center_url", "fetched_at", "content_summary", "excerpt"):
         value = ev.get(key)
         if isinstance(value, str) and value:
             item[key] = value

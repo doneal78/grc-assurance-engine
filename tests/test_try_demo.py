@@ -293,7 +293,8 @@ def test_public_form_explains_proportion_and_trust_center(gated_client):
     body = response.data
     assert b"data-ask-when=\"ai_not_none\"" in body
     assert b"Asked only when AI use is not none" in body
-    assert b"does not open or download" in body
+    assert b"does not open the page" in body
+    assert b"not verified evidence" in body
     assert b"What supports the access claim?" in body
     assert b"Privacy notice" in body
     assert b"https://trust.example.test/northwind" in body

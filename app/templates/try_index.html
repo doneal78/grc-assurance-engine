@@ -57,6 +57,10 @@
       <input name="{{ trust_center.url_field }}" maxlength="{{ trust_center.url_max_length }}" value="{{ form.get(trust_center.url_field, '') }}" placeholder="https://trust.example.test/northwind">
       <span class="muted">{{ trust_center.help }}</span>
     </label>
+    <label class="wide">{{ trust_center.fetch_prompt }}
+      <select name="{{ trust_center.fetch_field }}">{% for key, text in trust_center.fetch_options.items() %}<option value="{{ key }}"{% if form.get(trust_center.fetch_field, 'no') == key %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>
+      <span class="muted">{{ trust_center.fetch_help }}</span>
+    </label>
     {% for pointer in trust_center.pointers %}
     <label>{{ pointer.prompt }}
       <select name="{{ pointer.field }}">{% for key, text in trust_center.evidence_options.items() %}<option value="{{ key }}"{% if form.get(pointer.field) == key %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>
@@ -72,7 +76,7 @@
   </fieldset>
   <button class="button-link" type="submit">Run assessment</button>
 </form>
-<p class="muted">Evidence dates are set relative to today, so "older than its freshness limit" really is expired under the evidence policy. A trust-center choice becomes an evidence record. The URL is not opened. Try contradicting evidence, unknown answers, or high risk with a complete trust center, and see which rules respond.</p>
+<p class="muted">Evidence dates are set relative to today, so "older than its freshness limit" really is expired under the evidence policy. A trust-center choice becomes an evidence record. Leave fetch at no and the URL is not opened. Choosing fetch stores an excerpt for review and does not verify a control. Try contradicting evidence, unknown answers, or high risk with a complete trust center, and see which rules respond.</p>
 <script>
 (function () {
   var ai = document.querySelector("[name=ai_use]");

@@ -2,7 +2,7 @@
 
 The public demo can read a vendor intake file, show what it parsed, and then run those rows through the same intake builder as the questionnaire. The parser lives in `app/services/intake_importer.py`. It does not score a vendor and it does not write to the database. Scoring happens only after confirmation, in `build_intake` and `run_intake`. Saving happens only after that, when a person checks the box on the result page.
 
-This is a simulated file import. It does not call ServiceNow, and it does not download attachment bytes or trust-center pages.
+This is a simulated file import. It does not call ServiceNow, and it does not download attachment bytes or trust-center pages. The public form and the bot assess request can fetch a trust-center URL when `fetch_trust_center` is `yes`. This importer has no such column. A URL in a file stays a pasted citation.
 
 ## What is accepted
 
@@ -36,7 +36,7 @@ The current columns, in the order the sample writes them, come from intake quest
 | `retention_deletion` | `documented`, `undocumented`, or `unknown` |
 | `decisions_affecting_people` | `no`, `yes`, or `unknown` |
 | `evidence_integration_permissions` | One evidence key |
-| `trust_center_url` | Blank, or one `http://` or `https://` URL. Not fetched |
+| `trust_center_url` | Blank, or one `http://` or `https://` URL. File import does not fetch it |
 | `trust_soc2`, `trust_security`, `trust_privacy` | One evidence key each |
 | `evidence_clause_CC-001` | One evidence key for the required contract clause |
 
@@ -70,7 +70,7 @@ Each ticket:
 | `attachments` | yes | Evidence choices. See below |
 | `u_vendor_name` | yes | `vendor_name` |
 | `u_data_sensitivity`, `u_integration_permissions`, `u_ai_use`, `u_model_training_on_customer_data`, `u_external_exposure`, `u_retention_deletion`, `u_decisions_affecting_people` | yes | The same answers as the questionnaire. Text, not numbers |
-| `u_trust_center_url` | yes | May be an empty string. Not fetched |
+| `u_trust_center_url` | yes | May be an empty string. File import does not fetch it |
 | `sys_id`, `short_description`, `description`, `state`, `priority`, `assignment_group`, `opened_at` | no | Preview context only |
 
 `priority` does not set the residual tier. `opened_at` does not set the evaluation date. The evaluation date is the date the import is confirmed. Evidence ages are still calculated from that date by the intake builder, as they are for the form.

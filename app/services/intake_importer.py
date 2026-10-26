@@ -103,7 +103,7 @@ def column_guide():
         if column == "vendor_name":
             accepted = "Required text, 80 characters or fewer."
         elif column == url_field:
-            accepted = "Blank, or one http:// or https:// URL. The file is not fetched."
+            accepted = "Blank, or one http:// or https:// URL. File import does not fetch the page."
         elif column in choices:
             accepted = ", ".join(choices[column])
             if column == "model_training_on_customer_data":
