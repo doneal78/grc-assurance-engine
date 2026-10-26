@@ -24,6 +24,7 @@ from app.services.intake_importer import (
 from app.services.intake_questionnaire import load_questionnaire
 from app.services.org_policy import load_org_policy
 from app.services.scenario_runner import ScenarioNotFoundError, list_scenarios, run_scenario
+from app.services.walkthrough import carried_walk_step
 from app.services.workflow_service import DISPOSITIONS, WorkflowInputError, register_intake
 
 bp = Blueprint("try_demo", __name__, url_prefix="/try")
@@ -243,4 +244,8 @@ def import_save():
     except WorkflowInputError as exc:
         get_db().rollback()
         return _import_result(imported, document, save_error=str(exc), status=400)
-    return redirect(url_for("risks.detail", risk_id=risk_id))
+    values = {"risk_id": risk_id}
+    step = carried_walk_step(request.args.get("walk"), advance_from="import")
+    if step:
+        values["walk"] = step
+    return redirect(url_for("risks.detail", **values))

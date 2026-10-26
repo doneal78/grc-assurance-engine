@@ -18,7 +18,7 @@ A script can run that same intake without the browser. `python -m app.cli assess
 
 Phase 3 is implemented as framework-independent services. The evidence validator in `app/services/evidence_validator.py` derives claim evidence status using configurable freshness limits in `app/data/evidence_policy.json`. The control mapper in `app/services/control_mapper.py` joins explicitly tagged claims to a small NIST SP 800-53 mapping library in `app/data/control_mappings.json`; the mappings are draft pending human review. **Control mappings** lists that library. Assessment pages show only the topics that matched. ISO/IEC 27001 and ISO/IEC 42001 are not in the library. See `docs/evidence-model.md` and `docs/control-mapping-methodology.md`.
 
-A guided walkthrough at `/walkthrough` leads through those same pages: intake, the four results kept apart, the contradicted contract clause, the high-risk AI case, the prohibited eligibility case, an opt-in save, a human decision and reviewer-package export, then the dashboard and methods. A cookie remembers the last stop in that browser for 12 hours. The guide does not score or save on its own. Pages without `?walk=` stay free-form.
+A guided walkthrough at `/walkthrough` leads through those same pages: intake, the four results kept apart, the contradicted contract clause, the conflicting permissions claim, the high-risk AI case, the prohibited eligibility case, an opt-in save, a human decision and reviewer-package export, a file import, then the dashboard and methods. A cookie remembers the last stop in that browser for 12 hours. The guide does not score or save on its own. Pages without `?walk=` stay free-form.
 
 The local web interface includes repeatable synthetic scenarios that run the same risk, evidence, policy, and mapping services and show explanations and trace links. One scenario is an eligibility tool whose score stays moderate while the policy outcome is prohibited. A scenario can be added to the local SQLite risk register with a follow-up action, a human decision, and workflow history. The dashboard counts that register: saved assessments, open remediation, residual tiers, evidence statuses, dispositions, and elapsed intake-to-disposition time when both workflow events exist. A separate panel keeps the reproducible modeled labor-capacity example. The modeled panel is an illustrative formula. The elapsed cycle time is a clock span, and human handling time stays unmeasured. See `docs/BUILD_PLAN.md` and `docs/cost-model.md`.
 
@@ -45,19 +45,21 @@ Then open http://127.0.0.1:5000/ in a browser. The app listens on 127.0.0.1 only
 
 ## Demo walkthrough
 
-Open **Walkthrough** in the header, or go to `/walkthrough`, and choose **Start at intake**. The guide is nine stops on the live pages. Next and Back move between them. A cookie in this browser remembers the last stop for 12 hours. Start over on the guide page clears that cookie and does not delete the risk register. The pages do the scoring. The notes only say what to notice. An address without `?walk=` is the free-form page.
+Open **Walkthrough** in the header, or go to `/walkthrough`, and choose **Start at intake**. The guide is eleven stops on the live pages. Next and Back move between them. A cookie in this browser remembers the last stop for 12 hours. Start over on the guide page clears that cookie and does not delete the risk register. The pages do the scoring. The notes only say what to notice. An address without `?walk=` is the free-form page.
 
 1. **Intake** on `/try/`. The ready-made vendors are questionnaires. Running one does not save it. A trust-center URL is optional. Leave fetch at no and the page is not opened. A fetch is not verified evidence.
 2. **Evidence-supported vendor.** Inherent risk, evidence confidence, residual risk, and the policy outcome are separate cards. CC-001 is verified. The low residual tier is not an approval, and neither is a policy outcome of not prohibited.
 3. **Contract clause contradicted.** CC-001 is conflicting. That status does not change the inherent score, the residual tier, or the review path. A residual reason that says there are no conflicts is talking about claim evidence, not this clause.
-4. **High-risk AI.** The score is provisional, the tier is undetermined, and the review route is escalated. Missing evidence is a gap, not a confirmed control failure. A residual tier does not turn those rules off.
-5. **AI tool that decides eligibility.** Inherent risk stays moderate and residual risk stays low while the policy outcome is prohibited under HR-001. The low tier does not clear the restriction. This try page does not save a decision.
-6. **Save is opt-in.** Add that case from its demo page. The button writes the synthetic record and a follow-up action. Saving is not an approval.
-7. **Decision and export.** On the saved risk, escalate or reject without an exception rationale, or approve only with one. The prohibited flag stays. Download the JSON or the summary. The file includes the decision. Nothing is sent to ServiceNow.
-8. **Dashboard.** The observed panel counts saved records. Cycle time stays empty for a scenario save, because that path does not store both an intake event and a disposition event. The cost panel is modeled labor capacity, not cash savings.
-9. **Methods.** The rule set, the org policy, the clause check, and the formula. Mappings stay draft. The page does not certify a vendor.
+4. **Conflicting permissions claim.** The vendor statement and an internal export disagree. The claim is conflicting, the residual tier stays high, and ESC-003 escalates the review. That is not what the clause conflict did.
+5. **High-risk AI.** The score is provisional, the tier is undetermined, and the review route is escalated. Missing evidence is a gap, not a confirmed control failure. A residual tier does not turn those rules off.
+6. **AI tool that decides eligibility.** Inherent risk stays moderate and residual risk stays low while the policy outcome is prohibited under HR-001. The low tier does not clear the restriction. This try page does not save a decision.
+7. **Save is opt-in.** Add that case from its demo page. The button writes the synthetic record and a follow-up action. Saving is not an approval.
+8. **Decision and export.** On the saved risk, escalate or reject without an exception rationale, or approve only with one. The prohibited flag stays. Download the JSON or the summary. The file includes the decision. Nothing is sent to ServiceNow.
+9. **File import** on `/try/import`. Preview a sample. The preview has no score. Ticket priority does not set residual risk. Confirm runs the same engine and does not save. Saving is a checkbox, and the disposition is separate from the residual tier. ServiceNow is not called.
+10. **Dashboard.** The observed panel counts saved records. Cycle time stays empty for a scenario save, because that path does not store both an intake event and a disposition event. The cost panel is modeled labor capacity, not cash savings.
+11. **Methods.** The rule set, the org policy, the clause check, and the formula. Mappings stay draft. The page does not certify a vendor.
 
-The conflicting-permissions scenario stays on **Demo scenarios** and is not one of the nine stops. **Control mappings** is linked from the assessment pages. To try a file without the guide, open **Public demo**, then **import a questionnaire file**. Download a sample, preview it, and confirm. The preview has no score. Confirm does not save. Check **Save this synthetic vendor**, record a disposition and a rationale, and the register shows that vendor beside the engine tier. ServiceNow is not called. Saved rows stay in the ignored SQLite database under `instance/`.
+**Control mappings** is linked from the assessment pages. Saved rows stay in the ignored SQLite database under `instance/`. A custom vendor and a trust-center choice stay on the public form.
 
 The local demo does not require credentials, network services, or private evidence. The hosted demo is open with no login. The application still has an optional HTTP Basic gate, and it stays off unless `REQUIRE_AUTH` is set to true. The hosted site does not set that variable. See [docs/deployment.md](docs/deployment.md).
 
@@ -106,9 +108,9 @@ The host is a small portfolio demo, not a production service. Its Lightsail bund
 
 ## Walking through the demo
 
-Open `/walkthrough` and use Next. The note on each page is the cue: four results kept apart, CC-001 verified then conflicting, escalation that a score cannot skip, a prohibited outcome beside a low residual tier, an opt-in save, a decision whose export includes that decision, then the dashboard and methods. The cookie remembers the stop for 12 hours. The guide does not change a page unless the address includes `?walk=`.
+Open `/walkthrough` and use Next. The note on each page is the cue: four results kept apart, CC-001 verified then conflicting, a permissions claim that does escalate, a review a score cannot skip, a prohibited outcome beside a low residual tier, an opt-in save, a decision whose export includes that decision, a file import whose preview has no score, then the dashboard and methods. The cookie remembers the stop for 12 hours. The guide does not change a page unless the address includes `?walk=`.
 
-The notes below are the same story with extra beats the guide does not include: a custom vendor, a trust-center choice, and a file import.
+The notes below are the same story with extra beats the guide does not include: a custom vendor and a trust-center choice.
 
 1. Open `/try/` and run the evidence-supported vendor. Point out that inherent risk, evidence confidence, residual risk, and the policy outcome are shown separately. CC-001 is verified from the reviewed contract excerpt. Run **Contract clause contradicted** and show that CC-001 is conflicting. That status does not change the inherent score, the residual tier, or the review path. The two vendors do not share a score, because their other answers differ.
 2. Run the high-risk AI vendor. Show which escalation rules fired and why a low score could never skip that review.
