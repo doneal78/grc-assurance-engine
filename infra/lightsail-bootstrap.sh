@@ -11,8 +11,9 @@
 #
 # Routine updates of a host that already has the unit, the virtualenv, and
 # the data directory should use infra/deploy-app-revision.sh. This bootstrap
-# also apt-get installs packages, creates the service account, and rewrites
-# the systemd unit. It does not back up SQLite or check /health.
+# also apt-get installs packages, including the sqlite3 CLI used for online
+# backups, creates the service account, and rewrites the systemd unit. It
+# does not back up SQLite or check /health.
 #
 # Run as root. The functions above main can be sourced by tests.
 set -Eeuo pipefail
@@ -113,6 +114,28 @@ ensure_service_user() {
     "$SERVICE_USER"
 }
 
+# Path of a downloaded tarball removed on EXIT. This is not a function local.
+# main returns before the shell exits, and the EXIT trap then runs under
+# set -u. A local name such as tarball is already gone by then.
+CLEANUP_TAR_FILE=""
+
+cleanup_downloaded_tarball() {
+  if [[ -n "${CLEANUP_TAR_FILE:-}" ]]; then
+    rm -f -- "$CLEANUP_TAR_FILE"
+    CLEANUP_TAR_FILE=""
+  fi
+}
+
+arm_tarball_cleanup() {
+  local path=${1-}
+  if [[ -z "$path" ]]; then
+    echo "Refusing to arm tarball cleanup without a path." >&2
+    return 1
+  fi
+  CLEANUP_TAR_FILE=$path
+  trap cleanup_downloaded_tarball EXIT
+}
+
 main() {
   local revision tarball
   if [[ "$(id -u)" -ne 0 ]]; then
@@ -128,11 +151,11 @@ main() {
   umask 022
 
   apt-get update
-  apt-get install -y ca-certificates curl nginx python3-venv python3-pip
+  apt-get install -y ca-certificates curl nginx python3-venv python3-pip sqlite3
   ensure_service_user
 
   tarball=$(mktemp)
-  trap 'rm -f -- "$tarball"' EXIT
+  arm_tarball_cleanup "$tarball"
   curl -fsSL "https://github.com/doneal78/grc-assurance-engine/archive/${revision}.tar.gz" -o "$tarball"
   install -d -o root -g root -m 0755 "$APP_DIR"
   replace_app_tree "$APP_DIR" "$tarball"

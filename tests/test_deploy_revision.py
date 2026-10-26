@@ -503,6 +503,70 @@ def test_record_deployed_revision_writes_the_bootstrap_pin_path(tmp_path):
     assert link.is_symlink()
 
 
+def test_tarball_cleanup_runs_after_the_function_returns(tmp_path):
+    """EXIT cleanup must not read a name that was local to the function."""
+    directory = tmp_path / "has space"
+    directory.mkdir()
+    returned = directory / "after-return.tar.gz"
+    exited = directory / "after-exit.tar.gz"
+    returned.write_bytes(b"return-path")
+    exited.write_bytes(b"exit-path")
+    returned_q = shlex.quote(str(returned))
+    exited_q = shlex.quote(str(exited))
+
+    after_return = _run(
+        "source infra/deploy-app-revision.sh\n"
+        "arm_and_return() {\n"
+        f"  local tarball={returned_q}\n"
+        '  arm_tarball_cleanup "$tarball"\n'
+        "}\n"
+        "arm_and_return\n"
+        'if [[ -z "${CLEANUP_TAR_FILE:-}" ]]; then\n'
+        '  echo "cleanup path was lost after return" >&2\n'
+        "  exit 2\n"
+        "fi\n"
+        'if [[ "$CLEANUP_TAR_FILE" != ' + returned_q + " ]]; then\n"
+        '  echo "cleanup path changed after return" >&2\n'
+        "  exit 3\n"
+        "fi\n"
+        "exit 0\n"
+    )
+    assert after_return.returncode == 0, after_return.stderr
+    assert "unbound variable" not in after_return.stderr
+    assert not returned.exists()
+
+    after_exit = _run(
+        "source infra/deploy-app-revision.sh\n"
+        "arm_and_exit() {\n"
+        f"  local tarball={exited_q}\n"
+        '  arm_tarball_cleanup "$tarball"\n'
+        "  exit 0\n"
+        "}\n"
+        "arm_and_exit\n"
+    )
+    assert after_exit.returncode == 0, after_exit.stderr
+    assert "unbound variable" not in after_exit.stderr
+    assert not exited.exists()
+
+    missing = _source_deploy("arm_tarball_cleanup")
+    assert missing.returncode != 0
+    assert "without a path" in missing.stderr
+
+
+def test_bootstrap_installs_the_sqlite3_cli_and_neither_script_traps_a_local():
+    deploy = DEPLOY.read_text(encoding="utf-8")
+    bootstrap = BOOTSTRAP.read_text(encoding="utf-8")
+    assert 'arm_tarball_cleanup "$tarball"' in deploy
+    assert 'arm_tarball_cleanup "$tarball"' in bootstrap
+    assert "CLEANUP_TAR_FILE" in bootstrap
+    assert 'trap \'rm -f -- "$tarball"\' EXIT' not in deploy
+    assert 'trap \'rm -f -- "$tarball"\' EXIT' not in bootstrap
+    install_lines = [line.strip() for line in bootstrap.splitlines() if "apt-get install" in line]
+    assert any(line.split().count("sqlite3") == 1 for line in install_lines)
+    assert "sqlite3 is not installed" in deploy
+    assert ".backup" in deploy
+
+
 def test_deploy_script_is_a_lighter_path_than_bootstrap():
     text = DEPLOY.read_text(encoding="utf-8")
     bootstrap = BOOTSTRAP.read_text(encoding="utf-8")
@@ -558,3 +622,7 @@ def test_deployment_doc_describes_the_script_and_the_remaining_gaps():
     assert "highly available" in lowered or "no second host" in lowered
     assert "--update-nginx" in text
     assert "lightsail-bootstrap.sh" in text
+    assert "8dcfea2139ba86134697fe83fb4f64734e3155ce" in text
+    assert "does not skip the backup" in text
+    assert "unbound variable" in text
+    assert "sqlite3" in text
