@@ -1,6 +1,6 @@
 # GRC Assurance Engine — Build Plan
 
-**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Trust-center citations are pasted evidence, not a live fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow. Preview and confirm do not save. A person can then save one synthetic row with a disposition and rationale. A bot JSON contract and CLI run the same intake path. Assess alone does not save. `persist: true` with a human disposition does. The dashboard reports observed register counts and elapsed intake-to-disposition time, kept separate from the illustrative cost formula. Human handling time remains unmeasured. The control-mapping library is listed at `/mappings`. Those entries remain draft. ISO/IEC 27001 and ISO/IEC 42001 are not in the library. Multi-tenant policy storage is not implemented.
+**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Trust-center citations can be pasted, or a reviewer can request one HTTP GET that stores the page for human review. A fetch is not verified evidence. File import does not fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow. Preview and confirm do not save. A person can then save one synthetic row with a disposition and rationale. A bot JSON contract and CLI run the same intake path. Assess alone does not save. `persist: true` with a human disposition does. The dashboard reports observed register counts and elapsed intake-to-disposition time, kept separate from the illustrative cost formula. Human handling time remains unmeasured. The control-mapping library is listed at `/mappings`. Those entries remain draft. ISO/IEC 27001 and ISO/IEC 42001 are not in the library. Multi-tenant policy storage is not implemented.
 **Project type:** GRC Engineering portfolio application  
 **Development approach:** Local-first, phased implementation, test-driven business logic  
 **Primary IDE:** Cursor  
@@ -778,3 +778,25 @@ Show what the local register can actually support, and keep those figures apart 
 ### Out of scope for this increment
 
 Human handling time, manual touches, handoffs, rework duration, cash savings, and monetized avoided incidents. The event log is still a local trace. It can be edited by someone with access to the database.
+
+## 23. Trust-center fetch
+
+**Status:** Implemented as an optional step on the public intake form and the bot JSON/CLI assess path. File import stays paste-only.
+
+### Objective
+
+Let a reviewer supply a trust-center URL and have the application GET that page into an evidence artifact for human review, while pasted citations still work when fetch is not requested.
+
+### Behavior
+
+- The questionnaire field `fetch_trust_center` accepts `no` or `yes`. Omitted and `no` store the URL and do not open it. `yes` performs one HTTP GET with the standard library (`urllib`). There is no scraper, headless browser, or third-party trust-center API.
+- A successful fetch stores the source URL, the fetch timestamp (the assessment date at 00:00 UTC), the HTTP status, a short summary, and an excerpt. The evidence validator statuses that record. The source is `vendor` and no review is recorded, so the status is `not_reviewed`. It cannot become `verified`.
+- The fetch artifact is not one of the scored claims. It does not change evidence confidence, the residual tier, or automatic approval. `automatic_approval` stays null.
+- An HTTP error, a timeout, a DNS failure, or too many redirects is a failed fetch. The result records the error, the validator status is `missing`, and the mock remediation ticket names the gap. It is not stored as a successful collection.
+- A URL that is not `http` or `https`, that includes a username or password, or that points at a private, loopback, link-local, or metadata address is rejected before a connection. The same check runs on each redirect. Name resolution uses an injectable resolver in tests. The check does not pin DNS against a later address change.
+- Tests inject the HTTP opener and the resolver. They do not use the live internet.
+- Pasted SOC, security, and privacy choices are unchanged. A URL with no artifact choice and no fetch still creates no scored evidence record.
+
+### Out of scope for this increment
+
+Authenticated trust centers, PDF parsing, a headless browser, a paid trust API, and treating the fetched page as independent verification or certification. File import does not fetch. The hosted demo should stay on synthetic or fictional URLs.

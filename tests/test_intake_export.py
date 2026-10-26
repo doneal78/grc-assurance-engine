@@ -130,7 +130,8 @@ def test_methods_page_describes_the_questionnaire(client):
     body = response.data
     assert b"Intake questionnaire" in body
     assert b"1.0.0" in body
-    assert b"does not open or download" in body
+    assert b"does not open the page" in body
+    assert b"not verified evidence" in body
     assert b"not a disposition" in body
 
 

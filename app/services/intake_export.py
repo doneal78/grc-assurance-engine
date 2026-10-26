@@ -1,8 +1,8 @@
 """A reviewer package for one vendor assessment.
 
 JSON for a ticket or a handoff, and a plain-text summary that can be read or
-printed. The package copies the assessment result. It does not score, fetch a
-trust center, or approve the vendor.
+printed. The package copies the assessment result. It does not score, fetch,
+or approve the vendor.
 """
 
 import json
@@ -238,6 +238,22 @@ def render_markdown(package):
     lines.append(f"- Fetched: {'yes' if trust['fetched'] else 'no'}")
     lines.append(f"- Collection: {trust['collection'].replace('_', ' ')}")
     lines.append(f"- Note: {trust['note']}")
+    fetch = trust.get("fetch") or {}
+    if fetch.get("requested"):
+        lines.append(f"- Fetch outcome: {fetch.get('outcome') or 'unknown'}")
+        if fetch.get("fetched_at"):
+            lines.append(f"- Fetched at: {fetch['fetched_at']}")
+        if fetch.get("http_status"):
+            lines.append(f"- HTTP status: {fetch['http_status']}")
+        if fetch.get("evidence_status"):
+            lines.append(f"- Fetch evidence status: {fetch['evidence_status']}. {fetch.get('status_reason') or ''}")
+        if fetch.get("summary"):
+            lines.append(f"- Summary: {fetch['summary']}")
+        if fetch.get("excerpt"):
+            lines.append(f"- Excerpt: {fetch['excerpt']}")
+        if fetch.get("error"):
+            lines.append(f"- Fetch error: {fetch['error']}")
+        lines.append("- A fetch is vendor-published material for human review. It is not verified evidence.")
     if trust["pointers"]:
         for pointer in trust["pointers"]:
             topics = ", ".join(pointer["topics"])

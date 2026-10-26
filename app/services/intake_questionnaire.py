@@ -92,6 +92,21 @@ def validate_questionnaire(data, choices, policy, evidence_policy):
         raise QuestionnaireError("trust_center note is required")
     if not isinstance(trust.get("url_max_length"), int) or trust["url_max_length"] < 1:
         raise QuestionnaireError("trust_center url_max_length must be a positive integer")
+    fetch_field = trust.get("fetch_field")
+    if not _text(fetch_field) or not _text(trust.get("fetch_prompt")) or not _text(trust.get("fetch_help")):
+        raise QuestionnaireError("trust_center needs a fetch field, prompt, and help")
+    fetch_options = trust.get("fetch_options")
+    if not isinstance(fetch_options, dict) or tuple(fetch_options) != ("no", "yes"):
+        raise QuestionnaireError("trust_center fetch_options must be no, then yes")
+    if any(not _text(label) for label in fetch_options.values()):
+        raise QuestionnaireError("trust_center fetch option labels are required")
+    result_notes = trust.get("result_notes")
+    if not isinstance(result_notes, dict) or set(result_notes) != {"not_requested", "retrieved", "failed"}:
+        raise QuestionnaireError("trust_center result_notes must cover not_requested, retrieved, and failed")
+    if any(not _text(text) for text in result_notes.values()):
+        raise QuestionnaireError("trust_center result notes are required")
+    if fetch_field in {access["field"], trust["url_field"], "vendor_name"} or fetch_field in seen_fields:
+        raise QuestionnaireError("trust_center fetch field collides with another intake field")
     options = trust.get("evidence_options")
     if not isinstance(options, dict) or tuple(options) != EVIDENCE_OPTION_KEYS:
         raise QuestionnaireError("trust_center evidence_options must use the evidence option keys, in order")
@@ -103,7 +118,7 @@ def validate_questionnaire(data, choices, policy, evidence_policy):
     clause_fields = set()
     for clause in policy["required_contract_clauses"]:
         clause_fields.add(f"evidence_clause_{clause['clause_id']}")
-    reserved = set(seen_fields) | clause_fields | {access["field"], trust["url_field"], "vendor_name"}
+    reserved = set(seen_fields) | clause_fields | {access["field"], trust["url_field"], fetch_field, "vendor_name"}
     topics = {access_topic}
     pointer_ids = set()
     for pointer in trust.get("pointers") or []:

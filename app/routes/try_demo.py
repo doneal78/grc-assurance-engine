@@ -57,6 +57,7 @@ def _posted_fields(form):
     questionnaire = load_questionnaire()
     policy = load_org_policy()
     keys = ["vendor_name", questionnaire["trust_center"]["url_field"],
+            questionnaire["trust_center"]["fetch_field"],
             questionnaire["access_evidence"]["field"]]
     keys.extend(spec["field"] for spec in questionnaire["context_questions"])
     keys.extend(spec["field"] for spec in policy["intake_fields"])

@@ -2,8 +2,9 @@
 
 A script or agent submits the same fields as the public intake form, or an
 intake file the importer already accepts. The assessment document copies the
-risk-engine result. It does not calculate a score, approve a vendor, fetch a
-trust center, or call ServiceNow.
+risk-engine result. It does not calculate a score, approve a vendor, or call
+ServiceNow. A trust-center fetch runs only when the form asks for it, and
+that page is not verified evidence.
 
 Nothing is written unless the caller sets persist to true and supplies a
 human disposition and rationale. That disposition is stored separately from
@@ -41,7 +42,7 @@ LIMITATIONS = (
     "The risk model is an illustrative portfolio model. Identical inputs and the same rule-set version produce the same result.",
     "A residual tier does not approve the vendor. Human review is required, and a configured restriction can block automatic approval.",
     "An assessment is not written to the risk register unless persist is true and a person supplies a disposition, rationale, and decider. The residual tier is not that disposition.",
-    "A trust-center URL is stored only as pasted text and is not fetched.",
+    "A trust-center URL is stored as pasted text unless fetch_trust_center is yes. A fetch is one HTTP GET of vendor-published material for human review. It is not verified evidence and it does not approve the vendor. File import does not fetch.",
     "A ServiceNow-shaped file is simulated input. This contract does not call ServiceNow.",
     "No external AI model scores or approves the vendor.",
 )
@@ -116,7 +117,10 @@ def contract_document():
         "request": {
             "contract_version": f"Optional. When present, must be {CONTRACT_VERSION}.",
             "as_of": "Optional YYYY-MM-DD. Omitted means the server or process date. Evidence ages are calculated from this date.",
-            "form": "Required object. Keys are the intake fields listed below.",
+            "form": (
+                "Required object. Keys are the intake fields listed below. "
+                "fetch_trust_center is optional: omitted or no does not fetch; yes performs one HTTP GET."
+            ),
             "persist": "Optional boolean. Omitted or false assesses only. True saves a synthetic risk and requires decision.",
             "decision": (
                 "Required object when persist is true. disposition is approve, "
@@ -126,6 +130,16 @@ def contract_document():
         },
         "dispositions": list(DISPOSITIONS),
         "fields": column_guide(),
+        "optional_form_fields": [
+            {
+                "field": questionnaire["trust_center"]["fetch_field"],
+                "accepted": (
+                    "no or yes. Omitted or no stores the URL and does not fetch it. "
+                    "yes performs one HTTP GET. The page is not verified evidence. "
+                    "File import does not have this column and does not fetch."
+                ),
+            }
+        ],
         "conditional_fields": [
             {
                 "field": spec["field"],
@@ -157,12 +171,12 @@ def load_json_object(text):
     return payload
 
 
-def assess_request_text(text, db=None):
+def assess_request_text(text, db=None, *, open_url=None, resolver=None):
     """Parse a JSON request body and return one assessment document."""
-    return assess_request(load_json_object(text), db=db)
+    return assess_request(load_json_object(text), db=db, open_url=open_url, resolver=resolver)
 
 
-def assess_request(payload, db=None):
+def assess_request(payload, db=None, *, open_url=None, resolver=None):
     """Validate one assess request and run it through intake.
 
     persist defaults to false. A true value writes the synthetic vendor and
@@ -171,7 +185,7 @@ def assess_request(payload, db=None):
     """
     form, as_of, persist, decision = parse_assess_request(payload)
     try:
-        intake = build_intake(form, as_of)
+        intake = build_intake(form, as_of, open_url=open_url, resolver=resolver)
     except IntakeError as exc:
         raise BotRequestError(exc.problems) from exc
     result = run_intake(intake, as_of)
@@ -227,7 +241,8 @@ def parse_assess_request(payload):
         raise BotRequestError(problems)
 
     columns = questionnaire_columns()
-    known = set(columns)
+    optional = _optional_form_fields()
+    known = set(columns) | set(optional)
     unexpected = sorted(set(form) - known)
     if unexpected:
         problems.append(
@@ -238,7 +253,7 @@ def parse_assess_request(payload):
     if missing:
         problems.append("Missing form fields: " + ", ".join(missing) + ".")
     cleaned = {}
-    for column in columns:
+    for column in [*columns, *optional]:
         if column not in form:
             continue
         value = form[column]
@@ -507,6 +522,14 @@ def _parse_date(value):
         return None, "as_of is not a real calendar date."
 
 
+def _optional_form_fields():
+    """Form keys the public page can send and a file import does not have."""
+    field = load_questionnaire()["trust_center"]["fetch_field"]
+    if field in questionnaire_columns():
+        return []
+    return [field]
+
+
 def _required_fields(form):
     """Columns the public form submits. Model training is omitted when AI use is none."""
     questionnaire = load_questionnaire()
@@ -547,10 +570,25 @@ def _type_name(value):
 
 def _trust_view(trust):
     trust = trust or {}
+    fetch = trust.get("fetch") or {}
     return {
         "url": trust.get("url"),
         "fetched": trust.get("fetched", False),
         "collection": trust.get("collection"),
+        "fetch": {
+            "requested": bool(fetch.get("requested")),
+            "outcome": fetch.get("outcome") or "not_requested",
+            "http_status": fetch.get("http_status"),
+            "fetched_at": fetch.get("fetched_at"),
+            "final_url": fetch.get("final_url"),
+            "source": fetch.get("source"),
+            "summary": fetch.get("summary"),
+            "excerpt": fetch.get("excerpt"),
+            "error": fetch.get("error"),
+            "evidence_status": fetch.get("evidence_status"),
+            "status_reason": fetch.get("status_reason"),
+            "evidence_id": fetch.get("evidence_id"),
+        },
     }
 
 

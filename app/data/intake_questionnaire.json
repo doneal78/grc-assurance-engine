@@ -1,7 +1,7 @@
 {
   "questionnaire_version": "1.0.0",
   "status": "illustrative",
-  "description": "Public intake questions for this portfolio prototype. Allowed values still come from the risk rule set and the org policy. This file holds the prompts, when a question is asked, and how a trust-center citation becomes evidence. It does not score anything. The prototype stores a trust-center URL and does not fetch the page.",
+  "description": "Public intake questions for this portfolio prototype. Allowed values still come from the risk rule set and the org policy. This file holds the prompts, when a question is asked, and how a trust-center citation becomes evidence. It does not score anything. A trust-center URL can be stored as a citation. Choosing fetch performs one HTTP GET and stores the page for review. That fetch is not verified evidence.",
   "policy_question_help": "Asked on every intake, including when AI use is none. Yes matches HR-001 either way. Unknown is not treated as no and opens ESC-009. The score does not change.",
   "context_questions": [
     {
@@ -52,8 +52,20 @@
     "url_field": "trust_center_url",
     "url_max_length": 200,
     "prompt": "Vendor trust center URL",
-    "help": "Optional. Use a fictional URL. The prototype stores it and does not open or download the page. A URL alone creates no evidence and cannot approve the vendor.",
-    "note": "The prototype stores the URL and the artifact choices. It does not retrieve the page. A URL alone is not an evidence record and cannot approve the vendor.",
+    "help": "Optional. Use a fictional URL. Leave fetch at no and the prototype does not open the page. A URL alone creates no scored evidence and cannot approve the vendor.",
+    "note": "The URL and the artifact choices are pasted citations unless a fetch is requested. A fetch is vendor-published material for human review. It is not verified evidence and it cannot approve the vendor.",
+    "fetch_field": "fetch_trust_center",
+    "fetch_prompt": "Fetch the trust center page",
+    "fetch_help": "No stores the URL and does not open the page. Yes performs one HTTP GET and stores a short excerpt for review. The page is vendor-published material. It is not verified evidence, and it cannot approve the vendor. File import does not fetch.",
+    "fetch_options": {
+      "no": "No. Store the URL and do not open the page.",
+      "yes": "Yes. Fetch the page and store an excerpt for review."
+    },
+    "result_notes": {
+      "not_requested": "The URL and the artifact choices are pasted citations. The page was not fetched. A URL alone is not an evidence record and cannot approve the vendor.",
+      "retrieved": "The page was fetched and stored for human review. The evidence validator marks it not yet reviewed because the source is the vendor and no review was recorded. This is not verified evidence and it cannot approve the vendor.",
+      "failed": "The fetch failed. That failure is an evidence gap. It is not a verified control and it is not a successful collection."
+    },
     "evidence_options": {
       "independent_verified": "Reviewed, and the source is not the vendor",
       "vendor_statement": "Vendor's own description, reviewed",
