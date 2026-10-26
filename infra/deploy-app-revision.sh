@@ -561,7 +561,8 @@ main() {
 
   umask 022
   tarball=$(mktemp)
-  trap 'rm -f -- "$tarball"' EXIT
+  # The EXIT trap reads CLEANUP_TAR_FILE, not this function-local name.
+  arm_tarball_cleanup "$tarball"
   if ! url=$(tarball_url_for_revision "$revision"); then
     exit 1
   fi
