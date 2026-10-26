@@ -1,0 +1,156 @@
+# Manual deploy of one pinned commit to the live Lightsail demo.
+# Starting it by hand is the only trigger. Pushes and pull requests do not run it.
+# It does not SSH unless the repository secrets named below are set.
+# See docs/deployment.md for the host command, the secret list, and the
+# Lightsail SSH /32 limit that still blocks GitHub-hosted runners.
+
+name: Deploy Lightsail app revision
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Full 40-character commit SHA to install
+        required: true
+        type: string
+      update_nginx:
+        description: Install infra/nginx-site.conf from that SHA and reload Nginx
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lightsail-app-revision
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy pinned SHA
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out workflow commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Reject anything other than a full SHA
+        env:
+          REVISION: ${{ inputs.revision }}
+        run: |
+          set -euo pipefail
+          source infra/deploy-app-revision.sh
+          if ! parsed=$(require_revision "$REVISION"); then
+            exit 1
+          fi
+          echo "GRC_DEPLOY_REVISION=${parsed}" >> "$GITHUB_ENV"
+
+      - name: Require deploy secrets
+        env:
+          LIGHTSAIL_SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_KNOWN_HOSTS: ${{ secrets.LIGHTSAIL_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+          missing=0
+          if [[ -z "${LIGHTSAIL_SSH_KEY}" ]]; then
+            echo "::error::Missing repository secret LIGHTSAIL_SSH_KEY. Add the SSH private key for the Lightsail account. This workflow does not SSH until that secret exists."
+            missing=1
+          fi
+          if [[ -z "${LIGHTSAIL_HOST}" ]]; then
+            echo "::error::Missing repository secret LIGHTSAIL_HOST. Use the instance static IP, not the Cloudflare hostname. This workflow does not SSH until that secret exists."
+            missing=1
+          fi
+          if [[ -z "${LIGHTSAIL_KNOWN_HOSTS}" ]]; then
+            echo "::error::Missing repository secret LIGHTSAIL_KNOWN_HOSTS. Store the ssh-keyscan output for that IP. This workflow does not SSH until that secret exists."
+            missing=1
+          fi
+          if [[ "$missing" -ne 0 ]]; then
+            echo "No SSH connection was attempted. The host command in docs/deployment.md can install a SHA without these secrets."
+            exit 1
+          fi
+
+      - name: Deploy over SSH
+        env:
+          LIGHTSAIL_SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_KNOWN_HOSTS: ${{ secrets.LIGHTSAIL_KNOWN_HOSTS }}
+          LIGHTSAIL_SSH_USER: ${{ secrets.LIGHTSAIL_SSH_USER }}
+          UPDATE_NGINX: ${{ inputs.update_nginx }}
+        run: |
+          set -euo pipefail
+          source infra/deploy-app-revision.sh
+          revision="${GRC_DEPLOY_REVISION:-}"
+          if ! parsed=$(require_revision "$revision"); then
+            echo "::error::The validated revision was not available to the SSH step."
+            exit 1
+          fi
+          revision=$parsed
+          case "${UPDATE_NGINX}" in
+            true|false) ;;
+            *)
+              echo "::error::update_nginx must be true or false."
+              exit 1
+              ;;
+          esac
+          user="${LIGHTSAIL_SSH_USER:-ubuntu}"
+          if [[ ! "$user" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; then
+            echo "::error::LIGHTSAIL_SSH_USER must be a short lowercase account name. The default is ubuntu."
+            exit 1
+          fi
+          if [[ ! "$LIGHTSAIL_HOST" =~ ^[A-Za-z0-9][A-Za-z0-9.-]*$ ]]; then
+            echo "::error::LIGHTSAIL_HOST must be a hostname or IPv4 address with no other characters. Nothing was deployed."
+            exit 1
+          fi
+
+          umask 077
+          key_file=$(mktemp)
+          known_file=$(mktemp)
+          remote_dir=""
+          ssh_opts=(
+            -i "$key_file"
+            -o BatchMode=yes
+            -o StrictHostKeyChecking=yes
+            -o "UserKnownHostsFile=${known_file}"
+            -o GlobalKnownHostsFile=/dev/null
+            -o IdentitiesOnly=yes
+            -o ConnectTimeout=20
+            -o ServerAliveInterval=30
+            -o ServerAliveCountMax=4
+          )
+          cleanup() {
+            if [[ -n "${remote_dir}" ]]; then
+              ssh "${ssh_opts[@]}" "${user}@${LIGHTSAIL_HOST}" "rm -rf -- $(printf '%q' "$remote_dir")" || true
+              remote_dir=""
+            fi
+            rm -f -- "$key_file" "$known_file"
+          }
+          trap cleanup EXIT
+          printf '%s\n' "$LIGHTSAIL_SSH_KEY" > "$key_file"
+          printf '%s\n' "$LIGHTSAIL_KNOWN_HOSTS" > "$known_file"
+          chmod 600 "$key_file" "$known_file"
+
+          remote_dir=$(ssh "${ssh_opts[@]}" "${user}@${LIGHTSAIL_HOST}" 'mktemp -d /tmp/grc-deploy.XXXXXXXX')
+          if [[ ! "$remote_dir" =~ ^/tmp/grc-deploy\.[A-Za-z0-9]+$ ]]; then
+            echo "::error::The host returned an unexpected temporary directory. Nothing was deployed."
+            remote_dir=""
+            exit 1
+          fi
+          scp "${ssh_opts[@]}" \
+            infra/deploy-app-revision.sh \
+            infra/lightsail-bootstrap.sh \
+            "${user}@${LIGHTSAIL_HOST}:${remote_dir}/"
+          remote_script=$(printf '%q' "${remote_dir}/deploy-app-revision.sh")
+          remote_cmd="sudo --non-interactive bash ${remote_script} --revision ${revision}"
+          if [[ "$UPDATE_NGINX" == "true" ]]; then
+            remote_cmd+=" --update-nginx"
+          fi
+          set +e
+          ssh "${ssh_opts[@]}" "${user}@${LIGHTSAIL_HOST}" "$remote_cmd"
+          status=$?
+          set -e
+          exit "$status"
