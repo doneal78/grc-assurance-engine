@@ -173,6 +173,8 @@ def test_public_pages_open_without_login_but_full_demo_stays_locked(gated_client
     assert gated_client.get("/").status_code == 401
     assert gated_client.get("/risks").status_code == 401
     assert gated_client.get("/demo/").status_code == 401
+    assert gated_client.get("/walkthrough").status_code == 401
+    assert gated_client.get("/walkthrough/").status_code == 401
 
 
 def test_public_assessment_runs_and_saves_nothing(gated_client):

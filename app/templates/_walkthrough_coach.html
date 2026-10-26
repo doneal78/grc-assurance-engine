@@ -1,0 +1,33 @@
+{% if walk_dock %}
+<nav class="walk-dock" aria-label="Walkthrough continue">
+  <p class="walk-dock-label">Step {{ walkthrough.number }} of {{ walkthrough.total }} · {{ walkthrough.title }}</p>
+  {% if walkthrough.hold %}<p class="walk-hold">{{ walkthrough.hold }}</p>{% endif %}
+  <div class="walk-coach-actions">
+    {% if walkthrough.prev_href %}<a class="text-link walk-back" href="{{ walkthrough.prev_href }}">Back</a>{% endif %}
+    <a class="text-link" href="{{ url_for('walkthrough.index') }}">All steps</a>
+    {% if walkthrough.next_href %}<a class="button-link walk-next" href="{{ walkthrough.next_href }}">{% if walkthrough.finish %}Finish{% else %}Next{% if walkthrough.next_title %} · {{ walkthrough.next_title }}{% endif %}{% endif %}</a>{% endif %}
+  </div>
+</nav>
+{% else %}
+<aside id="walkthrough-coach" class="walk-coach" data-step="{{ walkthrough.step_id }}" aria-label="Walkthrough">
+  <p class="eyebrow">WALKTHROUGH · STEP {{ walkthrough.number }} OF {{ walkthrough.total }}</p>
+  {% if walkthrough.on_page %}
+  <h2>{{ walkthrough.title }}</h2>
+  <p>{{ walkthrough.notice }}</p>
+  {% if walkthrough.hold %}<p class="walk-hold">{{ walkthrough.hold }}</p>{% endif %}
+  {% else %}
+  <h2>This note is on another page</h2>
+  <p>Open {{ walkthrough.title }} to read it.{% if walkthrough.blocked %} {{ walkthrough.blocked }}{% endif %}</p>
+  {% endif %}
+  <p class="walk-meter" aria-hidden="true">{% for n in range(walkthrough.total) %}<span{% if n < walkthrough.number %} class="is-on"{% endif %}></span>{% endfor %}</p>
+  <div class="walk-coach-actions">
+    {% if walkthrough.prev_href %}<a class="text-link walk-back" href="{{ walkthrough.prev_href }}">Back</a>{% endif %}
+    <a class="text-link" href="{{ url_for('walkthrough.index') }}">All steps</a>
+    {% if not walkthrough.on_page %}
+    <a class="button-link walk-next" href="{{ walkthrough.target_href }}">{% if walkthrough.blocked %}{{ walkthrough.blocked }}{% else %}Go to this step{% endif %}</a>
+    {% elif walkthrough.next_href %}
+    <a class="button-link walk-next" href="{{ walkthrough.next_href }}">{% if walkthrough.finish %}Finish{% else %}Next{% if walkthrough.next_title %} · {{ walkthrough.next_title }}{% endif %}{% endif %}</a>
+    {% endif %}
+  </div>
+</aside>
+{% endif %}

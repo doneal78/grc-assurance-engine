@@ -69,3 +69,31 @@ code { background:var(--surface); padding:.1rem .25rem; border-radius:4px; overf
 .cost-panel { border:1px solid #e9cd85; border-radius:10px; padding:1.1rem 1.2rem 1.2rem; background:var(--warning-soft); }
 .metric-table { margin:.2rem 0 1.2rem; }
 .metric-table caption { caption-side:top; text-align:left; font-weight:650; padding:0 0 .55rem; }
+.heading-actions { display:flex; flex-wrap:wrap; gap:.75rem 1rem; align-items:center; }
+.button-quiet { display:inline-flex; align-items:center; justify-content:center; min-height:2.75rem; background:transparent; color:var(--ink); border:1px solid var(--line); border-radius:6px; padding:.55rem .9rem; font:inherit; font-weight:650; cursor:pointer; }
+.button-quiet:hover { color:var(--accent); border-color:var(--accent); }
+.walk-steps { list-style:none; padding:0; margin:1.5rem 0 0; display:grid; gap:.75rem; }
+.walk-steps li { border:1px solid var(--line); border-radius:10px; padding:1rem 1.15rem; }
+.walk-steps li.is-current { border-color:var(--accent); background:var(--accent-soft); }
+.walk-steps h2 { font-size:1.15rem; margin:0 0 .3rem; }
+.walk-num { color:var(--accent); margin-right:.35rem; }
+.walk-steps p { margin:0 0 .45rem; }
+.walk-open { margin:0; }
+.walk-coach { border:1px solid var(--accent); background:var(--accent-soft); border-radius:10px; padding:1rem 1.15rem; margin:0 0 1.75rem; }
+.walk-coach h2 { font-size:1.25rem; margin:.1rem 0 .45rem; }
+.walk-coach p { margin:.35rem 0; max-width:54rem; }
+.walk-hold { font-weight:650; }
+.walk-meter { display:flex; gap:.3rem; margin:.85rem 0 .2rem; }
+.walk-meter span { flex:1; height:.28rem; border-radius:99px; background:var(--line); }
+.walk-meter span.is-on { background:var(--accent); }
+.walk-coach-actions { display:flex; flex-wrap:wrap; gap:.75rem; align-items:center; margin-top:.9rem; }
+.walk-coach-actions .button-link { margin-left:auto; }
+.walk-dock { display:grid; gap:.35rem; border-top:1px solid var(--line); margin-top:2.5rem; padding-top:1rem; }
+.walk-dock-label { margin:0; font-weight:650; }
+@media(max-width:36rem) {
+  .heading-actions { width:100%; }
+  .heading-actions .button-link { display:flex; justify-content:center; align-items:center; min-height:2.75rem; }
+  .walk-coach-actions { flex-direction:column; align-items:stretch; }
+  .walk-coach-actions .button-link, .walk-coach-actions .text-link { margin-left:0; min-height:2.75rem; display:inline-flex; align-items:center; justify-content:center; }
+  .walk-steps li { padding:1rem; }
+}
