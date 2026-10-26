@@ -3,7 +3,7 @@
 {% block content %}
 <p class="eyebrow"><a href="{{ url_for('try_demo.index') }}">TRY THE DEMO</a> · SYNTHETIC · NOT SAVED</p>
 <h1>Import a vendor file</h1>
-<p class="lead">Upload a questionnaire spreadsheet or a simulated ServiceNow ticket file. The page lists what would be ingested. Scores appear only after you confirm, and they come from the same assessment used by the intake form. Nothing is saved, and ServiceNow is not contacted.</p>
+<p class="lead">Upload a questionnaire spreadsheet or a simulated ServiceNow ticket file. The page lists what would be ingested. Scores appear only after you confirm, and they come from the same assessment used by the intake form. Preview and confirm do not save anything. ServiceNow is not contacted.</p>
 <section class="notice"><strong>Simulated file import</strong><p>Use made-up vendors. CSV and Excel use the questionnaire columns. JSON, and a second CSV shape, mirror a ServiceNow ticket export. This is not a live connector. A reviewer package or a mock remediation ticket is not an intake file.</p></section>
 
 <section class="content-section">
@@ -70,7 +70,7 @@
   <textarea name="confirmation" hidden readonly>{{ confirmation|tojson }}</textarea>
   <button class="button-link" type="submit">Assess these vendors</button>
 </form>
-<p class="muted">Confirming runs each row through evidence validation, the risk engine, and control mapping. The result is not written to the risk register.</p>
+  <p class="muted">Confirming runs each row through evidence validation, the risk engine, and control mapping. It does not write the risk register. The next page can save one synthetic vendor only if you check the box and record a disposition.</p>
 {% else %}
 <p class="inline-warning">Fix the file and preview it again. Rows with errors are not assessed, and valid rows in the same file are not imported without them.</p>
 {% endif %}

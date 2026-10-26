@@ -37,7 +37,7 @@
 <p>No decision recorded. The assessment result is not a disposition.</p>
 {% endif %}
 {% if risk.rationale.risk.policy %}
-{% if risk.policy_outcome == 'prohibited' %}<p class="inline-warning">This result matches a hard restriction. The score does not approve or reject it. Approving it, with or without conditions, requires an exception rationale. Rejecting it does not. The prohibited outcome stays on the assessment either way. An exception is allowed so a named person can proceed on the record. The application does not block the decision, and it does not clear the restriction.</p>{% endif %}
+{% if risk.policy_outcome == 'prohibited' %}<p class="inline-warning">This result matches a hard restriction. The score does not approve or reject it. Approving it, with or without conditions, requires an exception rationale. Rejecting it, or escalating it, does not. The prohibited outcome stays on the assessment either way. An exception is allowed so a named person can proceed on the record. The application does not block the decision, and it does not clear the restriction.</p>{% endif %}
 <form class="action-form" method="post" action="{{ url_for('risks.record_risk_decision', risk_id=risk.risk_id) }}">
   <label>Disposition<select name="disposition">{% for value in dispositions %}<option value="{{ value }}">{{ value|replace('_', ' ')|title }}</option>{% endfor %}</select></label>
   <label>Decider (name or role)<input name="decider" maxlength="100" required placeholder="Example: AI governance reviewer"></label>

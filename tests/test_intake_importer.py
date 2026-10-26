@@ -363,6 +363,64 @@ def test_preview_does_not_show_a_score_and_confirm_does(gated_client):
     assert b"Harbor Assist" not in register.data
 
 
+def _confirmation(page):
+    start = page.index(b"<textarea")
+    snippet = page[start:page.index(b"</textarea>", start)]
+    return json.loads(snippet.split(b">", 1)[1])
+
+
+def test_import_save_is_opt_in_and_a_low_tier_is_not_approval(gated_client):
+    response = _post_file(gated_client, "vendor_intake.csv", sample_file("csv"))
+    document = _confirmation(response.data)
+    confirmed = gated_client.post("/try/import/confirm", data={"confirmation": json.dumps(document)},
+                                  headers=SAME_ORIGIN)
+    assert confirmed.status_code == 200
+    assert b"not saved" in confirmed.data
+    assert b"Save this synthetic vendor" in confirmed.data
+    login = {"Authorization": "Basic " + base64.b64encode(b"demo:pw").decode()}
+    assert b"Northwind Notes" not in gated_client.get("/risks", headers=login).data
+
+    row = document["rows"][0]
+    fields = {
+        "confirmation": json.dumps(document),
+        "source_row": row["row_number"],
+        "disposition": "escalate",
+        "rationale": "Low residual tier is not an approval.",
+        "decider": "GRC analyst",
+    }
+    missing_box = gated_client.post("/try/import/save", data=fields, headers=SAME_ORIGIN)
+    assert missing_box.status_code == 400
+    assert b"Nothing was saved" in missing_box.data
+    assert b"Northwind Notes" not in gated_client.get("/risks", headers=login).data
+
+    invalid = dict(fields)
+    invalid["persist"] = "yes"
+    invalid["disposition"] = "accept"
+    rejected = gated_client.post("/try/import/save", data=invalid, headers=SAME_ORIGIN)
+    assert rejected.status_code == 400
+    assert b"disposition" in rejected.data
+    assert b"Northwind Notes" not in gated_client.get("/risks", headers=login).data
+
+    cross_site = dict(fields)
+    cross_site["persist"] = "yes"
+    blocked = gated_client.post("/try/import/save", data=cross_site)
+    assert blocked.status_code == 403
+
+    saved_fields = dict(fields)
+    saved_fields["persist"] = "yes"
+    saved = gated_client.post("/try/import/save", data=saved_fields, headers=SAME_ORIGIN)
+    assert saved.status_code == 302
+    detail = gated_client.get(saved.headers["Location"], headers=login)
+    assert detail.status_code == 200
+    assert b"Northwind Notes" in detail.data
+    assert b"Escalate" in detail.data
+    assert b"Low" in detail.data
+    assert b"not an approval" in detail.data
+    register = gated_client.get("/risks", headers=login)
+    assert b"Northwind Notes" in register.data
+    assert b"Harbor Assist" not in register.data
+
+
 def test_preview_shows_row_errors_without_a_confirm_button(gated_client):
     forms = [dict(sample_forms()[0]), dict(sample_forms()[0])]
     forms[1]["data_sensitivity"] = "restricted"

@@ -10,8 +10,9 @@ class WorkflowInputError(ValueError):
 
 
 ACTION_STATUSES = {"open", "in_progress", "completed"}
-DISPOSITIONS = ("approve", "approve_with_conditions", "reject")
+DISPOSITIONS = ("approve", "approve_with_conditions", "escalate", "reject")
 APPROVAL_DISPOSITIONS = {"approve", "approve_with_conditions"}
+DISPOSITION_RULE = "disposition must be approve, approve with conditions, escalate, or reject"
 MAX_DECISION_TEXT = 1000
 MAX_DECIDER = 100
 
@@ -64,8 +65,10 @@ def _stored_rationale(result):
 
     Rows saved before this shape have only risk, claims, mappings, and the
     scenario set version. The export says so instead of inventing answers.
+    General intake has no scenario id. Those rows record that origin so a
+    saved import is distinguishable from a scenario fixture.
     """
-    return {
+    stored = {
         "risk": result["risk"],
         "claims": result["claims"],
         "mappings": result["mappings"],
@@ -79,6 +82,25 @@ def _stored_rationale(result):
         "vendor_name": result.get("name"),
         "summary": result.get("summary"),
     }
+    if result.get("scenario_id") is None:
+        stored["intake_origin"] = "general_intake"
+        for key in ("source_row", "ticket_number", "import_format"):
+            if result.get(key) is not None:
+                stored[key] = result[key]
+    return stored
+
+
+def _intake_statement(result):
+    """Label a saved intake as synthetic, and keep the engine tier separate."""
+    summary = result.get("summary") or ""
+    summary = summary.replace(
+        "Synthetic input, not saved.",
+        "Synthetic demonstration data, saved after a person confirmed.",
+    )
+    note = "The residual tier is not an approval."
+    if note not in summary:
+        summary = f"{summary} {note}".strip()
+    return summary
 
 
 def register_scenario(db, result):
@@ -89,11 +111,57 @@ def register_scenario(db, result):
     existing = risk_for_scenario(db, scenario_id)
     if existing:
         return existing["risk_id"]
+    risk_id = _persist_assessment(
+        db, result, scenario_id, result["summary"],
+        "Synthetic scenario result added to the local risk register.",
+    )
+    db.commit()
+    return risk_id
 
+
+def register_intake(db, result, decision, *, commit=True):
+    """Save one synthetic intake and the human disposition in one transaction.
+
+    The caller has already confirmed. Assess-only results never reach this
+    function. The disposition is stored on the decision row. It is not copied
+    into the residual tier, and a low tier is not treated as approval.
+    """
+    if not result.get("synthetic_data"):
+        raise WorkflowInputError("Only synthetic demonstration data may be saved by this workflow.")
+    if result.get("scenario_id"):
+        raise WorkflowInputError("Scenario results are saved with the scenario register action.")
+    if not isinstance(decision, dict):
+        raise WorkflowInputError("A decision object is required to save an intake.")
+    problems, normalized = decision_problems(
+        result.get("risk") or {},
+        decision.get("disposition", ""),
+        decision.get("rationale", ""),
+        decision.get("decider", ""),
+        decision.get("conditions", ""),
+        decision.get("exception_rationale", ""),
+    )
+    if problems:
+        raise WorkflowInputError("; ".join(problems))
+    risk_id = _persist_assessment(
+        db, result, f"intake-{uuid4().hex[:12]}", _intake_statement(result),
+        "Synthetic general intake added to the local risk register. Demonstration data.",
+        opening_event=(
+            "intake_received",
+            "Synthetic general intake confirmed for save. Demonstration data. "
+            "The engine score is not a disposition.",
+        ),
+    )
+    _save_decision_row(db, risk_id, normalized, existing=None)
+    if commit:
+        db.commit()
+    return risk_id
+
+
+def _persist_assessment(db, result, scenario_id, statement, created_detail, opening_event=None):
+    """Insert the risk, its follow-up action, and the creation events. Does not commit."""
     risk_id = f"R-{uuid4().hex[:8].upper()}"
     risk = result["risk"]
     now = _now()
-    statement = result["summary"]
     policy = risk.get("policy") or {}
     policy_outcome = (risk.get("policy_outcome") or {}).get("status")
     db.execute(
@@ -105,9 +173,14 @@ def register_scenario(db, result):
          risk["residual"]["tier"], json.dumps(_stored_rationale(result)), now,
          policy.get("policy_id"), policy.get("policy_version"), policy_outcome),
     )
+    if opening_event:
+        db.execute(
+            "INSERT INTO workflow_events (risk_id, event_type, detail, occurred_at) VALUES (?, ?, ?, ?)",
+            (risk_id, opening_event[0], opening_event[1], now),
+        )
     db.execute(
         "INSERT INTO workflow_events (risk_id, event_type, detail, occurred_at) VALUES (?, ?, ?, ?)",
-        (risk_id, "risk_created", "Synthetic scenario result added to the local risk register.", now),
+        (risk_id, "risk_created", created_detail, now),
     )
 
     statuses = {claim["evidence_status"] for claim in result["claims"]}
@@ -141,7 +214,6 @@ def register_scenario(db, result):
             "INSERT INTO workflow_events (risk_id, event_type, detail, occurred_at) VALUES (?, ?, ?, ?)",
             (risk_id, "remediation_created", description, now),
         )
-    db.commit()
     return risk_id
 
 
@@ -190,27 +262,17 @@ def _required_text(value, label, limit):
     return text, None
 
 
-def record_decision(db, risk_id, disposition, rationale, decider, conditions="", exception_rationale=""):
-    """Record the human disposition for one saved risk.
+def decision_problems(evaluation, disposition, rationale, decider, conditions="", exception_rationale=""):
+    """Validate a human disposition against one engine result.
 
-    A prohibited result can still be approved. The check cites the policy and
-    stops an unrecorded override; it does not decide the case. Proceeding,
-    with or without conditions, requires an exception rationale. Rejection
-    does not. The exception does not clear the prohibited outcome. An
-    exception rationale is rejected when the result is not prohibited, or
-    when the disposition is reject, so the field means only "proceed despite
-    the restriction."
-
-    The policy id, policy version, and rule set version are copied from the
-    saved assessment. The caller cannot supply a different reference.
+    Returns (problems, normalized). An empty problem list means normalized is
+    ready to store. The residual tier is not an input. Escalate is a human
+    choice to send the case on. It is not an approval, so a prohibited result
+    does not require an exception rationale for it.
     """
-    risk = get_risk(db, risk_id)
-    if risk is None:
-        return None
-
     problems = []
     if disposition not in DISPOSITIONS:
-        problems.append("disposition must be approve, approve with conditions, or reject")
+        problems.append(DISPOSITION_RULE)
     rationale_text, rationale_problem = _required_text(rationale, "rationale", MAX_DECISION_TEXT)
     if rationale_problem:
         problems.append(rationale_problem)
@@ -233,12 +295,12 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
     else:
         exception_text = exception_rationale.strip()
 
-    stored = risk["rationale"].get("risk", {})
-    policy = stored.get("policy") or {}
-    outcome = stored.get("policy_outcome") or {}
+    evaluation = evaluation or {}
+    policy = evaluation.get("policy") or {}
+    outcome = evaluation.get("policy_outcome") or {}
     policy_id = policy.get("policy_id")
     policy_version = policy.get("policy_version")
-    rule_set_version = stored.get("rule_set_version")
+    rule_set_version = evaluation.get("rule_set_version")
     outcome_status = outcome.get("status")
     if (not policy_id or not policy_version or not rule_set_version
             or outcome_status not in {"prohibited", "not_prohibited"}):
@@ -252,12 +314,57 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
     if exception_text and not proceeding:
         problems.append("an exception rationale is only recorded when approving a prohibited result")
     if problems:
-        raise WorkflowInputError("; ".join(problems))
+        return problems, None
+    return [], {
+        "disposition": disposition,
+        "conditions": conditions_text,
+        "rationale": rationale_text,
+        "exception_rationale": exception_text,
+        "decider": decider_text,
+        "policy_id": policy_id,
+        "policy_version": policy_version,
+        "rule_set_version": rule_set_version,
+        "prohibited_at_decision": outcome_status,
+    }
 
+
+def record_decision(db, risk_id, disposition, rationale, decider, conditions="", exception_rationale=""):
+    """Record the human disposition for one saved risk.
+
+    A prohibited result can still be approved. The check cites the policy and
+    stops an unrecorded override; it does not decide the case. Proceeding,
+    with or without conditions, requires an exception rationale. Rejection
+    and escalation do not. The exception does not clear the prohibited
+    outcome. An exception rationale is rejected when the result is not
+    prohibited, or when the disposition is reject or escalate, so the field
+    means only "proceed despite the restriction."
+
+    The policy id, policy version, and rule set version are copied from the
+    saved assessment. The caller cannot supply a different reference.
+    """
+    risk = get_risk(db, risk_id)
+    if risk is None:
+        return None
+    stored = risk["rationale"].get("risk", {})
+    problems, normalized = decision_problems(
+        stored, disposition, rationale, decider, conditions, exception_rationale,
+    )
+    if problems:
+        raise WorkflowInputError("; ".join(problems))
+    _save_decision_row(db, risk_id, normalized, existing=risk["decision"])
+    db.commit()
+    return risk_id
+
+
+def _save_decision_row(db, risk_id, normalized, existing):
+    """Write one decision row and its workflow event. Does not commit."""
     now = _now()
-    existing = risk["decision"]
-    values = (disposition, conditions_text, rationale_text, exception_text, decider_text,
-              policy_id, policy_version, rule_set_version, outcome_status, now, risk_id)
+    values = (
+        normalized["disposition"], normalized["conditions"], normalized["rationale"],
+        normalized["exception_rationale"], normalized["decider"], normalized["policy_id"],
+        normalized["policy_version"], normalized["rule_set_version"],
+        normalized["prohibited_at_decision"], now, risk_id,
+    )
     if existing:
         db.execute(
             """UPDATE decisions SET disposition = ?, conditions = ?, rationale = ?,
@@ -274,9 +381,11 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             values,
         )
-    detail = (f"{disposition} by {decider_text}. Policy {policy_id} {policy_version}. "
-              f"Rule set {rule_set_version}. Policy outcome {outcome_status}.")
-    if exception_text:
+    detail = (f"{normalized['disposition']} by {normalized['decider']}. "
+              f"Policy {normalized['policy_id']} {normalized['policy_version']}. "
+              f"Rule set {normalized['rule_set_version']}. "
+              f"Policy outcome {normalized['prohibited_at_decision']}.")
+    if normalized["exception_rationale"]:
         detail += " Exception rationale recorded."
     if existing:
         detail += f" Replaces {existing['disposition']}."
@@ -284,5 +393,3 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
         "INSERT INTO workflow_events (risk_id, event_type, detail, occurred_at) VALUES (?, ?, ?, ?)",
         (risk_id, "decision_recorded", detail, now),
     )
-    db.commit()
-    return risk_id

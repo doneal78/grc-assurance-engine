@@ -1,6 +1,6 @@
 # File-based intake import
 
-The public demo can read a vendor intake file, show what it parsed, and then run those rows through the same intake builder as the questionnaire. The parser lives in `app/services/intake_importer.py`. It does not score a vendor and it does not write to the database. Scoring happens only after confirmation, in `build_intake` and `run_intake`.
+The public demo can read a vendor intake file, show what it parsed, and then run those rows through the same intake builder as the questionnaire. The parser lives in `app/services/intake_importer.py`. It does not score a vendor and it does not write to the database. Scoring happens only after confirmation, in `build_intake` and `run_intake`. Saving happens only after that, when a person checks the box on the result page.
 
 This is a simulated file import. It does not call ServiceNow, and it does not download attachment bytes or trust-center pages.
 
@@ -101,15 +101,24 @@ The optional CSV uses the same ticket fields in one row. Evidence choices are `u
 
 `/try/import` uploads the file and renders the preview. The preview lists every mapped field, ticket context, attachment metadata, and every problem. It does not show an inherent tier, a residual tier, or a policy outcome.
 
-Confirm posts the previewed rows back as JSON. The server checks them again with the intake builder. It does not re-read the original file. A field that is not a questionnaire column is rejected. When the rows are valid, each one is passed to `run_intake`. The result page shows the engine output, the workflow steps, and the mock remediation payload when one is produced. Nothing is written to the risk register, and the mock ticket is not sent.
+Confirm posts the previewed rows back as JSON. The server checks them again with the intake builder. It does not re-read the original file. A field that is not a questionnaire column is rejected. When the rows are valid, each one is passed to `run_intake`. The result page shows the engine output, the workflow steps, and the mock remediation payload when one is produced. Confirm does not write the risk register, and the mock ticket is not sent.
 
 A low score still does not approve the vendor. The result page uses the same assessment partial as the rest of the demo, including the human-review notice.
+
+## Saving a confirmed row
+
+Each assessed row has its own save form. The checkbox starts unchecked. Submitting without it returns the result page and writes nothing. With the box checked, the server runs the confirmation through `run_intake` again and saves that one row with `register_intake`. The disposition, rationale, and decider are required. Conditions and an exception rationale follow the same rules as a decision on a scenario risk.
+
+The saved statement says the row is synthetic demonstration data and that the residual tier is not an approval. The disposition is stored on the decision row. Escalate is the form's initial selection so a low tier is not one click away from approve. Approving a prohibited row still requires an exception rationale. A bad disposition, or a missing exception, leaves the register unchanged.
+
+Saving one row does not save the others in the file. Saving the same row again adds another risk. The ServiceNow ticket number, when the file had one, stays file context on the stored rationale. It was not read from ServiceNow.
 
 ## Limitations
 
 - There is no live ServiceNow connection, OAuth client, or attachment download.
 - The importer does not accept an arbitrary spreadsheet, PDF, or email.
-- Imported rows are not saved. Closing the page drops them.
+- Preview and confirm do not save. Closing the result page without the save form drops the rows. A saved row stays in the local risk register until that database is removed.
+- The save form writes to the same shared register as a scenario. On the hosted demo that register is open to anyone with the link. Use synthetic names only.
 - The confirmation step trusts the previewed field values after a second validation. It does not prove the bytes on disk were unchanged.
 - A file hash of an uploaded workbook is not stored. The evidence model still treats a hash as a change detector, not as proof of authenticity.
 - `openpyxl` reads `.xlsx` only. It is the only added dependency.

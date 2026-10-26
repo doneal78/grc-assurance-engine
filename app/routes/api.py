@@ -1,12 +1,14 @@
 """JSON intake API.
 
-These routes compute an assessment and return it. They do not write to the
-risk register. When REQUIRE_AUTH is enabled they use the same HTTP Basic
+These routes compute an assessment and return it. They write a synthetic
+risk only when the body sets persist to true and includes a human disposition
+and rationale. When REQUIRE_AUTH is enabled they use the same HTTP Basic
 check as the rest of the application, outside the public Try it pages.
 """
 
 from flask import Blueprint, jsonify, request
 
+from app.db import get_db
 from app.services.bot_intake import (
     BotRequestError, assess_request_text, contract_document, error_document,
 )
@@ -32,7 +34,7 @@ def intake_assess():
     except UnicodeDecodeError:
         return _error("validation", ["The request body is not UTF-8 text."], 400)
     try:
-        document = assess_request_text(raw)
+        document = assess_request_text(raw, db=get_db())
     except BotRequestError as exc:
         return _error("validation", exc.problems, 400)
     except Exception as exc:

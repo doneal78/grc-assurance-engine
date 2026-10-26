@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% block title %}Risk register | GRC Assurance Engine{% endblock %}
 {% block content %}
-<p class="eyebrow">LOCAL WORKFLOW · SYNTHETIC SCENARIOS</p><h1>Risk register</h1>
-<p class="lead">Risks entered from scenario walkthroughs, with inherent and residual results kept separate.</p>
+<p class="eyebrow">LOCAL WORKFLOW · SYNTHETIC RECORDS</p><h1>Risk register</h1>
+<p class="lead">Risks entered from scenario walkthroughs or from a confirmed synthetic intake. Inherent risk, residual risk, and the human decision stay separate. A low residual tier is not an approval.</p>
 {% if risks %}<div class="table-wrap"><table><thead><tr><th>Risk</th><th>Inherent</th><th>Residual</th><th>Policy</th><th>Decision</th><th>Actions</th><th>Created (UTC)</th></tr></thead><tbody>
 {% for risk in risks %}<tr><td><a href="{{ url_for('risks.detail', risk_id=risk.risk_id) }}"><strong>{{ risk.risk_id }} · {{ risk.scenario_name }}</strong></a><br><span class="muted">{{ risk.risk_statement }}</span></td><td><span class="tier tier-{{ risk.inherent_tier }}">{{ risk.inherent_tier|title }}</span></td><td><span class="tier tier-{{ risk.residual_tier }}">{{ risk.residual_tier|title }}</span></td><td>{% if risk.policy_outcome %}<span class="status status-{{ risk.policy_outcome|replace('_', '-') }}">{{ risk.policy_outcome|replace('_', ' ')|title }}</span>{% else %}<span class="muted">Not on this record</span>{% endif %}</td><td>{% if risk.decision_disposition %}{{ risk.decision_disposition|replace('_', ' ')|title }}{% else %}Not recorded{% endif %}</td><td>{{ risk.open_action_count or 0 }} open / {{ risk.action_count }} total</td><td>{{ risk.created_at }}</td></tr>{% endfor %}
 </tbody></table></div>
-{% else %}<section class="empty-state"><h2>No risks recorded</h2><p>Open a <a href="{{ url_for('demos.index') }}">demo scenario</a> and choose “Add to risk register” to create a local synthetic record.</p></section>{% endif %}
+{% else %}<section class="empty-state"><h2>No risks recorded</h2><p>Open a <a href="{{ url_for('demos.index') }}">demo scenario</a> and choose “Add to risk register”, or confirm an import and save that synthetic vendor.</p></section>{% endif %}
 <p class="muted">The local workflow log is useful for traceability but is editable by anyone with access to the local database. It is not immutable or tamper-proof.</p>
 {% endblock %}

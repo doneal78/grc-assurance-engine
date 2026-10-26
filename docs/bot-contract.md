@@ -1,8 +1,8 @@
 # Bot intake contract
 
-A script or agent can run the same vendor intake as the public form and receive the risk engine's result as JSON. The calculation lives in `app/services/bot_intake.py`. It calls `build_intake` and `run_intake`. The CLI and the HTTP route copy that result. They do not calculate a tier, and they do not write to the risk register.
+A script or agent can run the same vendor intake as the public form and receive the risk engine's result as JSON. The calculation lives in `app/services/bot_intake.py`. It calls `build_intake` and `run_intake`. The CLI and the HTTP route copy that result. They do not calculate a tier. They write a risk only when the caller sets persist and supplies a human disposition.
 
-This is a portfolio demo. It is not a production GRC API, an identity system, or a certification. The rule set is an illustrative portfolio model. `automatic_approval` is always null. A low residual tier does not approve the vendor. Human review remains required, and a configured restriction such as HR-001 still requires a person.
+This is a portfolio demo. It is not a production GRC API, an identity system, or a certification. The rule set is an illustrative portfolio model. `automatic_approval` is always null. A low residual tier does not approve the vendor. Human review remains required, and a configured restriction such as HR-001 still requires a person. The disposition, when one is saved, is a separate object from the residual tier.
 
 No external AI model scores or approves the vendor.
 
@@ -13,9 +13,12 @@ python -m app.cli assess request.json
 python -m app.cli assess - < request.json
 python -m app.cli preview tests/fixtures/imports/vendor_intake.csv --as-of 2026-10-14
 python -m app.cli assess-file tests/fixtures/imports/servicenow_intake.json --as-of 2026-10-14
+python -m app.cli assess request.json --persist --disposition escalate --rationale "Low tier is not an approval." --decider "GRC analyst"
 ```
 
 `assess` reads one JSON request from a file or from stdin. A terminal with nothing piped to `assess` exits 2 and asks for a file or a pipe. `preview` and `assess-file` read a questionnaire CSV, a `.xlsx` workbook, or a simulated ServiceNow JSON or CSV file. Those parsers are the ones documented in [import-formats.md](import-formats.md). `preview` does not call the risk engine. `assess-file` calls it only when every row is valid. A file with any invalid or conflicting row produces a preview and no assessment.
+
+`--persist` on `assess` or `assess-file` saves the result. It requires `--disposition`, `--rationale`, and `--decider`. Optional `--conditions` and `--exception-rationale` follow the saved-risk rules. If the JSON body already contains `persist` or `decision`, the flags are rejected and nothing is saved. Use one or the other. `assess-file --persist` stores every row with that same disposition. If one row cannot accept it, none are stored. `preview` cannot persist.
 
 `--as-of` sets the evaluation date for a file. The JSON request carries its own `as_of`. When the date is omitted, the process date is used. Evidence ages are calculated from that date, the same way the public form uses the server date.
 
@@ -40,7 +43,7 @@ There is no HTTP upload for CSV or `.xlsx`. Use the CLI for files. The JSON body
 
 `REQUIRE_AUTH` defaults to false, which is also the hosted demo setting, so these routes answer without a password. When `REQUIRE_AUTH` is true they use the same HTTP Basic credentials as the rest of the application. The public `/try/` pages stay open in that mode. This API does not.
 
-A browser request whose `Origin` or `Referer` host does not match the site is rejected with 403. A script that sends neither header is accepted, because these routes do not change stored data. A same-origin `Origin` is accepted.
+A browser request whose `Origin` or `Referer` host does not match the site is rejected with 403, including a persist request. A script that sends neither header is accepted. That script can save a synthetic risk when persist is true. A same-origin `Origin` is accepted.
 
 | Status | When |
 | --- | --- |
@@ -88,6 +91,20 @@ Form keys are the public intake fields. Values are text. Numbers and booleans ar
 
 Sending `residual_tier` or any other extra field fails validation. The response tier comes from the risk engine after a valid form is accepted.
 
+`persist` may be omitted. Omitted and false both assess only. The value must be a JSON boolean. A decision object sent while persist is omitted or false is a validation error, and nothing is saved, so a caller cannot think a disposition was recorded.
+
+When `persist` is true, `decision` is required:
+
+| Field | Required | Rule |
+| --- | --- | --- |
+| `disposition` | yes | `approve`, `approve_with_conditions`, `escalate`, or `reject` |
+| `rationale` | yes | 1 to 1000 characters after trimming |
+| `decider` | yes | 1 to 100 characters after trimming. A name or role. It is not authenticated |
+| `conditions` | only for approve with conditions | Empty for every other disposition |
+| `exception_rationale` | only to approve a prohibited result | Refused on escalate, reject, or a result that is not prohibited |
+
+An invalid disposition is rejected before a risk row is written. Approving a prohibited result without an exception rationale is also rejected, and the register is unchanged. Escalate means a person is sending the case on. It is not an approval, including when the residual tier is low.
+
 ## Assessment document
 
 `contract` is `grc.intake.assessment`. These fields are copied from the `run_intake` result:
@@ -107,7 +124,7 @@ Sending `residual_tier` or any other extra field fails validation. The response 
 | `claims` | claim id, topic, statement, evidence status, status reason, and evidence-record status |
 | `mappings` | mapper id, framework, control, rationale, and `review_status` |
 
-`persisted` is false. `human_review_required` is true. `automatic_approval` is null. `synthetic_data` is taken from the intake result. `trust_center.fetched` is copied from that result and is false for this intake path.
+`persisted` is false unless this request saved the vendor. `risk_id` and `decision` are null when nothing was saved. When a save succeeds, `risk_id` is the register id and `decision` copies the stored disposition, rationale, decider, policy reference, rule set version, and `prohibited_at_decision`. `decision.separate_from_score` is true. The residual tier is not copied into the disposition. `human_review_required` is true. `automatic_approval` is null. `synthetic_data` is taken from the intake result. `trust_center.fetched` is copied from that result and is false for this intake path.
 
 The explanations are the engine's own text: `residual.reason`, each inherent factor, each escalation's `reason`, each claim and clause `status_reason`, and each matched restriction. The route does not write a second narrative or a second score.
 
@@ -137,7 +154,9 @@ A yes answer on `decisions_affecting_people` returns policy outcome `prohibited`
 - One vendor per `assess` request. A file may contain up to 20 vendor rows, which is the importer's limit.
 - JSON assess bodies over 16 KB are rejected. Import files over 256 KB are rejected by the importer.
 - Duplicate JSON keys are rejected. The repeated value is not kept.
-- The contract does not record a human decision. Approve, approve with conditions, and reject remain on a saved risk in the web application, and this contract does not save one.
+- A human decision is recorded only with persist true. Approve, approve with conditions, escalate, and reject are that disposition. The web form on a saved risk uses the same four. Assess without persist does not save one.
+- `assess-file --persist` uses one disposition for the whole file. It does not ask for a different decision per row. The import result page does, one vendor at a time.
+- The saved row is synthetic demonstration data in the local SQLite register. Saving the same request again adds another row. The decider text is not checked against a directory.
 - Draft control mappings are review prompts. A mapping does not show that a control is implemented or that a framework is met.
 - The local event log and the mock remediation ticket on the web page are separate views of an assessment. They are not part of this JSON document.
 - The CLI and the API do not call ServiceNow and do not open attachment bytes or trust-center pages.

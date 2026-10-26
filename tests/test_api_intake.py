@@ -158,3 +158,87 @@ def test_auth_gate_applies_when_required(gated_app):
 def test_api_date_is_the_evaluation_date(client):
     response = client.post("/api/v1/intake/assess", json=payload())
     assert response.get_json()["as_of"] == date(2026, 10, 14).isoformat()
+
+
+def _risk_names(client):
+    with client.application.app_context():
+        return [risk["scenario_name"] for risk in list_risks(get_db())]
+
+
+def test_explicit_persist_false_still_saves_nothing(client):
+    response = client.post("/api/v1/intake/assess", json=payload(persist=False))
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["persisted"] is False
+    assert body["decision"] is None
+    assert body["risk_id"] is None
+    assert body["residual"]["tier"] == "low"
+    assert _risk_names(client) == []
+
+
+def test_persist_records_a_low_tier_without_treating_it_as_approval(client):
+    response = client.post("/api/v1/intake/assess", json=payload(persist=True, decision={
+        "disposition": "escalate",
+        "rationale": "Low residual tier is not an approval.",
+        "decider": "GRC analyst",
+    }))
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["persisted"] is True
+    assert body["residual"]["tier"] == "low"
+    assert body["automatic_approval"] is None
+    assert body["decision"]["disposition"] == "escalate"
+    assert body["decision"]["separate_from_score"] is True
+    assert body["decision"]["rationale"] == "Low residual tier is not an approval."
+    assert body["risk_id"]
+    assert _risk_names(client) == ["Northwind Notes"]
+    detail = client.get(f"/risks/{body['risk_id']}")
+    assert detail.status_code == 200
+    assert b"Northwind Notes" in detail.data
+    assert b"Escalate" in detail.data
+    assert b"not an approval" in detail.data
+
+
+def test_invalid_persist_decision_writes_no_register_row(client):
+    rejected = client.post("/api/v1/intake/assess", json=payload(persist=True, decision={
+        "disposition": "accept",
+        "rationale": "Not a disposition.",
+        "decider": "GRC analyst",
+    }))
+    assert rejected.status_code == 400
+    error = rejected.get_json()
+    assert error["error"] == "validation"
+    assert error["persisted"] is False
+    assert error["assessed"] is False
+    assert any("disposition" in problem for problem in error["problems"])
+
+    extra = client.post("/api/v1/intake/assess", json=payload(decision={
+        "disposition": "reject",
+        "rationale": "This should not be stored.",
+        "decider": "GRC analyst",
+    }))
+    assert extra.status_code == 400
+    assert extra.get_json()["persisted"] is False
+
+    prohibited = client.post("/api/v1/intake/assess", json=payload(
+        persist=True,
+        form=form(ai_use="assistive", decisions_affecting_people="yes"),
+        decision={"disposition": "approve", "rationale": "The score looks fine.", "decider": "GRC analyst"},
+    ))
+    assert prohibited.status_code == 400
+    assert any("exception" in problem for problem in prohibited.get_json()["problems"])
+    assert _risk_names(client) == []
+
+
+def test_cross_site_persist_is_rejected(client):
+    response = client.post(
+        "/api/v1/intake/assess",
+        json=payload(persist=True, decision={
+            "disposition": "approve",
+            "rationale": "Cross-site attempt.",
+            "decider": "Someone else",
+        }),
+        headers={"Origin": "https://evil.example"},
+    )
+    assert response.status_code == 403
+    assert _risk_names(client) == []

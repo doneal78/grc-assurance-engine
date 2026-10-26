@@ -43,10 +43,13 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     os.makedirs(app.instance_path, exist_ok=True)
 
     # Pages anyone may open without the demo password. The public "Try it"
-    # pages run synthetic input through the real services and save nothing.
+    # pages run synthetic input through the real services. Assess and preview
+    # do not write. A confirmed import save does.
     PUBLIC_ENDPOINTS = {"health.health", "static"}
     FORM_MAX_BYTES = 16 * 1024
-    IMPORT_ENDPOINTS = {"try_demo.import_preview", "try_demo.import_confirm"}
+    IMPORT_ENDPOINTS = {
+        "try_demo.import_preview", "try_demo.import_confirm", "try_demo.import_save",
+    }
 
     @app.before_request
     def limit_request_body():
@@ -97,9 +100,10 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
         source = request.headers.get("Origin") or request.headers.get("Referer")
         if source and urlparse(source).netloc == request.host:
             return None
-        # Scripts call the JSON API without a browser Origin. Those routes do
-        # not write to the risk register. A cross-site browser request still
-        # sends Origin and is rejected when the host does not match.
+        # Scripts call the JSON API without a browser Origin. A request with
+        # no Origin may assess or, when persist is true, save a synthetic risk.
+        # A cross-site browser request still sends Origin and is rejected
+        # when the host does not match.
         endpoint = request.endpoint or ""
         if endpoint.startswith("api.") and not source:
             return None

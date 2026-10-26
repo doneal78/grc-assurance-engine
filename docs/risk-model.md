@@ -246,15 +246,18 @@ Every evaluation returns: the rule set version, the inherent score, tier, and co
 
 ## Human disposition
 
-On a saved risk, a person records one of three dispositions:
+On a saved risk, a person records one of four dispositions:
 
 - approve
 - approve with conditions, with the conditions stored as text
+- escalate, which sends the case on and is not an approval
 - reject
 
 The record stores the rationale, the decider's name or role, a UTC timestamp from the server clock, the policy id and version, and the rule set version. Those last two are copied from the saved assessment. The form does not ask the reviewer to type them. Each save writes a workflow event. Saving again replaces the current decision and writes another event. The earlier rationale is not kept as a second row. The local event log is not tamper-proof.
 
-A prohibited result cannot be approved, with or without conditions, unless the reviewer records an exception rationale. Rejection does not require one. An exception rationale is rejected when the result is not prohibited, and it is rejected on a rejection, so the field means only "proceed despite this restriction."
+A prohibited result cannot be approved, with or without conditions, unless the reviewer records an exception rationale. Rejection does not require one. Escalation does not require one. An exception rationale is rejected when the result is not prohibited, and it is rejected on a rejection or an escalation, so the field means only "proceed despite this restriction."
+
+A general intake can be saved with that decision in the same step. The residual tier is still the engine result. Saving a low tier with disposition escalate leaves both values on the record. The tier did not approve the vendor.
 
 The exception is allowed on purpose. The policy check makes the restriction visible and traceable. It does not decide the case, and it is not an automatic block. The person remains the final decider. The exception does not change the policy outcome. The assessment stays prohibited, and the decision shows both the restriction and the recorded reason for proceeding.
 

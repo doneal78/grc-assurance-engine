@@ -341,6 +341,78 @@ def test_cli_usage_and_missing_file(capsys, monkeypatch):
     assert "stdin" in json.loads(captured.out)["problems"][0]
 
 
+def test_cli_persist_flag_writes_only_when_the_disposition_is_valid(tmp_path, capsys, monkeypatch):
+    from app import create_app
+    from app.db import get_db
+    from app.services.workflow_service import list_risks
+
+    database = tmp_path / "cli.sqlite3"
+    monkeypatch.setenv("DATABASE_PATH", str(database))
+    code = _cli(["assess", "-"], json.dumps(request()))
+    captured = capsys.readouterr()
+    assert code == EXIT_OK
+    assert json.loads(captured.out)["persisted"] is False
+    assert json.loads(captured.out)["decision"] is None
+
+    code = _cli(
+        ["assess", "-", "--persist", "--disposition", "accept", "--rationale", "No.", "--decider", "GRC analyst"],
+        json.dumps(request()),
+    )
+    captured = capsys.readouterr()
+    assert code == EXIT_VALIDATION
+    error = json.loads(captured.out)
+    assert error["persisted"] is False
+    assert error["assessed"] is False
+
+    code = _cli(
+        ["assess", "-", "--persist", "--disposition", "escalate",
+         "--rationale", "Low residual tier is not an approval.", "--decider", "GRC analyst"],
+        json.dumps(request()),
+    )
+    captured = capsys.readouterr()
+    assert code == EXIT_OK
+    body = json.loads(captured.out)
+    assert body["persisted"] is True
+    assert body["residual"]["tier"] == "low"
+    assert body["decision"]["disposition"] == "escalate"
+    assert body["automatic_approval"] is None
+    app = create_app({"TESTING": True, "DATABASE": str(database), "REQUIRE_AUTH": False})
+    with app.app_context():
+        risks = list_risks(get_db())
+    assert [risk["scenario_name"] for risk in risks] == ["Northwind Notes"]
+    assert risks[0]["residual_tier"] == "low"
+    assert risks[0]["decision_disposition"] == "escalate"
+
+
+def test_cli_assess_file_without_persist_leaves_the_register_empty(tmp_path, capsys, monkeypatch):
+    from app import create_app
+    from app.db import get_db
+    from app.services.workflow_service import list_risks
+
+    database = tmp_path / "batch.sqlite3"
+    monkeypatch.setenv("DATABASE_PATH", str(database))
+    code = _cli(["assess-file", str(FIXTURES / "vendor_intake.csv"), "--as-of", AS_OF.isoformat()])
+    captured = capsys.readouterr()
+    assert code == EXIT_OK
+    assert json.loads(captured.out)["persisted"] is False
+    code = _cli(
+        ["assess-file", str(FIXTURES / "vendor_intake.csv"), "--as-of", AS_OF.isoformat(),
+         "--persist", "--disposition", "reject", "--rationale", "A person recorded this.",
+         "--decider", "GRC analyst"],
+    )
+    captured = capsys.readouterr()
+    assert code == EXIT_OK
+    batch = json.loads(captured.out)
+    assert batch["persisted"] is True
+    assert batch["count"] == 2
+    assert {item["decision"]["disposition"] for item in batch["results"]} == {"reject"}
+    assert all(item["residual"]["tier"] != item["decision"]["disposition"] for item in batch["results"])
+    app = create_app({"TESTING": True, "DATABASE": str(database), "REQUIRE_AUTH": False})
+    with app.app_context():
+        names = {risk["scenario_name"] for risk in list_risks(get_db())}
+    assert names == {"Northwind Notes", "Harbor Assist"}
+
+
 def test_module_entrypoint_assesses_and_rejects(tmp_path):
     path = tmp_path / "request.json"
     path.write_text(json.dumps(request()), encoding="utf-8")
