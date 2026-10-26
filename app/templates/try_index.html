@@ -25,7 +25,7 @@
 <p>You can also <a href="{{ url_for('try_demo.import_form') }}">import a questionnaire file or a simulated ServiceNow ticket</a>. The file is previewed before it is assessed, and nothing is saved.</p>
 <p>The questions follow the rule set. Model training is asked only when AI use is not none, because that answer is not scored otherwise. The decisions question stays on every intake.</p>
 {% if problems %}<div class="inline-warning" role="alert"><strong>Please fix these fields:</strong><ul>{% for problem in problems %}<li>{{ problem }}</li>{% endfor %}</ul></div>{% endif %}
-<form class="action-form intake-form" method="post" action="{{ url_for('try_demo.assess') }}">
+<form class="action-form intake-form" method="post" action="{{ url_for('try_demo.assess', walk=walkthrough.step_id) if walkthrough and walkthrough.on_page else url_for('try_demo.assess') }}">
   <label class="wide">Vendor or tool name<input name="vendor_name" maxlength="80" required value="{{ form.get('vendor_name', '') }}" placeholder="Example: Northwind AI Notes"></label>
   {% for spec in context_questions %}
   {% if spec.ask == 'when_ai_use_is_not_none' %}<div data-ask-when="ai_not_none">{% endif %}
@@ -51,7 +51,7 @@
       <span class="muted">{{ access_evidence.help }}</span>
     </label>
   </fieldset>
-  <fieldset class="evidence-fieldset">
+  <fieldset class="evidence-fieldset" id="trust-center">
     <legend>Trust center</legend>
     <label class="wide">{{ trust_center.prompt }}
       <input name="{{ trust_center.url_field }}" maxlength="{{ trust_center.url_max_length }}" value="{{ form.get(trust_center.url_field, '') }}" placeholder="https://trust.example.test/northwind">

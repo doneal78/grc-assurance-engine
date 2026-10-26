@@ -8,7 +8,7 @@ cookie, not a database row.
 
 from copy import deepcopy
 
-WALKTHROUGH_VERSION = "1.1.0"
+WALKTHROUGH_VERSION = "1.2.0"
 WALK_COOKIE = "walk_step"
 WALK_QUERY = "walk"
 COOKIE_MAX_AGE = 12 * 60 * 60
@@ -22,12 +22,43 @@ _STEPS = (
         "summary": "Run a synthetic vendor. Nothing is saved.",
         "notice": (
             "These cards are finished questionnaires. Opening one runs the same "
-            "intake path as the form and does not save a risk. A trust-center URL "
-            "is optional: leave fetch at no and it is not opened, and a fetch is "
-            "not verified evidence."
+            "intake path as the form and does not save a risk. The next two stops "
+            "stay on this page: one for a vendor you type, and one for the "
+            "optional trust-center choice."
         ),
         "endpoint": "try_demo.index",
         "view_args": {},
+    },
+    {
+        "step_id": "custom",
+        "title": "Your own vendor",
+        "summary": "Fill the form with a made-up name. Run assessment does not save.",
+        "notice": (
+            "Use a made-up vendor name. Model training is asked only when AI use "
+            "is not none. Run assessment uses the same engine as the ready-made "
+            "vendors and does not save. The four results stay separate. A low "
+            "residual tier is not an approval."
+        ),
+        "endpoint": "try_demo.index",
+        "endpoints": ("try_demo.index", "try_demo.assess"),
+        "view_args": {},
+        "anchor": "intake",
+    },
+    {
+        "step_id": "trust",
+        "title": "Trust center is optional",
+        "summary": "A URL can be stored. A fetch is an excerpt for review, not verified evidence.",
+        "notice": (
+            "A trust-center URL is optional. Leave fetch at no and the page is "
+            "not opened. Choosing fetch performs one HTTP GET and stores an "
+            "excerpt for review. That excerpt is not yet reviewed. It is not "
+            "verified evidence, it does not change evidence confidence, and it "
+            "does not approve the vendor."
+        ),
+        "endpoint": "try_demo.index",
+        "endpoints": ("try_demo.index", "try_demo.assess"),
+        "view_args": {},
+        "anchor": "trust-center",
     },
     {
         "step_id": "evidence",

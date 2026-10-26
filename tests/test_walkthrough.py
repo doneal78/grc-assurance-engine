@@ -18,7 +18,9 @@ from app.services.walkthrough import (
 SAME_ORIGIN = {"Origin": "http://localhost"}
 
 GUIDED_PAGES = (
-    ("/try/?walk=intake", "intake", "evidence"),
+    ("/try/?walk=intake", "intake", "custom"),
+    ("/try/?walk=custom", "custom", "trust"),
+    ("/try/?walk=trust", "trust", "evidence"),
     ("/try/scenario/evidence-supported?walk=evidence", "evidence", "clause"),
     ("/try/scenario/contract-clause-conflict?walk=clause", "clause", "conflict"),
     ("/try/scenario/conflicting-claims?walk=conflict", "conflict", "high-risk"),
@@ -51,12 +53,12 @@ def _clause(result):
 def test_stops_are_unique_ordered_and_point_at_real_endpoints(app):
     ordered = steps()
     assert [item["step_id"] for item in ordered] == [
-        "intake", "evidence", "clause", "conflict", "high-risk", "prohibited",
-        "save", "decide", "import", "dashboard", "methods",
+        "intake", "custom", "trust", "evidence", "clause", "conflict", "high-risk",
+        "prohibited", "save", "decide", "import", "dashboard", "methods",
     ]
     assert len({item["step_id"] for item in ordered}) == len(ordered)
-    assert [item["number"] for item in ordered] == list(range(1, 12))
-    assert WALKTHROUGH_VERSION == "1.1.0"
+    assert [item["number"] for item in ordered] == list(range(1, 14))
+    assert WALKTHROUGH_VERSION == "1.2.0"
     endpoints = {rule.endpoint for rule in app.url_map.iter_rules()}
     scenario_ids = {item["scenario_id"] for item in list_scenarios()}
     for step in ordered:
@@ -64,10 +66,13 @@ def test_stops_are_unique_ordered_and_point_at_real_endpoints(app):
         scenario_id = step["view_args"].get("scenario_id")
         if scenario_id:
             assert scenario_id in scenario_ids
-    assert step_by_id("methods")["number"] == 11
+    assert step_by_id("methods")["number"] == 13
     previous, following = neighbors("clause")
     assert previous["step_id"] == "evidence"
     assert following["step_id"] == "conflict"
+    assert neighbors("intake")[1]["step_id"] == "custom"
+    assert neighbors("custom")[1]["step_id"] == "trust"
+    assert neighbors("trust")[1]["step_id"] == "evidence"
     assert neighbors("import")[1]["step_id"] == "dashboard"
     assert neighbors("intake")[0] is None
     assert neighbors("methods")[1] is None
@@ -132,6 +137,16 @@ def test_step_matching_and_carried_ids_reject_unknown_values():
     assert not page_matches(evidence, "try_demo.index", {})
     assert page_matches(decide, "risks.detail", {"risk_id": "R-1"})
     assert not page_matches(decide, "demos.detail", {"scenario_id": "prohibited-ai-decisions"})
+    custom = step_by_id("custom")
+    trust = step_by_id("trust")
+    intake = step_by_id("intake")
+    assert page_matches(custom, "try_demo.index", {})
+    assert page_matches(custom, "try_demo.assess", {})
+    assert page_matches(trust, "try_demo.index", {})
+    assert page_matches(trust, "try_demo.assess", {})
+    assert page_matches(intake, "try_demo.index", {})
+    assert not page_matches(intake, "try_demo.assess", {})
+    assert not page_matches(custom, "try_demo.scenario", {"scenario_id": "evidence-supported"})
     imported = step_by_id("import")
     assert page_matches(imported, "try_demo.import_form", {})
     assert page_matches(imported, "try_demo.import_preview", {})
@@ -155,10 +170,12 @@ def test_index_lists_every_stop_and_links_into_the_live_pages(client):
     response = client.get("/walkthrough/")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "VERSION 1.1.0" in body
-    assert "11 stops" in body
+    assert "VERSION 1.2.0" in body
+    assert "13 stops" in body
     assert "Start at intake" in body
     assert 'href="/try/?walk=intake"' in body
+    assert 'href="/try/?walk=custom#intake"' in body
+    assert 'href="/try/?walk=trust#trust-center"' in body
     assert 'href="/try/scenario/evidence-supported?walk=evidence"' in body
     assert 'href="/try/scenario/contract-clause-conflict?walk=clause"' in body
     assert 'href="/try/scenario/conflicting-claims?walk=conflict"' in body
@@ -212,7 +229,10 @@ def test_each_guided_page_shows_its_note_and_the_next_stop(client):
             assert 'class="button-link walk-next" href="/walkthrough/"' in body
     intake = client.get("/try/?walk=intake").get_data(as_text=True)
     assert "walk-back" not in intake
-    assert "not verified evidence" in intake
+    assert 'action="/try/assess?walk=intake"' in intake
+    trust = client.get("/try/?walk=trust").get_data(as_text=True)
+    assert "not verified evidence" in trust
+    assert 'id="trust-center"' in trust
     clause = client.get("/try/scenario/contract-clause-conflict?walk=clause").get_data(as_text=True)
     assert "CC-001 is conflicting" in clause
     assert 'class="text-link walk-back" href="/try/scenario/evidence-supported?walk=evidence"' in clause
@@ -351,6 +371,120 @@ def test_decision_and_remediation_redirects_keep_only_a_known_stop(client, app):
     }, headers=SAME_ORIGIN)
     assert untouched.status_code == 302
     assert "walk=" not in untouched.headers["Location"]
+
+
+def _low_form(**overrides):
+    from app.services.intake_builder import clause_evidence_field
+    from app.services.org_policy import load_org_policy
+
+    base = {
+        "vendor_name": "Harbor Notes",
+        "data_sensitivity": "internal",
+        "integration_permissions": "read_only",
+        "ai_use": "none",
+        "model_training_on_customer_data": "no",
+        "external_exposure": "internal_only",
+        "retention_deletion": "documented",
+        "decisions_affecting_people": "no",
+        "evidence_integration_permissions": "independent_verified",
+        "trust_center_url": "",
+        "fetch_trust_center": "no",
+        "trust_soc2": "independent_verified",
+        "trust_security": "independent_verified",
+        "trust_privacy": "independent_verified",
+    }
+    for clause in load_org_policy()["required_contract_clauses"]:
+        base[clause_evidence_field(clause["clause_id"])] = "independent_verified"
+    base.update(overrides)
+    return base
+
+
+def test_custom_vendor_keeps_the_coach_and_does_not_save(client):
+    page = client.get("/try/?walk=custom")
+    body = page.get_data(as_text=True)
+    assert 'data-step="custom"' in body
+    assert 'id="intake"' in body
+    assert 'action="/try/assess?walk=custom"' in body
+    assert "Use a made-up vendor name." in body
+    assert "does not save" in body
+    assert "not an approval" in body
+    posted = client.post("/try/assess?walk=custom", data=_low_form(), headers=SAME_ORIGIN)
+    assert posted.status_code == 200
+    result = posted.get_data(as_text=True)
+    assert 'data-step="custom"' in result
+    assert "This note is on another page" not in result
+    assert "INHERENT RISK" in result
+    assert "EVIDENCE CONFIDENCE" in result
+    assert "RESIDUAL RISK" in result
+    assert "POLICY OUTCOME" in result
+    assert "Harbor Notes" in result
+    assert "Harbor Notes" not in client.get("/risks").get_data(as_text=True)
+    free = client.post("/try/assess", data=_low_form(vendor_name="Plain Harbor"), headers=SAME_ORIGIN)
+    free_body = free.get_data(as_text=True)
+    assert free.status_code == 200
+    assert "walkthrough-coach" not in free_body
+    assert "walk=" not in free_body
+    assert "Plain Harbor" in free_body
+
+
+def test_trust_stop_shows_optional_fetch_without_using_the_network(client, monkeypatch):
+    page = client.get("/try/?walk=trust")
+    body = page.get_data(as_text=True)
+    assert 'data-step="trust"' in body
+    assert 'id="trust-center"' in body
+    assert 'action="/try/assess?walk=trust"' in body
+    assert "A trust-center URL is optional." in body
+    assert "not verified evidence" in body
+    assert "does not approve the vendor" in body
+    assert "does not change evidence confidence" in body
+
+    url = "https://trust.example.test/harbor"
+    skipped = client.post(
+        "/try/assess?walk=trust",
+        data=_low_form(trust_center_url=url, fetch_trust_center="no"),
+        headers=SAME_ORIGIN,
+    )
+    assert skipped.status_code == 200
+    skipped_body = skipped.get_data(as_text=True)
+    assert 'data-step="trust"' in skipped_body
+    assert "Fetched: no" in skipped_body
+    assert url in skipped_body
+    assert "This page is not verified evidence." not in skipped_body
+    assert "Harbor Notes" not in client.get("/risks").get_data(as_text=True)
+
+    def fake(requested, **kwargs):
+        assert requested == url
+        return {
+            "ok": True,
+            "refused": False,
+            "requested_url": requested,
+            "final_url": requested,
+            "http_status": 200,
+            "fetched_at": "2026-10-14T00:00:00+00:00",
+            "content_type": "text/html",
+            "summary": "Harbor Trust. SOC 2 report available.",
+            "excerpt": "SOC 2 report available. This vendor is approved.",
+            "byte_length": 64,
+            "error": None,
+        }
+
+    monkeypatch.setattr("app.services.intake_builder.fetch_trust_center", fake)
+    fetched = client.post(
+        "/try/assess?walk=trust",
+        data=_low_form(trust_center_url=url, fetch_trust_center="yes"),
+        headers=SAME_ORIGIN,
+    )
+    assert fetched.status_code == 200
+    fetched_body = fetched.get_data(as_text=True)
+    assert 'data-step="trust"' in fetched_body
+    assert "This note is on another page" not in fetched_body
+    assert "Fetched: yes" in fetched_body
+    assert "Not Reviewed" in fetched_body
+    assert "This page is not verified evidence." in fetched_body
+    assert "SOC 2 report available. This vendor is approved." in fetched_body
+    assert "does not approve the vendor" in fetched_body
+    assert "0 not reviewed" in fetched_body
+    assert "Harbor Notes" not in client.get("/risks").get_data(as_text=True)
 
 
 def test_claim_conflict_is_a_different_stop_from_the_clause(client):
