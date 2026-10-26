@@ -1,5 +1,7 @@
 """Phase 1 tests: application factory, health route, and dashboard."""
 
+from pathlib import Path
+
 from app import create_app
 
 SAME_ORIGIN = {"Origin": "http://localhost"}
@@ -43,10 +45,78 @@ def test_required_auth_protects_pages_and_allows_health_check(tmp_path):
     assert client.get("/", auth=("demo", "correct horse battery staple")).status_code == 200
 
 
-def test_health_returns_documented_response(client):
+def test_health_returns_documented_response(client, app):
     response = client.get("/health")
     assert response.status_code == 200
-    assert response.get_json() == {"status": "ok", "service": "grc-assurance-engine"}
+    assert response.get_json() == {
+        "status": "ok",
+        "service": "grc-assurance-engine",
+        "database": "reachable",
+    }
+    text = response.get_data(as_text=True)
+    assert app.config["DATABASE"] not in text
+    assert "SELECT" not in text
+    assert "sqlite_master" not in text
+
+
+def test_health_reports_unreachable_when_the_database_file_is_gone(app):
+    path = Path(app.config["DATABASE"])
+    assert path.is_file()
+    path.unlink()
+    response = app.test_client().get("/health")
+    assert response.status_code == 503
+    assert response.get_json() == {
+        "status": "unavailable",
+        "service": "grc-assurance-engine",
+        "database": "unreachable",
+    }
+    text = response.get_data(as_text=True)
+    assert str(path) not in text
+    assert "SELECT" not in text
+    assert "sqlite_master" not in text
+    assert "sqlite" not in text.lower()
+    assert not path.exists()
+
+
+def test_health_reports_unreachable_when_the_database_is_not_sqlite(app):
+    path = Path(app.config["DATABASE"])
+    path.write_bytes(b"not sqlite")
+    response = app.test_client().get("/health")
+    assert response.status_code == 503
+    body = response.get_json()
+    assert body == {
+        "status": "unavailable",
+        "service": "grc-assurance-engine",
+        "database": "unreachable",
+    }
+    text = response.get_data(as_text=True)
+    assert "not sqlite" not in text
+    assert str(path) not in text
+    assert "SELECT" not in text
+    assert "sqlite_master" not in text
+
+
+def test_database_is_readable_uses_a_temp_file_without_creating_a_missing_one(tmp_path):
+    import sqlite3
+
+    from app.db import database_is_readable
+
+    ready = tmp_path / "ready.sqlite3"
+    connection = sqlite3.connect(ready)
+    connection.execute("CREATE TABLE example (id INTEGER)")
+    connection.commit()
+    connection.close()
+    missing = tmp_path / "missing.sqlite3"
+    blocker = tmp_path / "not-a-directory"
+    blocker.write_text("x", encoding="utf-8")
+
+    assert database_is_readable(str(ready)) is True
+    assert database_is_readable(str(missing)) is False
+    assert database_is_readable(str(blocker / "db.sqlite3")) is False
+    assert database_is_readable(str(tmp_path)) is False
+    assert database_is_readable("") is False
+    assert not missing.exists()
+    assert ready.is_file()
 
 
 def test_health_rejects_post(client):

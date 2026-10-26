@@ -77,7 +77,7 @@ Exit 0 means an assessment was produced, or a preview can be assessed. Exit 2 me
 
 ## Health check
 
-`GET /health` returns status 200 and `{"status": "ok", "service": "grc-assurance-engine"}` when the application is running. It does not check the database or any other dependency yet.
+`GET /health` returns status 200 and `{"status": "ok", "service": "grc-assurance-engine", "database": "reachable"}` when the process is running and the configured SQLite file can be opened read-only so its catalog can be read. If that read fails, the same route returns status 503 and `{"status": "unavailable", "service": "grc-assurance-engine", "database": "unreachable"}`. The body does not include the filesystem path, the SQL, or the driver message. The check does not validate schema completeness, integrity, or backups, and it does not show that the host is production-ready.
 
 ## Project notes
 
@@ -93,7 +93,7 @@ Every provided record is synthetic. The org policy, the intake questionnaire, an
 
 The hosted demo is live and open at https://grc-assurance.davidoneal.dev, with no login. Start at https://grc-assurance.davidoneal.dev/try/ to run a vendor review without changing anything. The Flask application runs on an AWS Lightsail Ubuntu instance provisioned by CloudFormation, with Nginx and Gunicorn serving it and SQLite storing synthetic saved risks on the instance. Cloudflare proxies the hostname and connects to the origin over HTTPS in Full (strict) mode. Daily Lightsail snapshots provide recovery points. See [docs/deployment.md](docs/deployment.md) for the current state, the setup procedure, and known gaps.
 
-The host is a small portfolio demo, not a production service. Its Lightsail bundle is $7/month before snapshot storage or other charges. SQLite is suitable for this single-instance synthetic demo only. All data must remain synthetic. There is no login, so the risk register is shared by everyone with the link, and Nginx rate limits every page.
+The host is a small portfolio demo, not a production service. Its Lightsail bundle is $7/month before snapshot storage or other charges. SQLite is suitable for this single-instance synthetic demo only. All data must remain synthetic. There is no login, so the risk register is shared by everyone with the link. The repository Nginx file limits `/try/` and `/api/` to 20 requests a minute per visitor and other pages to 120. The live host uses the file installed on the server.
 
 ## Walking through the demo
 

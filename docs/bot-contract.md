@@ -55,7 +55,7 @@ A browser request whose `Origin` or `Referer` host does not match the site is re
 | 415 | Body is not `application/json` |
 | 500 | Unexpected engine error. Body is `grc.intake.error` with `"error": "engine"` |
 
-On the hosted demo, Nginx's general site limit applies to `/api/` (120 requests a minute per visitor in `infra/nginx-site.conf`). `/try/` has a tighter limit. This repository does not add a separate API limit. The live host uses the nginx file installed there.
+`infra/nginx-site.conf` limits `/api/` to 20 requests a minute per visitor and 5 requests a second across visitors. That is the same per-visitor budget as `/try/`. Other pages stay at 120 requests a minute per visitor. The live host uses the Nginx file installed there. Copying this repository file and reloading Nginx is a separate manual step, so the running demo keeps its previous limit until that happens.
 
 `GET /api/v1/intake/contract` is generated from the questionnaire, the rule set, and the org policy. Use it when a field list in this page and the running app might differ.
 

@@ -8,7 +8,7 @@ The application uses the Flask factory in `app/__init__.py` to register web blue
 | --- | --- | --- |
 | HTTP routes | `app/routes/` | Health, dashboard, synthetic scenario pages, the control-mapping library at `/mappings`, and the JSON intake API under `/api/v1`. |
 | Business logic | `app/services/` | Risk evaluation, the single org-policy check, evidence validation, control mapping, scenario orchestration, local workflow persistence, human decisions, observed workflow metrics, cost calculations, the reviewer package, file import, and the bot intake contract. |
-| Database | `app/db.py`, `app/schema.sql` | SQLite schema and request-scoped connections for risks, remediation actions, human decisions, and workflow events. `DATABASE_PATH` can place the file on a persistent host volume. Startup adds policy columns to a risk table created before those columns existed. |
+| Database | `app/db.py`, `app/schema.sql` | SQLite schema and request-scoped connections for risks, remediation actions, human decisions, and workflow events. `DATABASE_PATH` can place the file on a persistent host volume. Startup adds policy columns to a risk table created before those columns existed. `GET /health` opens that file read-only and reports whether its catalog can be read. |
 | Versioned rules/data | `app/data/` | Risk rules, the single org policy profile, the public intake questionnaire, evidence freshness policy, mappings, and fixed-date demo scenarios. |
 | Presentation | `app/templates/`, `app/static/` | Server-rendered HTML and responsive CSS. |
 | Automated checks | `tests/` | pytest tests include service-level business logic and Flask route behavior. |
@@ -37,6 +37,7 @@ Scenario runs are deterministic examples, not vendor records. File import on `/t
 - No external AI service participates in scoring or approval decisions.
 - One org policy file is enough. There is no tenant selector.
 - The policy outcome is calculated in the risk engine. Templates display it. They do not decide it.
+- `GET /health` reports SQLite reachability. The check is a read-only open and a catalog read. It does not rate the data, the schema, or the host.
 - Required contract clauses are data in the org policy. The evidence validator derives each clause status. The risk engine records that status and does not score it. A gap does not block the human decision.
 - A prohibited result can be approved only with an exception rationale because a person, not the score, makes the disposition. The restriction stays on the record. There is no configured non-overridable ban.
 - The decider is a name or role typed into the form. Nothing checks it against a directory or against the restriction's owner role.
