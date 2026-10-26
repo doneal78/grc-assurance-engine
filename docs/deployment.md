@@ -40,9 +40,9 @@ Before any update, make a copy of the database with SQLite's online backup, for 
 
 The bootstrap downloads the current `main` branch rather than a pinned revision. The service runs as the default `ubuntu` user rather than a dedicated account. Re-running the bootstrap keeps the live Nginx site but can leave files from older revisions in place. These are tracked for a follow-up change.
 
-File import, when this revision is deployed, reads an uploaded CSV, `.xlsx`, or simulated ServiceNow JSON/CSV file. It does not connect to ServiceNow. Imported rows are not written to the shared risk register. Nginx's default upload limit is 1 MB, which is above the application's 256 KB cap.
+File import, when this revision is deployed, reads an uploaded CSV, `.xlsx`, or simulated ServiceNow JSON/CSV file. It does not connect to ServiceNow. Preview and confirm do not write. The result page can save one synthetic vendor into the shared risk register when the visitor checks the box and records a disposition. Nginx's default upload limit is 1 MB, which is above the application's 256 KB cap.
 
-`POST /api/v1/intake/assess`, when this revision is deployed, is open because `REQUIRE_AUTH` is false. It runs the intake calculation and does not write to the shared risk register. In `infra/nginx-site.conf`, `/api/` is covered by the general site limit of 120 requests a minute per visitor, not the tighter `/try/` limit. The live host uses whichever nginx file is installed there. See `docs/bot-contract.md`.
+`POST /api/v1/intake/assess`, when this revision is deployed, is open because `REQUIRE_AUTH` is false. Assess alone does not write. A body with `persist` true and a human disposition does write a synthetic row to the shared register. Do not send real vendor data. In `infra/nginx-site.conf`, `/api/` is covered by the general site limit of 120 requests a minute per visitor, not the tighter `/try/` limit. The live host uses whichever nginx file is installed there. See `docs/bot-contract.md`.
 
 ## Operations and limitations
 

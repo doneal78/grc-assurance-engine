@@ -3,7 +3,11 @@
 A script or agent submits the same fields as the public intake form, or an
 intake file the importer already accepts. The assessment document copies the
 risk-engine result. It does not calculate a score, approve a vendor, fetch a
-trust center, call ServiceNow, or write to the risk register.
+trust center, or call ServiceNow.
+
+Nothing is written unless the caller sets persist to true and supplies a
+human disposition and rationale. That disposition is stored separately from
+the residual tier.
 """
 
 import json
@@ -17,6 +21,9 @@ from app.services.intake_importer import (
 from app.services.intake_questionnaire import load_questionnaire
 from app.services.org_policy import load_org_policy
 from app.services.risk_engine import load_rules
+from app.services.workflow_service import (
+    DISPOSITION_RULE, DISPOSITIONS, WorkflowInputError, decision_problems, get_risk, register_intake,
+)
 
 CONTRACT_VERSION = "1.0.0"
 CONTRACT_ASSESSMENT = "grc.intake.assessment"
@@ -26,13 +33,14 @@ CONTRACT_ERROR = "grc.intake.error"
 CONTRACT_DESCRIPTION = "grc.intake.contract"
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
-_REQUEST_KEYS = {"form", "as_of", "contract_version"}
+_REQUEST_KEYS = {"form", "as_of", "contract_version", "persist", "decision"}
+_DECISION_KEYS = {"disposition", "rationale", "decider", "conditions", "exception_rationale"}
 
 LIMITATIONS = (
     "Portfolio demo. Not a production GRC API and not a certification.",
     "The risk model is an illustrative portfolio model. Identical inputs and the same rule-set version produce the same result.",
     "A residual tier does not approve the vendor. Human review is required, and a configured restriction can block automatic approval.",
-    "Nothing from this contract is written to the risk register.",
+    "An assessment is not written to the risk register unless persist is true and a person supplies a disposition, rationale, and decider. The residual tier is not that disposition.",
     "A trust-center URL is stored only as pasted text and is not fetched.",
     "A ServiceNow-shaped file is simulated input. This contract does not call ServiceNow.",
     "No external AI model scores or approves the vendor.",
@@ -94,14 +102,29 @@ def contract_document():
         "cli": {
             "assess": "python -m app.cli assess REQUEST.json",
             "assess_stdin": "python -m app.cli assess -",
+            "persist": (
+                "python -m app.cli assess REQUEST.json --persist "
+                "--disposition escalate --rationale TEXT --decider TEXT"
+            ),
             "preview": "python -m app.cli preview FILE",
             "assess_file": "python -m app.cli assess-file FILE",
+            "assess_file_persist": (
+                "python -m app.cli assess-file FILE --persist "
+                "--disposition escalate --rationale TEXT --decider TEXT"
+            ),
         },
         "request": {
             "contract_version": f"Optional. When present, must be {CONTRACT_VERSION}.",
             "as_of": "Optional YYYY-MM-DD. Omitted means the server or process date. Evidence ages are calculated from this date.",
             "form": "Required object. Keys are the intake fields listed below.",
+            "persist": "Optional boolean. Omitted or false assesses only. True saves a synthetic risk and requires decision.",
+            "decision": (
+                "Required object when persist is true. disposition is approve, "
+                "approve_with_conditions, escalate, or reject. rationale and decider are required. "
+                "conditions and exception_rationale follow the saved-risk rules."
+            ),
         },
+        "dispositions": list(DISPOSITIONS),
         "fields": column_guide(),
         "conditional_fields": [
             {
@@ -121,8 +144,8 @@ def contract_document():
     }
 
 
-def assess_request_text(text):
-    """Parse a JSON request body and return one assessment document."""
+def load_json_object(text):
+    """Parse one JSON object. Duplicate keys are rejected."""
     if text is None or not str(text).strip():
         raise BotRequestError(["The request is empty."])
     try:
@@ -131,21 +154,42 @@ def assess_request_text(text):
         raise BotRequestError([f"Duplicate JSON key {exc.key!r}."]) from exc
     except json.JSONDecodeError as exc:
         raise BotRequestError([f"The request is not valid JSON ({exc.msg})."]) from exc
-    return assess_request(payload)
+    return payload
 
 
-def assess_request(payload):
-    """Validate one assess request and run it through intake."""
-    form, as_of = parse_assess_request(payload)
+def assess_request_text(text, db=None):
+    """Parse a JSON request body and return one assessment document."""
+    return assess_request(load_json_object(text), db=db)
+
+
+def assess_request(payload, db=None):
+    """Validate one assess request and run it through intake.
+
+    persist defaults to false. A true value writes the synthetic vendor and
+    the human decision. A false value never writes, even if a decision object
+    was sent by mistake: that combination is rejected so it cannot look saved.
+    """
+    form, as_of, persist, decision = parse_assess_request(payload)
     try:
         intake = build_intake(form, as_of)
     except IntakeError as exc:
         raise BotRequestError(exc.problems) from exc
-    return assessment_from_result(run_intake(intake, as_of))
+    result = run_intake(intake, as_of)
+    if not persist:
+        return assessment_from_result(result)
+    if db is None:
+        raise BotRequestError(["persist is true, but no database is available. Nothing was saved."])
+    _require_decision(result, decision)
+    try:
+        risk_id = register_intake(db, result, decision)
+    except WorkflowInputError as exc:
+        db.rollback()
+        raise BotRequestError([str(exc)]) from exc
+    return assessment_from_result(result, saved=get_risk(db, risk_id))
 
 
 def parse_assess_request(payload):
-    """Return (form, as_of). Structural problems are raised before scoring."""
+    """Return (form, as_of, persist, decision). Structural problems are raised before scoring."""
     problems = []
     if not isinstance(payload, dict):
         raise BotRequestError(["The request must be a JSON object."])
@@ -159,6 +203,9 @@ def parse_assess_request(payload):
         problems.append("Unrecognized request fields: " + ", ".join(unknown) + ".")
     if "contract_version" in payload and payload["contract_version"] != CONTRACT_VERSION:
         problems.append(f"contract_version must be {CONTRACT_VERSION}.")
+
+    persist, decision, persist_problems = _parse_persist(payload)
+    problems.extend(persist_problems)
 
     form = payload.get("form")
     if "form" not in payload:
@@ -201,17 +248,19 @@ def parse_assess_request(payload):
         cleaned[column] = value
     if problems:
         raise BotRequestError(problems)
-    return cleaned, as_of
+    return cleaned, as_of, persist, decision
 
 
-def assessment_from_result(result):
+def assessment_from_result(result, saved=None):
     """Copy one run_intake result into the bot assessment document."""
     risk = result["risk"]
     policy = risk["policy"]
     document = {
         "contract": CONTRACT_ASSESSMENT,
         "contract_version": CONTRACT_VERSION,
-        "persisted": False,
+        "persisted": saved is not None,
+        "risk_id": saved["risk_id"] if saved else None,
+        "decision": _decision_document(saved["decision"]) if saved else None,
         "synthetic_data": bool(result.get("synthetic_data", True)),
         "human_review_required": True,
         "automatic_approval": None,
@@ -266,8 +315,12 @@ def preview_file(filename, data, as_of):
     return preview_document(preview)
 
 
-def assess_file(filename, data, as_of):
-    """Assess every row when the whole file is valid. Otherwise raise with the preview."""
+def assess_file(filename, data, as_of, decision=None, db=None):
+    """Assess every row when the whole file is valid. Otherwise raise with the preview.
+
+    decision is omitted for an assess-only batch. When it is present, every
+    row is saved with that same human disposition, or none of them are.
+    """
     from app.services.intake_importer import ImportRejected, assess_import
 
     if isinstance(data, str):
@@ -279,11 +332,15 @@ def assess_file(filename, data, as_of):
         results = assess_import(confirmation_document(preview), as_of)
     except ImportRejected as exc:
         raise BotRequestError(_preview_problems(exc.preview), preview=exc.preview) from exc
-    assessments = [assessment_from_result(result) for result in results]
+    saved_rows = _persist_results(results, decision, db)
+    assessments = [
+        assessment_from_result(result, saved=saved)
+        for result, saved in zip(results, saved_rows)
+    ]
     return {
         "contract": CONTRACT_BATCH,
         "contract_version": CONTRACT_VERSION,
-        "persisted": False,
+        "persisted": decision is not None,
         "synthetic_data": True,
         "human_review_required": True,
         "automatic_approval": None,
@@ -336,6 +393,100 @@ def parse_cli_date(value):
     if problem:
         raise BotRequestError([problem])
     return parsed
+
+
+def _parse_persist(payload):
+    """Return (persist, decision, problems). Missing persist means assess only."""
+    problems = []
+    if "persist" not in payload:
+        if "decision" in payload:
+            problems.append("A decision is recorded only when persist is true. Nothing was saved.")
+        return False, None, problems
+    persist = payload["persist"]
+    if not isinstance(persist, bool):
+        problems.append("persist must be true or false.")
+        return False, None, problems
+    if not persist:
+        if "decision" in payload:
+            problems.append("A decision is recorded only when persist is true. Nothing was saved.")
+        return False, None, problems
+    decision = payload.get("decision")
+    if not isinstance(decision, dict):
+        problems.append("persist true requires a decision object with a disposition, rationale, and decider.")
+        return True, None, problems
+    unknown = sorted(set(decision) - _DECISION_KEYS)
+    if unknown:
+        problems.append("Unrecognized decision fields: " + ", ".join(unknown) + ".")
+    cleaned = {}
+    for key in ("disposition", "rationale", "decider", "conditions", "exception_rationale"):
+        if key not in decision:
+            if key in {"disposition", "rationale", "decider"}:
+                problems.append(f"decision.{key} is required when persist is true.")
+            cleaned[key] = ""
+            continue
+        value = decision[key]
+        if not isinstance(value, str):
+            problems.append(f"decision.{key}: expected text, got {_type_name(value)}.")
+            cleaned[key] = ""
+            continue
+        cleaned[key] = value
+    if isinstance(decision.get("disposition"), str) and decision["disposition"] not in DISPOSITIONS:
+        problems.append(DISPOSITION_RULE + ".")
+    return True, cleaned, problems
+
+
+def _require_decision(result, decision):
+    """Reject a decision the saved-risk rules would refuse. Does not write."""
+    if not isinstance(decision, dict):
+        raise BotRequestError(["persist true requires a decision object with a disposition, rationale, and decider."])
+    problems, _normalized = decision_problems(
+        result.get("risk") or {},
+        decision.get("disposition", ""),
+        decision.get("rationale", ""),
+        decision.get("decider", ""),
+        decision.get("conditions", ""),
+        decision.get("exception_rationale", ""),
+    )
+    if problems:
+        raise BotRequestError(problems)
+
+
+def _persist_results(results, decision, db):
+    """Save every result with one disposition, or leave the register unchanged."""
+    if decision is None:
+        return [None] * len(results)
+    if db is None:
+        raise BotRequestError(["persist is true, but no database is available. Nothing was saved."])
+    for result in results:
+        _require_decision(result, decision)
+    risk_ids = []
+    try:
+        for result in results:
+            risk_ids.append(register_intake(db, result, decision, commit=False))
+        db.commit()
+    except WorkflowInputError as exc:
+        db.rollback()
+        raise BotRequestError([str(exc)]) from exc
+    except Exception:
+        db.rollback()
+        raise
+    return [get_risk(db, risk_id) for risk_id in risk_ids]
+
+
+def _decision_document(decision):
+    """The human disposition, copied from the saved row and kept off the score."""
+    return {
+        "disposition": decision["disposition"],
+        "rationale": decision["rationale"],
+        "decider": decision["decider"],
+        "conditions": decision["conditions"],
+        "exception_rationale": decision["exception_rationale"],
+        "policy_id": decision["policy_id"],
+        "policy_version": decision["policy_version"],
+        "rule_set_version": decision["rule_set_version"],
+        "prohibited_at_decision": decision["prohibited_at_decision"],
+        "separate_from_score": True,
+    }
 
 
 def _object_pairs(pairs):

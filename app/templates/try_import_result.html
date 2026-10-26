@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Imported vendors | Try the demo{% endblock %}
 {% block content %}
-<p class="eyebrow"><a href="{{ url_for('try_demo.import_form') }}">IMPORT</a> · SYNTHETIC · NOT SAVED</p>
+<p class="eyebrow"><a href="{{ url_for('try_demo.import_form') }}">IMPORT</a> · SYNTHETIC · NOT SAVED YET</p>
 <h1>Imported vendors</h1>
-<p class="lead">Each result was produced by the evidence validator, the risk engine, and the control mapper. This page did not assign a score of its own. Nothing was saved, and nothing was sent to ServiceNow.</p>
+<p class="lead">Each result was produced by the evidence validator, the risk engine, and the control mapper. This page did not assign a score of its own. Nothing was saved yet, and nothing was sent to ServiceNow. Saving is a separate choice under each vendor. A low residual tier is not an approval.</p>
+{% if save_error %}<div class="inline-warning" role="alert"><strong>Not saved.</strong> {{ save_error }}</div>{% endif %}
 {% for item in imported %}
 <section class="content-section">
   <p class="eyebrow">ROW {{ item.result.source_row }}{% if item.result.ticket_number %} · TICKET {{ item.result.ticket_number }}{% endif %}</p>
@@ -16,6 +17,21 @@
   {% if item.payload %}<p>This payload is only displayed. Nothing is sent.</p>
   <pre class="payload"><code>{{ item.payload|tojson(indent=2) }}</code></pre>
   {% else %}<p>No ticket needed: no escalation rule fired, no hard restriction matched, and no evidence gap needs follow-up. A person still reviews the result.</p>{% endif %}
+  <h3>Save to the risk register</h3>
+  <p>Synthetic demonstration data. Check the box and record a disposition to write this vendor. The residual tier stays the engine result. It does not set the disposition.</p>
+  <form class="action-form" method="post" action="{{ url_for('try_demo.import_save') }}">
+    <textarea name="confirmation" hidden readonly>{{ confirmation|tojson }}</textarea>
+    <input type="hidden" name="source_row" value="{{ item.result.source_row }}">
+    <label class="wide"><input type="checkbox" name="persist" value="yes" required> Save this synthetic vendor to the risk register</label>
+    <label>Disposition
+      <select name="disposition">{% for value in dispositions %}<option value="{{ value }}" {% if value == 'escalate' %}selected{% endif %}>{{ value|replace('_', ' ')|title }}</option>{% endfor %}</select>
+    </label>
+    <label>Decider (name or role)<input name="decider" maxlength="100" required placeholder="Example: GRC analyst"></label>
+    <label class="wide">Rationale<textarea name="rationale" maxlength="1000" rows="3" required placeholder="Why this disposition, separate from the score"></textarea></label>
+    <label class="wide">Conditions<textarea name="conditions" maxlength="1000" rows="2" placeholder="Required only for approve with conditions"></textarea></label>
+    <label class="wide">Exception rationale<textarea name="exception_rationale" maxlength="1000" rows="2" placeholder="Required only to approve a prohibited result"></textarea></label>
+    <button class="button-link" type="submit">Save to risk register</button>
+  </form>
 </section>
 {% endfor %}
 <p><a class="button-link" href="{{ url_for('try_demo.import_form') }}">Import another file</a></p>

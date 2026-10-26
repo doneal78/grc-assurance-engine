@@ -37,7 +37,52 @@ def migrate(connection):
     for name in ("policy_id", "policy_version", "policy_outcome"):
         if name not in columns:
             connection.execute(f"ALTER TABLE risks ADD COLUMN {name} TEXT")
+    _allow_escalate_disposition(connection)
     connection.commit()
+
+
+def _allow_escalate_disposition(connection):
+    """Let an existing decisions table store the escalate disposition.
+
+    CREATE TABLE IF NOT EXISTS does not change a CHECK constraint that was
+    created before escalate existed. Rows already stored are copied across.
+    """
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='decisions'"
+    ).fetchone()
+    if row is None or "escalate" in row[0]:
+        return
+    connection.execute("PRAGMA foreign_keys = OFF")
+    try:
+        connection.execute("ALTER TABLE decisions RENAME TO decisions_legacy")
+        connection.execute(
+            """CREATE TABLE decisions (
+                decision_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                risk_id TEXT NOT NULL UNIQUE REFERENCES risks(risk_id) ON DELETE CASCADE,
+                disposition TEXT NOT NULL CHECK (disposition IN ('approve', 'approve_with_conditions', 'escalate', 'reject')),
+                conditions TEXT NOT NULL DEFAULT '',
+                rationale TEXT NOT NULL,
+                exception_rationale TEXT NOT NULL DEFAULT '',
+                decider TEXT NOT NULL,
+                policy_id TEXT NOT NULL,
+                policy_version TEXT NOT NULL,
+                rule_set_version TEXT NOT NULL,
+                prohibited_at_decision TEXT NOT NULL CHECK (prohibited_at_decision IN ('prohibited', 'not_prohibited')),
+                decided_at TEXT NOT NULL
+            )"""
+        )
+        connection.execute(
+            """INSERT INTO decisions (
+                decision_id, risk_id, disposition, conditions, rationale, exception_rationale,
+                decider, policy_id, policy_version, rule_set_version, prohibited_at_decision, decided_at
+            )
+            SELECT decision_id, risk_id, disposition, conditions, rationale, exception_rationale,
+                   decider, policy_id, policy_version, rule_set_version, prohibited_at_decision, decided_at
+            FROM decisions_legacy"""
+        )
+        connection.execute("DROP TABLE decisions_legacy")
+    finally:
+        connection.execute("PRAGMA foreign_keys = ON")
 
 
 def init_app(app):

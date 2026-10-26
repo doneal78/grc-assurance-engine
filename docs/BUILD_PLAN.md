@@ -1,6 +1,6 @@
 # GRC Assurance Engine — Build Plan
 
-**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Trust-center citations are pasted evidence, not a live fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow, and it does not save the rows. A bot JSON contract and CLI run the same intake path and return the engine result without saving it. General intake that is saved, and observed metrics, remain out of scope. Multi-tenant policy storage is not implemented.
+**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Trust-center citations are pasted evidence, not a live fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow. Preview and confirm do not save. A person can then save one synthetic row with a disposition and rationale. A bot JSON contract and CLI run the same intake path. Assess alone does not save. `persist: true` with a human disposition does. Observed metrics remain out of scope. Multi-tenant policy storage is not implemented.
 **Project type:** GRC Engineering portfolio application  
 **Development approach:** Local-first, phased implementation, test-driven business logic  
 **Primary IDE:** Cursor  
@@ -400,7 +400,7 @@ Each scenario must define:
 
 ## 10. Phase 5 — Risk Register and Remediation
 
-**Status:** Scenario-derived risks, related follow-up actions, status updates, and local workflow events persist in SQLite. The initial workflow is intentionally limited to the three synthetic scenarios; general-purpose intake and finding authoring are not implemented.
+**Status:** Scenario-derived risks, related follow-up actions, status updates, and local workflow events persist in SQLite. A confirmed general intake can be saved the same way, with the human disposition stored on its own row. Arbitrary finding authoring is not implemented.
 
 ### Objective
 
@@ -537,7 +537,7 @@ Do not monetize hypothetical avoided security incidents in the MVP.
 
 ## 12. Phase 7 — Dashboard and User Experience
 
-**Status:** Local demo landing, scenario detail, risk register, remediation, and methods pages are implemented for the synthetic fixtures. General-purpose assessment intake, observed workflow metrics, and full dashboard reporting remain unimplemented.
+**Status:** Local demo landing, scenario detail, risk register, remediation, and methods pages are implemented for the synthetic fixtures. The public form, file import, and JSON/CLI intake assess a vendor. Saving that assessment is opt-in. Observed workflow metrics and full dashboard reporting remain unimplemented.
 
 ### Objective
 
@@ -712,7 +712,7 @@ Let a visitor ingest synthetic vendor intake from a spreadsheet or from a ticket
 
 ### Out of scope for this increment
 
-Live ServiceNow API calls, attachment downloads, arbitrary PDF or email ingestion, and saving imported vendors to the risk register. See `docs/import-formats.md`.
+Live ServiceNow API calls, attachment downloads, and arbitrary PDF or email ingestion. Saving an imported vendor is a later, separate confirmation. See section 21 and `docs/import-formats.md`.
 
 ## 20. Bot intake contract
 
@@ -728,9 +728,31 @@ Let a script or agent run the public intake, or preview an intake file the impor
 - `as_of` is an optional `YYYY-MM-DD`. When it is omitted, the process or server date is used. Evidence ages are calculated from that date.
 - File preview uses `parse_upload` and does not score. `assess-file` scores every row only when the file is valid. Ticket priority stays context.
 - CLI exit codes are 0 for a produced assessment or an assessable preview, 2 for validation failure, and 1 for an unexpected engine error.
-- The HTTP route follows `REQUIRE_AUTH`. The demo default is false. The route does not save a risk and does not record a human decision.
+- The HTTP route follows `REQUIRE_AUTH`. The demo default is false.
 - The illustrative-model limits are in the JSON document and in `docs/bot-contract.md`.
 
 ### Out of scope for this increment
 
-Saved general intake, a recorded decision, a live ServiceNow call, a separate scoring path, and a production API.
+A live ServiceNow call, a separate scoring path, and a production API. Saving the assessment is section 21.
+
+## 21. Saved general intake
+
+**Status:** Implemented as an opt-in after a successful assessment. Assess alone still does not write.
+
+### Objective
+
+Let a confirmed import, or an explicit API or CLI decision, put one synthetic vendor on the local risk register with the same trace a scenario save already keeps: the assessment, a follow-up action when the scenario rules would create one, workflow events, and a human disposition.
+
+### Behavior
+
+- `/try/import` preview and confirm do not write. The result page offers a checkbox and a save button for each row. The box must be checked. The person records a disposition, a short rationale, and a decider.
+- `POST /api/v1/intake/assess` writes only when `persist` is the boolean true and `decision` includes `disposition`, `rationale`, and `decider`. Omitted `persist` means assess only. A decision sent without `persist: true` is rejected and nothing is saved.
+- The CLI accepts the same JSON fields, or `--persist` with `--disposition`, `--rationale`, and `--decider`. Flags and JSON persist fields cannot be combined. `assess-file --persist` applies that one disposition to every row. If any row cannot take it, none are saved.
+- Dispositions are approve, approve with conditions, escalate, and reject. The same rules as a scenario decision apply. Approving a prohibited result requires an exception rationale. Escalate and reject do not. An exception rationale is refused when it does not mean "proceed despite the restriction."
+- The residual tier stays the engine result. A low tier does not become an approval. `automatic_approval` stays null. The decision row stores the person's disposition.
+- The register row is labeled synthetic demonstration data. Its id is `intake-` plus a random suffix, so it does not collide with a scenario fixture. Saving the same vendor again adds another row.
+- A database created before escalate existed keeps its decision rows. Startup rebuilds the disposition check so escalate can be stored.
+
+### Out of scope for this increment
+
+Observed handling time, a per-visitor register, an authenticated decider, and a live ServiceNow write. The hosted demo's register is still shared by everyone with the link. Do not put real vendor data in it.

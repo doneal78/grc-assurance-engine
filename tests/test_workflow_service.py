@@ -226,3 +226,146 @@ def test_old_database_gains_policy_columns_and_decisions(tmp_path):
     connection.close()
     assert {"policy_id", "policy_version", "policy_outcome"} <= columns
     assert "decisions" in tables
+
+
+def test_existing_decision_survives_adding_escalate(tmp_path):
+    from app import create_app
+    import sqlite3
+
+    path = tmp_path / "legacy.sqlite3"
+    schema = Path("app/schema.sql").read_text(encoding="utf-8").replace(
+        "'approve', 'approve_with_conditions', 'escalate', 'reject'",
+        "'approve', 'approve_with_conditions', 'reject'",
+    )
+    connection = sqlite3.connect(path)
+    connection.executescript(schema)
+    connection.execute(
+        """INSERT INTO risks
+        (risk_id, scenario_id, scenario_name, risk_statement, inherent_tier, residual_tier,
+         rationale_json, created_at, policy_id, policy_version, policy_outcome)
+        VALUES ('R-OLD', 'legacy-scenario', 'Legacy', 'Synthetic statement', 'low', 'low', '{}',
+                '2026-10-01T00:00:00+00:00', 'ORG-AI-USE', '1.1.0', 'not_prohibited')"""
+    )
+    connection.execute(
+        """INSERT INTO decisions
+        (risk_id, disposition, rationale, decider, policy_id, policy_version, rule_set_version,
+         prohibited_at_decision, decided_at)
+        VALUES ('R-OLD', 'reject', 'Kept.', 'Reviewer', 'ORG-AI-USE', '1.1.0', '0.3.0',
+                'not_prohibited', '2026-10-01T00:00:00+00:00')"""
+    )
+    connection.commit()
+    connection.close()
+    create_app({"TESTING": True, "DATABASE": str(path), "REQUIRE_AUTH": False})
+    connection = sqlite3.connect(path)
+    sql = connection.execute("SELECT sql FROM sqlite_master WHERE name = 'decisions'").fetchone()[0]
+    row = connection.execute(
+        "SELECT disposition, rationale FROM decisions WHERE risk_id = 'R-OLD'"
+    ).fetchone()
+    connection.close()
+    assert "escalate" in sql
+    assert row == ("reject", "Kept.")
+
+
+def _intake(**overrides):
+    from datetime import date
+
+    from app.services.intake_builder import build_intake, clause_evidence_field, run_intake
+    from app.services.org_policy import load_org_policy
+
+    form = {
+        "vendor_name": "Northwind Notes",
+        "data_sensitivity": "internal",
+        "integration_permissions": "read_only",
+        "ai_use": "none",
+        "model_training_on_customer_data": "no",
+        "external_exposure": "internal_only",
+        "retention_deletion": "documented",
+        "decisions_affecting_people": "no",
+        "evidence_integration_permissions": "independent_verified",
+        "trust_center_url": "",
+        "trust_soc2": "independent_verified",
+        "trust_security": "independent_verified",
+        "trust_privacy": "independent_verified",
+    }
+    for clause in load_org_policy()["required_contract_clauses"]:
+        form[clause_evidence_field(clause["clause_id"])] = "independent_verified"
+    form.update(overrides)
+    as_of = date(2026, 10, 14)
+    return run_intake(build_intake(form, as_of), as_of)
+
+
+def _save_intake(db, result=None, **overrides):
+    from app.services.workflow_service import register_intake
+
+    decision = {"disposition": "escalate", "rationale": "Low residual tier is not an approval.",
+                "decider": "GRC analyst", "conditions": "", "exception_rationale": ""}
+    decision.update(overrides)
+    return register_intake(db, result or _intake(), decision)
+
+
+def test_general_intake_save_keeps_the_decision_off_the_score(db):
+    from app.services.workflow_service import get_risk, register_intake
+
+    result = _intake()
+    assert result["risk"]["residual"]["tier"] == "low"
+    risk_id = _save_intake(db, result)
+    risk = get_risk(db, risk_id)
+    assert risk["scenario_name"] == "Northwind Notes"
+    assert risk["scenario_id"].startswith("intake-")
+    assert risk["residual_tier"] == "low"
+    assert risk["inherent_tier"] == result["risk"]["inherent"]["tier"]
+    assert risk["decision"]["disposition"] == "escalate"
+    assert risk["decision"]["disposition"] != risk["residual_tier"]
+    assert "not an approval" in risk["risk_statement"]
+    assert risk["rationale"]["intake_origin"] == "general_intake"
+    assert [event["event_type"] for event in risk["events"]] == [
+        "intake_received", "risk_created", "decision_recorded",
+    ]
+    assert list_risks(db)[0]["decision_disposition"] == "escalate"
+    again = register_intake(db, result, {"disposition": "reject", "rationale": "A second confirmed save.",
+                                         "decider": "GRC analyst"})
+    assert again != risk_id
+    assert len(list_risks(db)) == 2
+
+
+def test_intake_with_a_gap_gets_a_follow_up_action(db):
+    from app.services.workflow_service import get_risk
+
+    result = _intake(evidence_integration_permissions="contradicts")
+    risk_id = _save_intake(db, result, disposition="reject", rationale="The conflict needs a person.")
+    risk = get_risk(db, risk_id)
+    assert risk["actions"][0]["status"] == "open"
+    assert "remediation_created" in [event["event_type"] for event in risk["events"]]
+    assert risk["decision"]["disposition"] == "reject"
+    assert risk["residual_tier"] == result["risk"]["residual"]["tier"]
+
+
+def test_invalid_intake_disposition_writes_nothing(db):
+    from app.services.workflow_service import WorkflowInputError, register_intake
+
+    result = _intake()
+    with pytest.raises(WorkflowInputError, match="disposition"):
+        register_intake(db, result, {"disposition": "accept", "rationale": "No.", "decider": "GRC analyst"})
+    assert list_risks(db) == []
+    prohibited = _intake(ai_use="assistive", decisions_affecting_people="yes")
+    with pytest.raises(WorkflowInputError, match="exception rationale"):
+        register_intake(db, prohibited, {"disposition": "approve", "rationale": "The score looks low.",
+                                         "decider": "GRC analyst"})
+    assert list_risks(db) == []
+    risk_id = register_intake(db, prohibited, {"disposition": "escalate",
+                                               "rationale": "A person is sending this on.",
+                                               "decider": "GRC analyst"})
+    saved = get_risk(db, risk_id)
+    assert saved["decision"]["disposition"] == "escalate"
+    assert saved["policy_outcome"] == "prohibited"
+    assert saved["decision"]["exception_rationale"] == ""
+
+
+def test_non_synthetic_intake_is_rejected(db):
+    from app.services.workflow_service import WorkflowInputError
+
+    result = _intake()
+    result["synthetic_data"] = False
+    with pytest.raises(WorkflowInputError):
+        _save_intake(db, result)
+    assert list_risks(db) == []

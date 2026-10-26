@@ -38,7 +38,7 @@ CREATE TABLE IF NOT EXISTS workflow_events (
 CREATE TABLE IF NOT EXISTS decisions (
     decision_id INTEGER PRIMARY KEY AUTOINCREMENT,
     risk_id TEXT NOT NULL UNIQUE REFERENCES risks(risk_id) ON DELETE CASCADE,
-    disposition TEXT NOT NULL CHECK (disposition IN ('approve', 'approve_with_conditions', 'reject')),
+    disposition TEXT NOT NULL CHECK (disposition IN ('approve', 'approve_with_conditions', 'escalate', 'reject')),
     conditions TEXT NOT NULL DEFAULT '',
     rationale TEXT NOT NULL,
     exception_rationale TEXT NOT NULL DEFAULT '',
