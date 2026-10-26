@@ -3,7 +3,7 @@
 {% block content %}
 <p class="eyebrow">GUIDED DEMO · VERSION {{ version }} · SYNTHETIC DATA</p>
 <h1>Walk through one vendor review</h1>
-<p class="lead">Nine stops on the live pages, from intake to a saved decision and the export. The pages run the rules. This guide only tells you what to notice.</p>
+<p class="lead">{{ steps|length }} stops on the live pages, from intake through a claim conflict, a saved decision, and a file import. The pages run the rules. This guide only tells you what to notice.</p>
 {% if current %}
 <p><a class="button-link" href="{{ current.href }}">{% if current.note %}{{ current.note }}{% else %}Continue · {{ current.title }}{% endif %}</a></p>
 {% else %}
@@ -25,6 +25,6 @@
   <form method="post" action="{{ url_for('walkthrough.reset') }}">
     <button class="button-quiet" type="submit">Start over</button>
   </form>
-  <p class="muted">Start over clears the guide cookie in this browser. The cookie stores the last stop for 12 hours. It is not an account, and it is not the risk register. The conflicting-permissions scenario stays on Demo scenarios and is not a stop here. Nothing on this page scores, saves, or approves a vendor.</p>
+  <p class="muted">Start over clears the guide cookie in this browser. The cookie stores the last stop for 12 hours. It is not an account, and it is not the risk register. A custom vendor and a trust-center choice stay on the public form and are not stops here. Nothing on this page scores, saves, or approves a vendor.</p>
 </section>
 {% endblock %}

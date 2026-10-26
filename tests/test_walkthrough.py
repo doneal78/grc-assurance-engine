@@ -4,6 +4,10 @@ The guide points at live pages. It does not score, and a stop does not save
 a risk unless the visitor uses the existing opt-in control.
 """
 
+import io
+import json
+
+from app.services.intake_importer import sample_file
 from app.services.risk_engine import evaluate
 from app.services.scenario_runner import list_scenarios, run_scenario
 from app.services.walkthrough import (
@@ -16,9 +20,11 @@ SAME_ORIGIN = {"Origin": "http://localhost"}
 GUIDED_PAGES = (
     ("/try/?walk=intake", "intake", "evidence"),
     ("/try/scenario/evidence-supported?walk=evidence", "evidence", "clause"),
-    ("/try/scenario/contract-clause-conflict?walk=clause", "clause", "high-risk"),
+    ("/try/scenario/contract-clause-conflict?walk=clause", "clause", "conflict"),
+    ("/try/scenario/conflicting-claims?walk=conflict", "conflict", "high-risk"),
     ("/try/scenario/high-risk-ai?walk=high-risk", "high-risk", "prohibited"),
     ("/try/scenario/prohibited-ai-decisions?walk=prohibited", "prohibited", "save"),
+    ("/try/import?walk=import", "import", "dashboard"),
     ("/?walk=dashboard", "dashboard", "methods"),
     ("/methodology?walk=methods", "methods", None),
 )
@@ -27,6 +33,8 @@ FREE_FORM_PAGES = (
     "/try/",
     "/try/scenario/evidence-supported",
     "/try/scenario/contract-clause-conflict",
+    "/try/scenario/conflicting-claims",
+    "/try/import",
     "/demo/",
     "/demo/evidence-supported",
     "/demo/prohibited-ai-decisions",
@@ -43,12 +51,12 @@ def _clause(result):
 def test_stops_are_unique_ordered_and_point_at_real_endpoints(app):
     ordered = steps()
     assert [item["step_id"] for item in ordered] == [
-        "intake", "evidence", "clause", "high-risk", "prohibited",
-        "save", "decide", "dashboard", "methods",
+        "intake", "evidence", "clause", "conflict", "high-risk", "prohibited",
+        "save", "decide", "import", "dashboard", "methods",
     ]
     assert len({item["step_id"] for item in ordered}) == len(ordered)
-    assert [item["number"] for item in ordered] == list(range(1, 10))
-    assert WALKTHROUGH_VERSION == "1.0.0"
+    assert [item["number"] for item in ordered] == list(range(1, 12))
+    assert WALKTHROUGH_VERSION == "1.1.0"
     endpoints = {rule.endpoint for rule in app.url_map.iter_rules()}
     scenario_ids = {item["scenario_id"] for item in list_scenarios()}
     for step in ordered:
@@ -56,10 +64,11 @@ def test_stops_are_unique_ordered_and_point_at_real_endpoints(app):
         scenario_id = step["view_args"].get("scenario_id")
         if scenario_id:
             assert scenario_id in scenario_ids
-    assert step_by_id("methods")["number"] == 9
+    assert step_by_id("methods")["number"] == 11
     previous, following = neighbors("clause")
     assert previous["step_id"] == "evidence"
-    assert following["step_id"] == "high-risk"
+    assert following["step_id"] == "conflict"
+    assert neighbors("import")[1]["step_id"] == "dashboard"
     assert neighbors("intake")[0] is None
     assert neighbors("methods")[1] is None
 
@@ -69,6 +78,7 @@ def test_coaching_facts_still_match_the_live_scenarios():
     clause = run_scenario("contract-clause-conflict")
     high = run_scenario("high-risk-ai")
     prohibited = run_scenario("prohibited-ai-decisions")
+    conflict = run_scenario("conflicting-claims")
 
     assert _clause(evidence) == "verified"
     assert evidence["risk"]["inherent"]["tier"] == "low"
@@ -81,6 +91,14 @@ def test_coaching_facts_still_match_the_live_scenarios():
     assert bare["inherent"] == clause["risk"]["inherent"]
     assert bare["residual"] == clause["risk"]["residual"]
     assert bare["review_path"] == clause["risk"]["review_path"]
+    assert clause["risk"]["escalations"] == []
+
+    permission = next(item for item in conflict["claims"] if item["claim_id"] == "C-PERM")
+    assert permission["evidence_status"] == "conflicting"
+    assert conflict["risk"]["residual"]["tier"] == "high"
+    assert conflict["risk"]["review_path"] == "escalated_review"
+    assert [item["rule_id"] for item in conflict["risk"]["escalations"]] == ["ESC-003"]
+    assert conflict["risk"]["policy_outcome"]["status"] == "not_prohibited"
 
     assert high["risk"]["inherent"]["provisional"] is True
     assert high["risk"]["inherent"]["tier"] == "undetermined"
@@ -114,6 +132,12 @@ def test_step_matching_and_carried_ids_reject_unknown_values():
     assert not page_matches(evidence, "try_demo.index", {})
     assert page_matches(decide, "risks.detail", {"risk_id": "R-1"})
     assert not page_matches(decide, "demos.detail", {"scenario_id": "prohibited-ai-decisions"})
+    imported = step_by_id("import")
+    assert page_matches(imported, "try_demo.import_form", {})
+    assert page_matches(imported, "try_demo.import_preview", {})
+    assert page_matches(imported, "try_demo.import_confirm", {})
+    assert not page_matches(imported, "try_demo.index", {})
+    assert carried_walk_step("import", advance_from="import") == "dashboard"
     assert known_step_id(" intake ") == "intake"
     assert known_step_id("nope") is None
     assert known_step_id(None) is None
@@ -131,12 +155,15 @@ def test_index_lists_every_stop_and_links_into_the_live_pages(client):
     response = client.get("/walkthrough/")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "VERSION 1.0.0" in body
+    assert "VERSION 1.1.0" in body
+    assert "11 stops" in body
     assert "Start at intake" in body
     assert 'href="/try/?walk=intake"' in body
     assert 'href="/try/scenario/evidence-supported?walk=evidence"' in body
     assert 'href="/try/scenario/contract-clause-conflict?walk=clause"' in body
+    assert 'href="/try/scenario/conflicting-claims?walk=conflict"' in body
     assert 'href="/try/scenario/high-risk-ai?walk=high-risk"' in body
+    assert 'href="/try/import?walk=import"' in body
     assert 'href="/try/scenario/prohibited-ai-decisions?walk=prohibited"' in body
     assert 'href="/demo/prohibited-ai-decisions?walk=save"' in body
     assert "Save the eligibility case first." in body
@@ -146,7 +173,7 @@ def test_index_lists_every_stop_and_links_into_the_live_pages(client):
         assert step["title"] in body
         assert step["summary"] in body
     assert 'action="/walkthrough/reset"' in body
-    assert "conflicting-permissions" in body
+    assert "not a stop here" not in body
     assert 'id="walkthrough-coach"' not in body
 
 
@@ -174,7 +201,8 @@ def test_each_guided_page_shows_its_note_and_the_next_stop(client):
         body = response.get_data(as_text=True)
         assert f'data-step="{step_id}"' in body
         assert "This note is on another page" not in body
-        assert f"STEP {steps()[next(i for i, item in enumerate(steps()) if item['step_id'] == step_id)]['number']} OF 9" in body
+        number = next(item["number"] for item in steps() if item["step_id"] == step_id)
+        assert f"STEP {number} OF {len(steps())}" in body
         assert "walk_step=" + step_id in response.headers.get("Set-Cookie", "")
         if following:
             assert f"walk={following}" in body
@@ -271,6 +299,7 @@ def test_register_advances_the_guide_and_a_plain_save_does_not(client):
     assert 'data-step="decide"' in body
     assert "exception rationale" in body
     assert "nothing is sent to ServiceNow" in body
+    assert "walk=import" in body
     assert f'action="{location.split("?")[0]}/decision?walk=decide"' in body
     resumed = client.get("/demo/prohibited-ai-decisions?walk=save")
     assert "walk=decide" in resumed.get_data(as_text=True)
@@ -322,6 +351,75 @@ def test_decision_and_remediation_redirects_keep_only_a_known_stop(client, app):
     }, headers=SAME_ORIGIN)
     assert untouched.status_code == 302
     assert "walk=" not in untouched.headers["Location"]
+
+
+def test_claim_conflict_is_a_different_stop_from_the_clause(client):
+    body = client.get("/try/scenario/conflicting-claims?walk=conflict").get_data(as_text=True)
+    assert "ESC-003" in body
+    assert "clause conflict did not" in body
+    assert "residual tier stays high" in body
+    assert 'class="text-link walk-back" href="/try/scenario/contract-clause-conflict?walk=clause"' in body
+
+
+def test_import_stop_follows_preview_and_confirm_without_scoring_early(client):
+    page = client.get("/try/import?walk=import")
+    body = page.get_data(as_text=True)
+    assert "Preview a sample file" in body
+    assert "ServiceNow is not called" in body
+    assert 'action="/try/import/preview?walk=import"' in body
+    assert 'href="/try/import/sample/json"' in body
+    plain = client.get("/try/import").get_data(as_text=True)
+    assert 'action="/try/import/preview"' in plain
+    assert "walk=" not in plain
+
+    preview = client.post(
+        "/try/import/preview?walk=import",
+        data={"intake_file": (io.BytesIO(sample_file("json")), "servicenow-intake.json")},
+        headers=SAME_ORIGIN,
+    )
+    assert preview.status_code == 200
+    preview_body = preview.get_data(as_text=True)
+    assert 'data-step="import"' in preview_body
+    assert "This note is on another page" not in preview_body
+    assert "INHERENT RISK" not in preview_body
+    assert "do not set residual risk" in preview_body
+    assert 'action="/try/import/confirm?walk=import"' in preview_body
+
+    start = preview.data.index(b"<textarea")
+    snippet = preview.data[start:preview.data.index(b"</textarea>", start)]
+    document = json.loads(snippet.split(b">", 1)[1])
+    confirmed = client.post(
+        "/try/import/confirm?walk=import",
+        data={"confirmation": json.dumps(document)},
+        headers=SAME_ORIGIN,
+    )
+    assert confirmed.status_code == 200
+    confirmed_body = confirmed.get_data(as_text=True)
+    assert 'data-step="import"' in confirmed_body
+    assert "INHERENT RISK" in confirmed_body
+    assert "does not save" in confirmed_body
+    assert 'action="/try/import/save?walk=import"' in confirmed_body
+    row = document["rows"][0]
+    saved = client.post("/try/import/save?walk=import", data={
+        "confirmation": json.dumps(document),
+        "source_row": row["row_number"],
+        "persist": "yes",
+        "disposition": "escalate",
+        "rationale": "The file is not an approval.",
+        "decider": "Portfolio reviewer",
+    }, headers=SAME_ORIGIN)
+    assert saved.status_code == 302
+    assert saved.headers["Location"].endswith("?walk=dashboard")
+    plain_saved = client.post("/try/import/save", data={
+        "confirmation": json.dumps(document),
+        "source_row": row["row_number"],
+        "persist": "yes",
+        "disposition": "escalate",
+        "rationale": "Still not an approval.",
+        "decider": "Portfolio reviewer",
+    }, headers=SAME_ORIGIN)
+    assert plain_saved.status_code == 302
+    assert "walk=" not in plain_saved.headers["Location"]
 
 
 def test_reset_clears_the_cookie_and_leaves_the_register_alone(client):

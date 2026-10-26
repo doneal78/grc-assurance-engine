@@ -19,7 +19,7 @@
   {% else %}<p>No ticket needed: no escalation rule fired, no hard restriction matched, and no evidence gap needs follow-up. A person still reviews the result.</p>{% endif %}
   <h3>Save to the risk register</h3>
   <p>Synthetic demonstration data. Check the box and record a disposition to write this vendor. The residual tier stays the engine result. It does not set the disposition.</p>
-  <form class="action-form" method="post" action="{{ url_for('try_demo.import_save') }}">
+  <form class="action-form" method="post" action="{{ url_for('try_demo.import_save', walk=walkthrough.step_id) if walkthrough and walkthrough.on_page else url_for('try_demo.import_save') }}">
     <textarea name="confirmation" hidden readonly>{{ confirmation|tojson }}</textarea>
     <input type="hidden" name="source_row" value="{{ item.result.source_row }}">
     <label class="wide"><input type="checkbox" name="persist" value="yes" required> Save this synthetic vendor to the risk register</label>

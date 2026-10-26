@@ -8,7 +8,7 @@ cookie, not a database row.
 
 from copy import deepcopy
 
-WALKTHROUGH_VERSION = "1.0.0"
+WALKTHROUGH_VERSION = "1.1.0"
 WALK_COOKIE = "walk_step"
 WALK_QUERY = "walk"
 COOKIE_MAX_AGE = 12 * 60 * 60
@@ -54,6 +54,20 @@ _STEPS = (
         ),
         "endpoint": "try_demo.scenario",
         "view_args": {"scenario_id": "contract-clause-conflict"},
+    },
+    {
+        "step_id": "conflict",
+        "title": "Claim conflict",
+        "summary": "A permissions claim is conflicting, so the review escalates.",
+        "notice": (
+            "The permissions claim is conflicting: the vendor statement and an "
+            "internal export disagree. That is a claim conflict, so the residual "
+            "tier stays high and ESC-003 escalates the review. The previous stop's "
+            "clause conflict did not do that. A residual tier does not approve the "
+            "vendor."
+        ),
+        "endpoint": "try_demo.scenario",
+        "view_args": {"scenario_id": "conflicting-claims"},
     },
     {
         "step_id": "high-risk",
@@ -106,6 +120,25 @@ _STEPS = (
         "endpoint": "risks.detail",
         "view_args": {},
         "match": "endpoint",
+    },
+    {
+        "step_id": "import",
+        "title": "File import",
+        "summary": "A file is previewed before the engine runs. Confirm does not save.",
+        "notice": (
+            "Preview a sample file. The preview has no score, and ticket priority "
+            "does not set residual risk. Confirm runs the same engine and does not "
+            "save. Saving is a checkbox on the result. The disposition is separate "
+            "from the residual tier. ServiceNow is not called."
+        ),
+        "endpoint": "try_demo.import_form",
+        "endpoints": (
+            "try_demo.import_form",
+            "try_demo.import_preview",
+            "try_demo.import_confirm",
+            "try_demo.import_save",
+        ),
+        "view_args": {},
     },
     {
         "step_id": "dashboard",
@@ -177,7 +210,10 @@ def neighbors(step_id):
 
 def page_matches(step, endpoint, view_args):
     """Whether this request is the page the stop is coaching."""
-    if not endpoint or step["endpoint"] != endpoint:
+    if not endpoint:
+        return False
+    allowed = step.get("endpoints") or (step["endpoint"],)
+    if endpoint not in allowed:
         return False
     if step.get("match") == "endpoint":
         return True
