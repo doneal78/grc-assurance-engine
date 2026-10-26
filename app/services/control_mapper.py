@@ -73,6 +73,36 @@ def _validate(claims, mapping_set):
         raise MappingInputError(problems)
 
 
+def list_library(mapping_set=None):
+    """Return every mapping in the library for review, without matching claims.
+
+    Review status is copied from the mapping file. This function does not
+    promote a draft or unverified entry to reviewed.
+    """
+    mapping_set = mapping_set if mapping_set is not None else load_mappings()
+    _validate([], mapping_set)
+    problems = []
+    version = mapping_set.get("mapping_set_version")
+    if not isinstance(version, str) or not version.strip():
+        problems.append("mapping_set_version: must be a non-empty string")
+    source_note = mapping_set.get("source_note", "")
+    if not isinstance(source_note, str):
+        problems.append("source_note: must be a string")
+    if problems:
+        raise MappingInputError(problems)
+    mappings = []
+    for mapping in mapping_set["mappings"]:
+        record = dict(mapping)
+        record["claim_topics"] = list(mapping["claim_topics"])
+        record["mapping_set_version"] = version
+        mappings.append(record)
+    return {
+        "mapping_set_version": version,
+        "source_note": source_note,
+        "mappings": mappings,
+    }
+
+
 def map_claims(claims, mapping_set=None):
     """Return mappings matched by explicit claim topic, with trace links.
 

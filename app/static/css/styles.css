@@ -23,7 +23,8 @@ a { color:var(--accent); }
 .result-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,13rem),1fr)); gap:.8rem; }
 .result-card { background:var(--surface); } .result-card strong { font-size:1.45rem; } .result-card p:last-child { color:var(--muted); font-size:.88rem; }
 .tier,.status { display:inline-flex; padding:.22rem .55rem; border-radius:999px; font-size:.82rem!important; font-weight:700; background:var(--surface); }
-.tier-low,.status-verified { color:#14634d; background:#e2f5ec; } .tier-moderate,.status-self-attested,.status-expired,.status-not-reviewed { color:#875500; background:#fff2d2; } .tier-high,.tier-critical,.status-conflicting,.status-prohibited { color:#a23434; background:#fde8e8; } .tier-undetermined,.status-missing,.status-draft,.status-not-prohibited { color:var(--muted); background:var(--surface); }
+.tier-low,.status-verified,.status-reviewed { color:#14634d; background:#e2f5ec; } .tier-moderate,.status-self-attested,.status-expired,.status-not-reviewed { color:#875500; background:#fff2d2; } .tier-high,.tier-critical,.status-conflicting,.status-prohibited { color:#a23434; background:#fde8e8; } .tier-undetermined,.status-missing,.status-draft,.status-unverified,.status-not-prohibited { color:var(--muted); background:var(--surface); }
+.mapping-card .meta-list { grid-template-columns:11.5rem 1fr; }
 .content-section { margin:2.5rem 0; } .content-section h2 { margin-bottom:1rem; }
 .factor-list { list-style:none; padding:0; max-width:42rem; } .factor-list li { display:flex; justify-content:space-between; gap:1rem; padding:.6rem 0; border-bottom:1px solid var(--line); } .factor-list li span { min-width:0; overflow-wrap:anywhere; }
 .inline-warning { border-left:3px solid var(--warning); padding:.5rem .8rem; background:var(--warning-soft); }
@@ -45,7 +46,7 @@ code { background:var(--surface); padding:.1rem .25rem; border-radius:4px; overf
   .section-heading { align-items:flex-start; flex-direction:column; }
   .claim-heading { flex-direction:column; gap:.2rem; }
   .escalation-list > li { padding:1rem; }
-  .meta-list { grid-template-columns:1fr; gap:.15rem; } .meta-list dt { margin-top:.45rem; }
+  .meta-list, .mapping-card .meta-list { grid-template-columns:1fr; gap:.15rem; } .meta-list dt { margin-top:.45rem; }
   .result-card,.scenario-card,.claim-card,.mapping-card { min-width:0; padding:1rem; }
   .action-form { grid-template-columns:minmax(0,1fr); }
   .action-form label,.action-form input,.action-form select,.action-form textarea { min-width:0; width:100%; box-sizing:border-box; }

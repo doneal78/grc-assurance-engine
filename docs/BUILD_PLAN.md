@@ -1,6 +1,6 @@
 # GRC Assurance Engine — Build Plan
 
-**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Trust-center citations are pasted evidence, not a live fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow. Preview and confirm do not save. A person can then save one synthetic row with a disposition and rationale. A bot JSON contract and CLI run the same intake path. Assess alone does not save. `persist: true` with a human disposition does. The dashboard reports observed register counts and elapsed intake-to-disposition time, kept separate from the illustrative cost formula. Human handling time remains unmeasured. Multi-tenant policy storage is not implemented.
+**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Trust-center citations are pasted evidence, not a live fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow. Preview and confirm do not save. A person can then save one synthetic row with a disposition and rationale. A bot JSON contract and CLI run the same intake path. Assess alone does not save. `persist: true` with a human disposition does. The dashboard reports observed register counts and elapsed intake-to-disposition time, kept separate from the illustrative cost formula. Human handling time remains unmeasured. The control-mapping library is listed at `/mappings`. Those entries remain draft. ISO/IEC 27001 and ISO/IEC 42001 are not in the library. Multi-tenant policy storage is not implemented.
 **Project type:** GRC Engineering portfolio application  
 **Development approach:** Local-first, phased implementation, test-driven business logic  
 **Primary IDE:** Cursor  
@@ -268,7 +268,7 @@ Automated tests cover:
 
 ## 8. Phase 3 — Evidence Validation and Control Mapping
 
-**Status:** Evidence validation and the initial NIST mapping service are implemented. The mapping set is intentionally small and all applicability/rationale decisions remain draft. Mapping results are not connected to the web interface yet.
+**Status:** Evidence validation and the initial NIST mapping service are implemented. The mapping set is intentionally small and all applicability and rationale decisions remain draft. Matched prompts appear on assessment results. The full library is listed at `/mappings` with the stored review status, source reference, and mapping-set version. ISO/IEC 27001 and ISO/IEC 42001 are not in the library. The page does not mark draft mappings as reviewed and does not claim conformity, certification, or cross-framework equivalence.
 
 ### Objective
 
@@ -537,7 +537,7 @@ Do not monetize hypothetical avoided security incidents in the MVP.
 
 ## 12. Phase 7 — Dashboard and User Experience
 
-**Status:** Local demo landing, scenario detail, risk register, remediation, and methods pages are implemented for the synthetic fixtures. The public form, file import, and JSON/CLI intake assess a vendor. Saving that assessment is opt-in. The dashboard shows observed volume, open remediation, residual-tier and evidence-status distributions, persisted disposition counts, and elapsed intake-to-disposition cycle time from stored events. Human handling effort and rework time remain unmeasured, and the page says so. The illustrative cost panel stays separate.
+**Status:** Local demo landing, scenario detail, risk register, remediation, methods, and the control-mappings library page (`/mappings`) are implemented for the synthetic fixtures. The public form, file import, and JSON/CLI intake assess a vendor. Saving that assessment is opt-in. The dashboard shows observed volume, open remediation, residual-tier and evidence-status distributions, persisted disposition counts, and elapsed intake-to-disposition cycle time from stored events. Human handling effort and rework time remain unmeasured, and the page says so. The illustrative cost panel stays separate. ISO/IEC 27001 and ISO/IEC 42001 mappings are still absent, and every current mapping remains draft.
 
 ### Objective
 

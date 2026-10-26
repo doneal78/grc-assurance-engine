@@ -29,6 +29,7 @@
 {% endif %}
 
 <section class="content-section"><h2>Related control mapping prompts</h2>
-{% if scenario.mappings %}<div class="mapping-list">{% for mapping in scenario.mappings %}<article class="mapping-card"><div class="claim-heading"><h3>{{ mapping.control_id }} · {{ mapping.title }}</h3><span class="status status-draft">{{ mapping.review_status|title }}</span></div><p>{{ mapping.rationale }}</p><p class="muted">{{ mapping.framework }} {{ mapping.framework_version }} · Claim topics: {{ mapping.claim_topics|join(', ') }} · <a href="{{ mapping.source_reference }}" rel="noreferrer">NIST catalog source</a></p><p class="muted">Claims: {{ mapping.related_claims|map(attribute='claim_id')|join(', ') }} · Evidence: {% if mapping.related_evidence %}{{ mapping.related_evidence|map(attribute='evidence_id')|join(', ') }}{% else %}none linked{% endif %}</p></article>{% endfor %}</div>{% else %}<p>No mapping matched these claim topics.</p>{% endif %}
-<p class="muted">Draft mapping prompts do not establish implementation, conformity, or equivalence.</p>
+<p class="muted">Matched by exact claim topic from the mapping library. A match is a review prompt. It does not show that a control is implemented, that a vendor or organization conforms to a framework, or that frameworks are equivalent. The review status below is the status stored in the mapping set.</p>
+{% if scenario.mappings %}<div class="mapping-list">{% for mapping in scenario.mappings %}{% include "_mapping_card.html" %}{% endfor %}</div>{% else %}<p>No mapping matched these claim topics.</p>{% endif %}
+<p class="muted"><a href="{{ url_for('mappings.index') }}">Browse the mapping library</a></p>
 </section>

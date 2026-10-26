@@ -37,6 +37,7 @@ def test_required_auth_protects_pages_and_allows_health_check(tmp_path):
 
     assert client.get("/").status_code == 401
     assert client.get("/").headers["WWW-Authenticate"].startswith("Basic ")
+    assert client.get("/mappings").status_code == 401
     assert client.get("/health").status_code == 200
     assert client.get("/", auth=("demo", "wrong password")).status_code == 401
     assert client.get("/", auth=("demo", "correct horse battery staple")).status_code == 200
@@ -137,6 +138,78 @@ def test_remediation_form_validates_and_saves(client, app):
 
 def test_stylesheet_is_served(client):
     assert client.get("/static/css/styles.css").status_code == 200
+
+
+def test_mappings_page_lists_every_library_entry(client):
+    from app.services.control_mapper import list_library
+
+    library = list_library()
+    response = client.get("/mappings")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Control mappings" in body
+    assert 'href="/mappings"' in body
+    assert f"MAPPING SET {library['mapping_set_version']}" in body
+    assert library["source_note"] in body
+    assert "does not certify a vendor or an organization" in body
+    assert "does not treat one framework as equivalent to another" in body
+    assert "ISO/IEC 27001" in body and "ISO/IEC 42001" in body
+    assert "status-reviewed" not in body
+    assert body.count("status-draft") == len(library["mappings"])
+    for mapping in library["mappings"]:
+        assert mapping["control_id"] in body
+        assert mapping["title"] in body
+        assert mapping["framework"] in body
+        assert mapping["framework_version"] in body
+        assert mapping["applicability_note"] in body
+        assert mapping["rationale"] in body
+        assert f'href="{mapping["source_reference"]}"' in body
+        for topic in mapping["claim_topics"]:
+            assert topic in body
+    assert "Related claim topics" in body
+    assert "Review status" in body
+    assert "Mapping-set version" in body
+    assert "Framework version" in body
+
+
+def test_scenario_mapping_prompts_use_library_field_labels(client):
+    response = client.get("/demo/evidence-supported")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert "Related control mapping prompts" in body
+    assert "Related claim topics" in body
+    assert "Source reference" in body
+    assert "Review status" in body
+    assert "Mapping-set version" in body
+    assert "Applicability" in body
+    assert "status-draft" in body
+    assert "status-reviewed" not in body
+    assert "AC-6" in body
+    assert "https://csrc.nist.gov/Projects/risk-management/sp800-53-controls/downloads" in body
+    assert 'href="/mappings"' in body
+
+
+def test_saved_risk_mapping_prompts_use_the_same_labels(client):
+    response = client.post("/demo/evidence-supported/register", headers=SAME_ORIGIN)
+    assert response.status_code == 302
+    detail = client.get(response.headers["Location"])
+    assert detail.status_code == 200
+    body = detail.get_data(as_text=True)
+    assert "Related control mapping prompts" in body
+    assert "Related claim topics" in body
+    assert "Review status" in body
+    assert "status-draft" in body
+    assert "IA-2" in body
+    assert 'href="/mappings"' in body
+
+
+def test_methodology_page_links_to_the_mapping_library(client):
+    response = client.get("/methodology")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'href="/mappings"' in body
+    assert "mapping set 0.1.0" in body
+    assert "ISO/IEC 27001" in body
 
 
 def test_methodology_page_explains_cost_limits(client):
