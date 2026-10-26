@@ -14,6 +14,30 @@ def _connect(path):
     return connection
 
 
+def database_is_readable(path: str) -> bool:
+    """Return whether the SQLite file can be opened read-only and its catalog read.
+
+    A missing file is left uncreated. A constant query is not enough, because
+    SQLite can answer that without reading the file. Callers must not surface
+    the path, the SQL, or the driver error. This does not check integrity or
+    backups.
+    """
+    if not isinstance(path, str) or not path:
+        return False
+    try:
+        uri = f"{Path(path).expanduser().resolve().as_uri()}?mode=ro"
+        connection = sqlite3.connect(uri, uri=True)
+    except (OSError, sqlite3.Error, ValueError):
+        return False
+    try:
+        row = connection.execute("SELECT count(*) FROM sqlite_master").fetchone()
+    except sqlite3.Error:
+        return False
+    finally:
+        connection.close()
+    return row is not None and isinstance(row[0], int)
+
+
 def get_db():
     if "db" not in g:
         g.db = _connect(current_app.config["DATABASE"])

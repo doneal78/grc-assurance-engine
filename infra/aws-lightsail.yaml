@@ -11,6 +11,13 @@ Parameters:
     Type: String
     Default: grc-assurance-demo-key
     Description: Name of a Lightsail SSH key pair created separately in this region.
+  AppRevision:
+    Type: String
+    Description: Full 40-character commit SHA to install. Use a commit that contains this pinned bootstrap. Do not pass a branch name.
+    AllowedPattern: ^[0-9a-fA-F]{40}$
+    ConstraintDescription: Supply the full 40-character commit SHA.
+    MinLength: 40
+    MaxLength: 40
 
 Resources:
   DemoInstance:
@@ -47,12 +54,16 @@ Resources:
             AccessDirection: inbound
             AccessFrom: Anywhere (0.0.0.0/0)
             AccessType: Public
-      UserData: |
+      # A new stack passes AppRevision into the bootstrap. Changing user data
+      # on the existing instance can replace it. Update the running host
+      # with the manual runbook in docs/deployment.md instead.
+      UserData: !Sub |
         set -eu
         export DEBIAN_FRONTEND=noninteractive
+        export GRC_REVISION='${AppRevision}'
         apt-get update
         apt-get install -y ca-certificates curl
-        curl -fsSL https://raw.githubusercontent.com/doneal78/grc-assurance-engine/main/infra/lightsail-bootstrap.sh -o /tmp/grc-assurance-bootstrap.sh
+        curl -fsSL "https://raw.githubusercontent.com/doneal78/grc-assurance-engine/${!GRC_REVISION}/infra/lightsail-bootstrap.sh" -o /tmp/grc-assurance-bootstrap.sh
         bash /tmp/grc-assurance-bootstrap.sh
 
   DemoStaticIp:
