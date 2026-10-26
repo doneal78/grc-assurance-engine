@@ -14,6 +14,8 @@ The public form follows intake questionnaire 1.0.0. Model training is asked only
 
 `/try/import` reads a questionnaire CSV or `.xlsx` file, or a simulated ServiceNow JSON or CSV ticket file, then shows a preview before running the same intake path. The ServiceNow file is not a live connector. Imported rows are not saved. See [docs/import-formats.md](docs/import-formats.md). Reading `.xlsx` uses `openpyxl`. CSV and JSON stay in the Python standard library.
 
+A script can run that same intake without the browser. `python -m app.cli assess request.json` and `POST /api/v1/intake/assess` return the risk engine's residual tier, explanations, escalations, and rule-set version. The result is not saved. See [docs/bot-contract.md](docs/bot-contract.md).
+
 Phase 3 is implemented as framework-independent services. The evidence validator in `app/services/evidence_validator.py` derives claim evidence status using configurable freshness limits in `app/data/evidence_policy.json`. The control mapper in `app/services/control_mapper.py` joins explicitly tagged claims to a small NIST SP 800-53 mapping library in `app/data/control_mappings.json`; the mappings are draft pending human review. See `docs/evidence-model.md` and `docs/control-mapping-methodology.md`.
 
 The local web interface includes repeatable synthetic scenarios that run the same risk, evidence, policy, and mapping services and show explanations and trace links. One scenario is an eligibility tool whose score stays moderate while the policy outcome is prohibited. A scenario can be added to the local SQLite risk register with a follow-up action, a human decision, and workflow history. The dashboard includes a reproducible modeled labor-capacity example; it is not a measured saving. See `docs/BUILD_PLAN.md` for features that remain out of scope.
@@ -58,6 +60,20 @@ python -m pytest
 
 GitHub Actions runs this suite on Python 3.12 and 3.14 for every push and pull request.
 
+## Bot and script intake
+
+```bash
+python -m app.cli assess request.json
+python -m app.cli preview vendor-intake.csv --as-of 2026-10-14
+python -m app.cli assess-file servicenow-intake.json --as-of 2026-10-14
+```
+
+`assess` reads a JSON request from a file or from stdin (`-`). The request `form` uses the same fields as the public intake form. `preview` parses a CSV, `.xlsx`, or simulated ServiceNow file and does not score it. `assess-file` scores every row only when the whole file is valid.
+
+Exit 0 means an assessment was produced, or a preview can be assessed. Exit 2 means validation failed. Exit 1 means the engine raised an unexpected error. The JSON document is written to stdout.
+
+`GET /api/v1/intake/contract` lists the live fields. `POST /api/v1/intake/assess` with `Content-Type: application/json` runs one request. With `REQUIRE_AUTH` left false, which is the demo default, the routes do not ask for a password. They do not write to the risk register. The contract, examples, and limitations are in [docs/bot-contract.md](docs/bot-contract.md).
+
 ## Health check
 
 `GET /health` returns status 200 and `{"status": "ok", "service": "grc-assurance-engine"}` when the application is running. It does not check the database or any other dependency yet.
@@ -70,7 +86,7 @@ Runtime data belongs in the `instance/` folder, which Git ignores. The app initi
 
 ## Data and limitations
 
-Every provided record is synthetic. The org policy, the intake questionnaire, and the risk rules are illustrative. A trust-center URL in the demo is not retrieved, and a pasted citation is not a live assurance feed. A ServiceNow import file is a simulated ticket export. The application does not connect to ServiceNow, and it does not open attachment bytes. A prohibited outcome is not a legal determination, and an exception rationale does not clear it. A contract-clause status is an evidence result, not a legal conclusion that the clause is in force. The cost-of-assurance panel is modeled from labeled assumptions and does not report observed performance or actual cash savings. Workflow timestamps, including a decision timestamp, are not handling-time measurements. The decision log is not tamper-proof, and the decider's name is not authenticated. Mapping a requirement to a control does not prove compliance, and no part of this project claims certification, production readiness, or proven risk reduction. The hosted demo is open with no login and uses synthetic data only; it is not production-ready.
+Every provided record is synthetic. The org policy, the intake questionnaire, and the risk rules are illustrative. The JSON API and CLI are a portfolio contract for that same illustrative model. A response does not approve a vendor, and it does not record a human decision. A trust-center URL in the demo is not retrieved, and a pasted citation is not a live assurance feed. A ServiceNow import file is a simulated ticket export. The application does not connect to ServiceNow, and it does not open attachment bytes. A prohibited outcome is not a legal determination, and an exception rationale does not clear it. A contract-clause status is an evidence result, not a legal conclusion that the clause is in force. The cost-of-assurance panel is modeled from labeled assumptions and does not report observed performance or actual cash savings. Workflow timestamps, including a decision timestamp, are not handling-time measurements. The decision log is not tamper-proof, and the decider's name is not authenticated. Mapping a requirement to a control does not prove compliance, and no part of this project claims certification, production readiness, or proven risk reduction. The hosted demo is open with no login and uses synthetic data only; it is not production-ready.
 
 ## Hosted demo
 
