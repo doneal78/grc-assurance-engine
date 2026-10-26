@@ -3,6 +3,7 @@
 import io
 import os
 import shlex
+import shutil
 import subprocess
 import tarfile
 from pathlib import Path
@@ -177,23 +178,38 @@ def test_replace_app_tree_refuses_an_unexpected_path(tmp_path):
         f"{shlex.quote(str(app))} {shlex.quote(str(tarball))}"
     )
     assert result.returncode != 0
+    assert "name is not grc-assurance-engine" in result.stderr
     assert (app / "keep.py").read_text(encoding="utf-8") == "keep"
     assert not (app / "requirements.txt").exists()
 
-    outside = Path("/workspace/grc-assurance-engine")
-    outside.mkdir(exist_ok=True)
+    # Correct directory name, but the resolved path is outside the prefixes
+    # the script allows. The call site is a symlink under tmp_path. TMPDIR is
+    # narrowed so a checkout that lives under /tmp is still refused. This does
+    # not depend on a fixed host directory such as /workspace.
+    allowed = tmp_path / "allowed-temp"
+    allowed.mkdir()
+    fixture_root = ROOT / ".replace-refusal-fixture"
+    outside = fixture_root / "grc-assurance-engine"
+    fixture_root.mkdir()
+    outside.mkdir()
     marker = outside / "keep.py"
     marker.write_text("keep", encoding="utf-8")
+    link = tmp_path / "grc-assurance-engine"
+    link.symlink_to(outside, target_is_directory=True)
     try:
         refused = _source(
             "replace_app_tree "
-            f"{shlex.quote(str(outside))} {shlex.quote(str(tarball))}"
+            f"{shlex.quote(str(link))} {shlex.quote(str(tarball))}",
+            env={"TMPDIR": str(allowed)},
         )
         assert refused.returncode != 0
+        assert "outside" in refused.stderr.lower()
         assert marker.read_text(encoding="utf-8") == "keep"
+        assert not (outside / "requirements.txt").exists()
+        assert link.is_symlink()
     finally:
-        marker.unlink(missing_ok=True)
-        outside.rmdir()
+        if fixture_root.is_dir() and fixture_root.parent == ROOT and fixture_root.name == ".replace-refusal-fixture":
+            shutil.rmtree(fixture_root)
 
 
 def test_nginx_limits_api_like_try_and_leaves_the_site_limit():
