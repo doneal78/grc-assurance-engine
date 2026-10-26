@@ -119,6 +119,8 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     from app.routes.methodology import bp as methodology_bp
     from app.routes.risks import bp as risks_bp
     from app.routes.try_demo import bp as try_demo_bp
+    from app.routes.walkthrough import bp as walkthrough_bp
+    from app.routes.walkthrough import coach_for_request
 
     app.register_blueprint(api_bp)
     app.register_blueprint(dashboard_bp)
@@ -128,6 +130,31 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     app.register_blueprint(methodology_bp)
     app.register_blueprint(risks_bp)
     app.register_blueprint(try_demo_bp)
+    app.register_blueprint(walkthrough_bp)
+
+    @app.context_processor
+    def inject_walkthrough():
+        """Expose the coaching note only when the address asks for a known stop."""
+        return {"walkthrough": coach_for_request()}
+
+    @app.after_request
+    def remember_walkthrough_step(response):
+        """Remember the last stop this browser actually opened.
+
+        The cookie is a step id, not an account. A page that merely carries
+        an unknown or mismatched ``walk`` value does not move the marker.
+        """
+        from app.services.walkthrough import COOKIE_MAX_AGE, WALK_COOKIE, WALK_QUERY, progress_step_id
+
+        if request.method != "GET" or response.status_code != 200:
+            return response
+        step_id = progress_step_id(request.args.get(WALK_QUERY), request.endpoint, request.view_args)
+        if step_id:
+            response.set_cookie(
+                WALK_COOKIE, step_id, max_age=COOKIE_MAX_AGE,
+                httponly=True, samesite="Lax", path="/",
+            )
+        return response
 
     from app.db import init_app as init_db_app
     init_db_app(app)

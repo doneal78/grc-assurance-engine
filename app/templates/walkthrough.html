@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Walkthrough | GRC Assurance Engine{% endblock %}
+{% block content %}
+<p class="eyebrow">GUIDED DEMO · VERSION {{ version }} · SYNTHETIC DATA</p>
+<h1>Walk through one vendor review</h1>
+<p class="lead">Nine stops on the live pages, from intake to a saved decision and the export. The pages run the rules. This guide only tells you what to notice.</p>
+{% if current %}
+<p><a class="button-link" href="{{ current.href }}">{% if current.note %}{{ current.note }}{% else %}Continue · {{ current.title }}{% endif %}</a></p>
+{% else %}
+<p><a class="button-link" href="{{ steps[0].href }}">Start at intake</a></p>
+{% endif %}
+<ol class="walk-steps">
+{% for step in steps %}
+  <li{% if step.is_current %} class="is-current" aria-current="step"{% endif %}>
+    <h2><span class="walk-num">{{ loop.index }}</span> {{ step.title }}</h2>
+    <p>{{ step.summary }}</p>
+    {% if step.note %}<p class="muted">{{ step.note }}</p>{% endif %}
+    <p class="walk-open"><a href="{{ step.href }}">{% if step.is_current %}Continue{% else %}Open{% endif %}</a></p>
+  </li>
+{% endfor %}
+</ol>
+<section class="content-section">
+  <h2>Leave the path</h2>
+  <p>The header still opens the public demo, the scenario list, the register, and methods on their own. A <code>?walk=</code> address is what shows the notes. Without it, those pages stay as they are.</p>
+  <form method="post" action="{{ url_for('walkthrough.reset') }}">
+    <button class="button-quiet" type="submit">Start over</button>
+  </form>
+  <p class="muted">Start over clears the guide cookie in this browser. The cookie stores the last stop for 12 hours. It is not an account, and it is not the risk register. The conflicting-permissions scenario stays on Demo scenarios and is not a stop here. Nothing on this page scores, saves, or approves a vendor.</p>
+</section>
+{% endblock %}

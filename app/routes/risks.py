@@ -4,6 +4,7 @@ from flask import Blueprint, Response, abort, redirect, render_template, request
 
 from app.db import get_db
 from app.services.intake_export import package_from_saved_risk, render_export
+from app.services.walkthrough import carried_walk_step
 from app.services.workflow_service import (
     DISPOSITIONS, WorkflowInputError, get_risk, list_risks, record_decision, update_action,
 )
@@ -49,7 +50,7 @@ def update_remediation(action_id):
         abort(404)
     if not risk_id:
         abort(400)
-    return redirect(url_for("risks.detail", risk_id=risk_id))
+    return _redirect_keeping_walk("risks.detail", risk_id=risk_id)
 
 
 @bp.post("/risks/<risk_id>/decision")
@@ -64,4 +65,12 @@ def record_risk_decision(risk_id):
         return render_template("workflow_error.html", error=str(exc)), 400
     if saved is None:
         abort(404)
-    return redirect(url_for("risks.detail", risk_id=saved))
+    return _redirect_keeping_walk("risks.detail", risk_id=saved)
+
+
+def _redirect_keeping_walk(endpoint, **values):
+    """Keep a known guide stop on the redirect. Drop anything else."""
+    step = carried_walk_step(request.args.get("walk"))
+    if step:
+        values["walk"] = step
+    return redirect(url_for(endpoint, **values))

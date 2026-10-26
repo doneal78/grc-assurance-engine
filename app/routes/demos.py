@@ -1,10 +1,11 @@
 """Routes for repeatable, synthetic scenario demonstrations."""
 
-from flask import Blueprint, abort, redirect, render_template, url_for
+from flask import Blueprint, abort, redirect, render_template, request, url_for
 
 from app.db import get_db
-from app.services.workflow_service import register_scenario, risk_for_scenario
 from app.services.scenario_runner import ScenarioNotFoundError, list_scenarios, run_scenario
+from app.services.walkthrough import carried_walk_step
+from app.services.workflow_service import register_scenario, risk_for_scenario
 
 bp = Blueprint("demos", __name__, url_prefix="/demo")
 
@@ -31,4 +32,8 @@ def add_to_risk_register(scenario_id):
     except ScenarioNotFoundError:
         abort(404)
     risk_id = register_scenario(get_db(), result)
-    return redirect(url_for("risks.detail", risk_id=risk_id))
+    values = {"risk_id": risk_id}
+    step = carried_walk_step(request.args.get("walk"), advance_from="save")
+    if step:
+        values["walk"] = step
+    return redirect(url_for("risks.detail", **values))

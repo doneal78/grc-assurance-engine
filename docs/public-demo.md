@@ -43,6 +43,8 @@ Model training is omitted from the posted form when AI use is none and the field
 
 Built and live: public intake and assessment pages, and Nginx rate limiting on `/try/` and the rest of the site. The questionnaire does not save. File import is in the application at `/try/import`. It is a simulated upload, not a ServiceNow connection. Confirm does not save. A checked save on the result page writes one synthetic vendor. The hosted site shows this revision after it is deployed.
 
+`/walkthrough` is a guided path through the public scenarios and then the demo register, the dashboard, and methods. The intake and scenario stops are under `/try/` and use that rate limit. Later stops use the ordinary page limit. The guide adds a `walk` query and a coaching note. It does not add a second scoring path. A fetch is still optional and is still not verified evidence. The free-form `/try/` form stays on the page.
+
 The signed-in password gate was later removed, so the full demo, including the shared synthetic risk register, is also open. A private per-visitor sandbox register remains a possible future improvement.
 
 ## Guardrails
