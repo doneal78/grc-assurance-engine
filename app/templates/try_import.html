@@ -22,7 +22,7 @@
 {% if preview and preview.problems %}
 <div class="inline-warning" role="alert"><strong>This file was not imported.</strong><ul>{% for problem in preview.problems %}<li>{{ problem }}</li>{% endfor %}</ul></div>
 {% endif %}
-<form class="action-form intake-form" method="post" action="{{ url_for('try_demo.import_preview', walk=walkthrough.step_id) if walkthrough and walkthrough.on_page else url_for('try_demo.import_preview') }}" enctype="multipart/form-data">
+<form class="action-form intake-form" method="post" action="{{ url_for('try_demo.import_preview', walk=walkthrough.step_id) if walkthrough else url_for('try_demo.import_preview') }}" enctype="multipart/form-data">
   <label class="wide">Intake file
     <input class="import-file" type="file" name="intake_file" accept=".csv,.xlsx,.json" required>
     <span class="muted">.csv, .xlsx, or .json. Up to 256 KB. At most 20 vendor rows. UTF-8 for text files.</span>
@@ -66,7 +66,7 @@
 </article>
 {% endfor %}
 {% if accepted %}
-<form method="post" action="{{ url_for('try_demo.import_confirm', walk=walkthrough.step_id) if walkthrough and walkthrough.on_page else url_for('try_demo.import_confirm') }}">
+<form method="post" action="{{ url_for('try_demo.import_confirm', walk=walkthrough.step_id) if walkthrough else url_for('try_demo.import_confirm') }}">
   <textarea name="confirmation" hidden readonly>{{ confirmation|tojson }}</textarea>
   <button class="button-link" type="submit">Assess these vendors</button>
 </form>

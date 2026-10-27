@@ -5,15 +5,17 @@ not score, validate evidence, map controls, or decide a disposition. Those
 results stay in the existing services. Progress is a step id in a browser
 cookie, not a database row.
 
-Intake, custom vendor, and trust center share the public form. Those stops
-set ``await_submission``. Next stays off until the current response is a
-successful assessment for that same stop. The cookie does not store the
-submission, so a later visit to the form holds Next again.
+Stops that set ``await_submission`` withhold Next until that stop's action
+has succeeded. Intake, custom vendor, trust center, and file import succeed
+only when the current response is a successful assessment. The cookie does
+not store that assessment, so a later visit to the form holds Next again.
+The save stop succeeds when the eligibility case is already in the register.
+The decision stop succeeds when that saved risk has a recorded decision.
 """
 
 from copy import deepcopy
 
-WALKTHROUGH_VERSION = "1.2.1"
+WALKTHROUGH_VERSION = "1.2.2"
 WALK_COOKIE = "walk_step"
 WALK_QUERY = "walk"
 COOKIE_MAX_AGE = 12 * 60 * 60
@@ -38,6 +40,8 @@ _STEPS = (
         "endpoints": ("try_demo.index", "try_demo.assess"),
         "view_args": {},
         "await_submission": True,
+        "await_kind": "assessment",
+        "pending_notice": "Run assessment on this page before Next.",
     },
     {
         "step_id": "custom",
@@ -54,6 +58,8 @@ _STEPS = (
         "view_args": {},
         "anchor": "intake",
         "await_submission": True,
+        "await_kind": "assessment",
+        "pending_notice": "Run assessment on this page before Next.",
     },
     {
         "step_id": "trust",
@@ -71,6 +77,8 @@ _STEPS = (
         "view_args": {},
         "anchor": "trust-center",
         "await_submission": True,
+        "await_kind": "assessment",
+        "pending_notice": "Run assessment on this page before Next.",
     },
     {
         "step_id": "evidence",
@@ -149,6 +157,9 @@ _STEPS = (
         ),
         "endpoint": "demos.detail",
         "view_args": {"scenario_id": "prohibited-ai-decisions"},
+        "await_submission": True,
+        "await_kind": "register",
+        "pending_notice": "Add to risk register continues the guide on the saved record.",
     },
     {
         "step_id": "decide",
@@ -161,8 +172,12 @@ _STEPS = (
             "to ServiceNow."
         ),
         "endpoint": "risks.detail",
+        "endpoints": ("risks.detail", "risks.record_risk_decision"),
         "view_args": {},
         "match": "endpoint",
+        "await_submission": True,
+        "await_kind": "decision",
+        "pending_notice": "Record a decision on this page before Next.",
     },
     {
         "step_id": "import",
@@ -182,6 +197,9 @@ _STEPS = (
             "try_demo.import_save",
         ),
         "view_args": {},
+        "await_submission": True,
+        "await_kind": "assessment",
+        "pending_notice": "Confirm the file on this page before Next.",
     },
     {
         "step_id": "dashboard",
@@ -264,17 +282,74 @@ def page_matches(step, endpoint, view_args):
     return all(view_args.get(key) == value for key, value in step["view_args"].items())
 
 
+def submission_satisfied(step, *, assessed=False, saved=False, decided=False):
+    """Whether an ``await_submission`` stop has succeeded for this response.
+
+    ``assessment`` is the current response only: a successful public
+    assessment or a confirmed file import. A validation error leaves it
+    false. The cookie does not store it.
+
+    ``register`` is true when the eligibility case is already in the
+    register. ``decision`` is true when that saved risk has a recorded
+    decision. Stops that do not wait are never satisfied by this check.
+    """
+    if not step.get("await_submission"):
+        return False
+    kind = step.get("await_kind", "assessment")
+    if kind == "assessment":
+        return bool(assessed)
+    if kind == "register":
+        return bool(saved)
+    if kind == "decision":
+        return bool(decided)
+    return False
+
+
 def submission_pending(step, submission_complete):
     """Whether this stop must withhold Next.
 
     A stop marked ``await_submission`` is complete only when
-    ``submission_complete`` is true. That flag means the current response
-    is a successful public assessment, not the form and not a validation
-    error. Other stops are never pending. Completion is not stored.
+    ``submission_complete`` is true. ``submission_satisfied`` is how a
+    caller decides that flag. Other stops are never pending.
     """
     if not step.get("await_submission"):
         return False
     return not submission_complete
+
+
+def scenario_stop_id(scenario_id, surface_endpoint):
+    """Return the guide stop for a ready-made scenario on one surface.
+
+    The eligibility case on the demo surface is the save stop. Each public
+    scenario is that scenario's try-page stop. None when the guide has no
+    stop for the scenario.
+    """
+    if not isinstance(scenario_id, str):
+        return None
+    fallback = None
+    for source in _STEPS:
+        if source["view_args"].get("scenario_id") != scenario_id:
+            continue
+        if source["endpoint"] == surface_endpoint:
+            return source["step_id"]
+        if source["endpoint"] == "try_demo.scenario":
+            fallback = source["step_id"]
+    return fallback
+
+
+def scenario_card_step(scenario_id, surface_endpoint, active_walk, on_active_page):
+    """Walk query for one ready-made card, or None on a free-form page.
+
+    A stop that is waiting on its own page keeps that id, so opening the
+    card does not advance Next. Any other known stop uses the guide stop
+    for this scenario. Unknown walk values stay coach-free.
+    """
+    if known_step_id(active_walk) is None:
+        return None
+    active = step_by_id(active_walk)
+    if on_active_page and active.get("await_submission"):
+        return active["step_id"]
+    return scenario_stop_id(scenario_id, surface_endpoint)
 
 
 def carried_walk_step(raw, *, advance_from=None):

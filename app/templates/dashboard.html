@@ -21,7 +21,7 @@
 {% for scenario in scenarios %}
   <article class="scenario-card">
     <p class="eyebrow">SYNTHETIC EXAMPLE</p>
-    <h3><a href="{{ url_for('demos.detail', scenario_id=scenario.scenario_id) }}">{{ scenario.name }}</a></h3>
+    <h3><a href="{{ scenario_card_href(scenario.scenario_id, 'demos.detail') }}">{{ scenario.name }}</a></h3>
     <p>{{ scenario.summary }}</p>
   </article>
 {% endfor %}

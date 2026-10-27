@@ -206,6 +206,10 @@ def import_confirm():
 
 
 def _import_result(imported, document, save_error=None, status=200):
+    # Confirm has already run the engine. A later save error is still that
+    # assessment, so a guided import stop can offer Next. The upload form
+    # and a rejected preview leave the flag unset.
+    setattr(g, SUBMISSION_COMPLETE_ATTR, True)
     return render_template(
         "try_import_result.html",
         imported=imported,

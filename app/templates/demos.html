@@ -8,9 +8,9 @@
 {% for scenario in scenarios %}
   <article class="scenario-card">
     <p class="eyebrow">SYNTHETIC DATA</p>
-    <h2><a href="{{ url_for('demos.detail', scenario_id=scenario.scenario_id) }}">{{ scenario.name }}</a></h2>
+    <h2><a href="{{ scenario_card_href(scenario.scenario_id, 'demos.detail') }}">{{ scenario.name }}</a></h2>
     <p>{{ scenario.summary }}</p>
-    <a class="text-link" href="{{ url_for('demos.detail', scenario_id=scenario.scenario_id) }}">Run scenario →</a>
+    <a class="text-link" href="{{ scenario_card_href(scenario.scenario_id, 'demos.detail') }}">Run scenario →</a>
   </article>
 {% endfor %}
 </div>

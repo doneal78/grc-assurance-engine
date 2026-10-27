@@ -62,7 +62,13 @@ def record_risk_decision(risk_id):
             request.form.get("conditions", ""), request.form.get("exception_rationale", ""),
         )
     except WorkflowInputError as exc:
-        return render_template("workflow_error.html", error=str(exc)), 400
+        risk = get_risk(get_db(), risk_id)
+        if risk is None:
+            abort(404)
+        get_db().rollback()
+        return render_template(
+            "risk_detail.html", risk=risk, dispositions=DISPOSITIONS, decision_error=str(exc),
+        ), 400
     if saved is None:
         abort(404)
     return _redirect_keeping_walk("risks.detail", risk_id=saved)

@@ -12,9 +12,9 @@
 {% for item in scenarios %}
   <article class="scenario-card">
     <p class="eyebrow">SYNTHETIC VENDOR</p>
-    <h3><a href="{{ url_for('try_demo.scenario', scenario_id=item.scenario_id) }}">{{ item.name }}</a></h3>
+    <h3><a href="{{ scenario_card_href(item.scenario_id, 'try_demo.scenario') }}">{{ item.name }}</a></h3>
     <p>{{ item.summary }}</p>
-    <a class="text-link" href="{{ url_for('try_demo.scenario', scenario_id=item.scenario_id) }}">Run this review</a>
+    <a class="text-link" href="{{ scenario_card_href(item.scenario_id, 'try_demo.scenario') }}">Run this review</a>
   </article>
 {% endfor %}
 </div>
@@ -28,7 +28,7 @@
 {% endif %}
 <section class="content-section" id="intake">
 <h2>Or describe your own</h2>
-<p>You can also <a href="{{ url_for('try_demo.import_form') }}">import a questionnaire file or a simulated ServiceNow ticket</a>. The file is previewed before it is assessed, and nothing is saved.</p>
+<p>You can also <a href="{{ import_page_href() }}">import a questionnaire file or a simulated ServiceNow ticket</a>. The file is previewed before it is assessed, and nothing is saved.</p>
 <p>The questions follow the rule set. Model training is asked only when AI use is not none, because that answer is not scored otherwise. The decisions question stays on every intake.</p>
 {% if problems %}<div class="inline-warning" role="alert"><strong>Please fix these fields:</strong><ul>{% for problem in problems %}<li>{{ problem }}</li>{% endfor %}</ul></div>{% endif %}
 <form class="action-form intake-form" method="post" action="{{ url_for('try_demo.assess', walk=walkthrough.step_id) if walkthrough and walkthrough.on_page else url_for('try_demo.assess') }}">
