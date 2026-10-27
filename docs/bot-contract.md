@@ -78,7 +78,10 @@ A browser request whose `Origin` or `Referer` host does not match the site is re
     "trust_soc2": "independent_verified",
     "trust_security": "independent_verified",
     "trust_privacy": "independent_verified",
-    "evidence_clause_CC-001": "independent_verified"
+    "evidence_clause_CC-001": "independent_verified",
+    "vendor_direction": "stable",
+    "residual_direction": "unchanged",
+    "direction_note": "Synthetic context: same scope as the last review. Not a score."
   }
 }
 ```
@@ -88,6 +91,8 @@ A browser request whose `Origin` or `Referer` host does not match the site is re
 Form keys are the public intake fields. Values are text. Numbers and booleans are rejected rather than turned into text, matching the file importer. Allowed values are the rule set and the org policy. `model_training_on_customer_data` may be omitted when `ai_use` is `none`, because the public form does not submit that disabled field. `fetch_trust_center` may be omitted, and that means do not fetch. Any other omitted field is a validation error. An empty `vendor_name` is a validation error.
 
 `trust_center_url` may be an empty string. `fetch_trust_center` is optional. Omitted and `no` store the URL and do not fetch it. `yes` performs one HTTP GET of that URL. The response is vendor-published material for human review. The evidence status on a successful fetch is `not_reviewed`. It is not a scored claim, it is not `verified`, and it does not approve the vendor. An HTTP error or a timeout is `fetch.outcome` `failed` and evidence status `missing`. A private, link-local, or metadata target is rejected and nothing is fetched. File import does not include this field and does not fetch.
+
+`vendor_direction`, `residual_direction`, and `direction_note` are optional. Omitted and blank both mean not provided. They are context for a person. They are not scored. They do not change inherent risk, residual risk, evidence confidence, escalations, the policy outcome, dispositions, or control mappings. Allowed direction values are on `GET /api/v1/intake/contract` under `direction_context`. `unknown` means the requester does not know the direction. It is not a missing scoring answer. The note is one line of text, 300 characters or fewer. A line break is rejected. File import uses the same three names, and a ServiceNow-shaped file uses the `u_` prefix. Those columns may be omitted.
 
 Sending `residual_tier` or any other extra field fails validation. The response tier comes from the risk engine after a valid form is accepted.
 
@@ -123,6 +128,7 @@ An invalid disposition is rejected before a risk row is written. Approving a pro
 | `required_contract_clauses` | clause id, title, text, evidence status, and status reason |
 | `claims` | claim id, topic, statement, evidence status, status reason, and evidence-record status |
 | `mappings` | mapper id, framework, control, rationale, and `review_status` |
+| `direction_context` | Optional intake context copied from the form. `scored` is false. `provided` is false only when the result has no direction section to copy. Values and the note do not change `residual` |
 
 `persisted` is false unless this request saved the vendor. `risk_id` and `decision` are null when nothing was saved. When a save succeeds, `risk_id` is the register id and `decision` copies the stored disposition, rationale, decider, policy reference, rule set version, and `prohibited_at_decision`. `decision.separate_from_score` is true. The residual tier is not copied into the disposition. `human_review_required` is true. `automatic_approval` is null. `synthetic_data` is taken from the intake result. `trust_center.fetched` is copied from that result. It is false when fetch was not requested or did not succeed. `trust_center.fetch` copies the outcome, timestamp, summary, excerpt, error, and evidence status from the same result.
 

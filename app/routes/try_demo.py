@@ -18,11 +18,11 @@ from app.services.intake_builder import (
 )
 from app.services.intake_export import build_package, render_export, render_markdown
 from app.services.intake_importer import (
-    FORMAT_LABELS, ImportRejected, assess_import, can_import, column_guide,
-    confirmation_document, parse_upload, sample_file,
+    FORMAT_LABELS, ImportRejected, assess_import, can_import, confirmation_document,
+    import_column_guide, parse_upload, sample_file,
 )
 from app.services.intake_questionnaire import load_questionnaire
-from app.services.intake_replay import query_form
+from app.services.intake_replay import intake_field_names, query_form
 from app.services.org_policy import load_org_policy
 from app.services.scenario_runner import ScenarioNotFoundError, list_scenarios, run_scenario
 from app.services.walkthrough import SUBMISSION_COMPLETE_ATTR, carried_walk_step
@@ -51,6 +51,7 @@ def _form_context(form=None, problems=None):
             "access_evidence": questionnaire["access_evidence"],
             "trust_center": questionnaire["trust_center"],
             "policy_question_help": questionnaire["policy_question_help"],
+            "direction_context": questionnaire["direction_context"],
             "policy_fields": policy["intake_fields"],
             "contract_clauses": policy["required_contract_clauses"],
             "clause_evidence_options": CLAUSE_EVIDENCE_OPTIONS,
@@ -60,16 +61,7 @@ def _form_context(form=None, problems=None):
 
 def _posted_fields(form):
     """Replay only the intake fields, so a download cannot echo unrelated input."""
-    questionnaire = load_questionnaire()
-    policy = load_org_policy()
-    keys = ["vendor_name", questionnaire["trust_center"]["url_field"],
-            questionnaire["trust_center"]["fetch_field"],
-            questionnaire["access_evidence"]["field"]]
-    keys.extend(spec["field"] for spec in questionnaire["context_questions"])
-    keys.extend(spec["field"] for spec in policy["intake_fields"])
-    keys.extend(pointer["field"] for pointer in questionnaire["trust_center"]["pointers"])
-    keys.extend(clause_evidence_field(clause["clause_id"]) for clause in policy["required_contract_clauses"])
-    return {key: form.get(key, "") for key in keys}
+    return {key: form.get(key, "") for key in intake_field_names()}
 
 
 def _attachment(package, export_format):
@@ -147,7 +139,7 @@ def _import_page(preview=None, status=200):
     confirmation = confirmation_document(preview) if accepted else None
     return render_template(
         "try_import.html",
-        columns=column_guide(),
+        columns=import_column_guide(),
         preview=preview,
         accepted=accepted,
         confirmation=confirmation,

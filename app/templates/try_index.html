@@ -50,6 +50,20 @@
   {% endif %}
   {% if spec.ask == 'when_ai_use_is_not_none' %}</div>{% endif %}
   {% endfor %}
+  <fieldset class="evidence-fieldset" id="direction-context">
+    <legend>{{ direction_context.label }}</legend>
+    <p class="muted wide">{{ direction_context.note }}</p>
+    {% for spec in direction_context.fields %}
+    <label class="wide">{{ spec.prompt }}
+      <select name="{{ spec.field }}">{% for value, text in spec.options.items() %}<option value="{{ value }}"{% if form.get(spec.field, '') == value %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>
+      <span class="muted">{{ spec.help }}</span>
+    </label>
+    {% endfor %}
+    <label class="wide">{{ direction_context.note_prompt }}
+      <textarea name="{{ direction_context.note_field }}" maxlength="{{ direction_context.note_max_length }}" rows="3">{{ form.get(direction_context.note_field, '') }}</textarea>
+      <span class="muted">{{ direction_context.note_help }}</span>
+    </label>
+  </fieldset>
   <fieldset class="evidence-fieldset">
     <legend>{{ access_evidence.prompt }}</legend>
     <label class="wide">{{ access_evidence.statement }}

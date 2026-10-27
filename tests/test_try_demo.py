@@ -250,7 +250,7 @@ def test_soc_citation_is_auditor_evidence_and_the_url_is_not_on_other_records():
     assert "trust_center_url" not in access["evidence"][0]
     assert "trust_center_url" not in clause["evidence"][0]
     assert result["trust_center"]["fetched"] is False
-    assert result["questionnaire_version"] == "1.0.0"
+    assert result["questionnaire_version"] == "1.1.0"
     detail = next(event["detail"] for event in workflow_events(result) if event["title"] == "Evidence validated")
     assert "not fetched" in detail
 
@@ -314,7 +314,7 @@ def test_public_download_is_the_same_result_and_saves_nothing(gated_client):
     assert package["trust_center"]["url"] == "https://trust.example.test/northwind"
     assert package["source"] == "public_intake"
     assert package["decision"] is None
-    assert package["versions"]["questionnaire"] == "1.0.0"
+    assert package["versions"]["questionnaire"] == "1.1.0"
     login = {"Authorization": "Basic " + base64.b64encode(b"demo:pw").decode()}
     assert b"Northwind Notes" not in gated_client.get("/risks", headers=login).data
 

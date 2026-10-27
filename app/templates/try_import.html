@@ -35,7 +35,7 @@
 <section class="content-section">
 <h2>Preview</h2>
 <p>{{ preview.rows|length }} vendor row{% if preview.rows|length != 1 %}s{% endif %} in {{ preview.filename }} ({{ format_labels.get(preview.format, preview.format) }}).{% if preview.blank_rows_skipped %} {{ preview.blank_rows_skipped }} blank row{% if preview.blank_rows_skipped != 1 %}s{% endif %} skipped.{% endif %}</p>
-<p class="muted">No score is shown here. Ticket priority, state, and assignment group are context only. They do not set residual risk.</p>
+<p class="muted">No score is shown here. Ticket priority, state, and assignment group are context only. vendor_direction, residual_direction, and direction_note are intake context. They do not set residual risk.</p>
 {% for row in preview.rows %}
 <article class="claim-card">
   <div class="claim-heading"><h3>Row {{ row.row_number }} · {{ row.vendor_name or "No vendor name" }}</h3>
@@ -81,7 +81,7 @@
 
 <section class="content-section">
 <h2>Questionnaire columns</h2>
-<p>CSV and the first worksheet of an .xlsx file use these names. Order does not matter. Values are case-sensitive. Surrounding spaces are removed. Numbers, dates, and formulas are rejected rather than converted. A blank model-training cell is accepted only when AI use is none.</p>
+<p>CSV and the first worksheet of an .xlsx file use these names. Order does not matter. Values are case-sensitive. Surrounding spaces are removed. Numbers, dates, and formulas are rejected rather than converted. A blank model-training cell is accepted only when AI use is none. <code>vendor_direction</code>, <code>residual_direction</code>, and <code>direction_note</code> may be omitted. They are context for a reviewer and are not scored. A file that leaves them out is still accepted.</p>
 <div class="table-wrap"><table>
   <thead><tr><th>Column</th><th>Accepted values</th></tr></thead>
   <tbody>{% for column in columns %}<tr><td><code>{{ column.column }}</code></td><td>{{ column.accepted }}</td></tr>{% endfor %}</tbody>
@@ -91,7 +91,7 @@
 <section class="content-section">
 <h2>Simulated ServiceNow file</h2>
 <p>The JSON object sets <code>import_kind</code> to <code>servicenow_vendor_intake</code> and <code>simulation</code> to true, and includes a note that the file was not retrieved from ServiceNow. <code>result</code> is a list of tickets. <code>number</code>, <code>category</code> (<code>vendor_risk</code>), and <code>attachments</code> are required. Assessment answers and the trust-center URL use a <code>u_</code> prefix, for example <code>u_vendor_name</code> and <code>u_data_sensitivity</code>. Evidence choices are attachment metadata: <code>u_intake_field</code> names the questionnaire evidence column and <code>u_evidence_option</code> is one of the six evidence keys. The CSV form flattens those evidence choices into <code>u_</code> columns on the ticket row.</p>
-<p><code>state</code>, <code>priority</code>, <code>assignment_group</code>, <code>opened_at</code>, <code>short_description</code>, <code>description</code>, and <code>sys_id</code> are shown on the preview and are not scored. <code>opened_at</code> does not change the evaluation date. Two rows for the same vendor are a conflict, including two attachments that give different options for one field. The extra row is reported and is not dropped.</p>
+<p><code>state</code>, <code>priority</code>, <code>assignment_group</code>, <code>opened_at</code>, <code>short_description</code>, <code>description</code>, and <code>sys_id</code> are shown on the preview and are not scored. <code>u_vendor_direction</code>, <code>u_residual_direction</code>, and <code>u_direction_note</code> are optional ticket fields. They are the same reviewer context as the questionnaire columns and are not scored. <code>opened_at</code> does not change the evaluation date. Two rows for the same vendor are a conflict, including two attachments that give different options for one field. The extra row is reported and is not dropped.</p>
 <p class="muted">Full field list and limitations: <code>docs/import-formats.md</code>.</p>
 </section>
 {% endblock %}

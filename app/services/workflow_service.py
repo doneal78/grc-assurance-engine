@@ -75,6 +75,7 @@ def _stored_rationale(result):
         "scenario_set_version": result.get("scenario_set_version"),
         "assessment_inputs": result.get("assessment_inputs"),
         "answer_applicability": result.get("answer_applicability") or {},
+        "direction_context": result.get("direction_context"),
         "evidence_policy_version": result.get("evidence_policy_version"),
         "as_of": result.get("as_of"),
         "trust_center": result.get("trust_center"),

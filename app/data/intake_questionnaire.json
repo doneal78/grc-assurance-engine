@@ -1,7 +1,7 @@
 {
-  "questionnaire_version": "1.0.0",
+  "questionnaire_version": "1.1.0",
   "status": "illustrative",
-  "description": "Public intake questions for this portfolio prototype. Allowed values still come from the risk rule set and the org policy. This file holds the prompts, when a question is asked, and how a trust-center citation becomes evidence. It does not score anything. A trust-center URL can be stored as a citation. Choosing fetch performs one HTTP GET and stores the page for review. That fetch is not verified evidence.",
+  "description": "Public intake questions for this portfolio prototype. Allowed values still come from the risk rule set and the org policy. This file holds the prompts, when a question is asked, and how a trust-center citation becomes evidence. It does not score anything. A trust-center URL can be stored as a citation. Choosing fetch performs one HTTP GET and stores the page for review. That fetch is not verified evidence. Direction context is optional intake for a person to read beside the residual tier. It is not a score, and questionnaire 1.1.0 does not change the residual formula.",
   "policy_question_help": "Asked on every intake, including when AI use is none. Yes matches HR-001 either way. Unknown is not treated as no and opens ESC-009. The score does not change.",
   "context_questions": [
     {
@@ -141,6 +141,43 @@
             "statement": "The cited privacy notice describes how customer data is collected, used, and retained."
           }
         ]
+      }
+    ]
+  },
+  "direction_context": {
+    "label": "Reviewer context · not scored",
+    "scored": false,
+    "note": "These answers sit beside the residual tier for a person to read when deciding. They are not scored. They do not change inherent risk, residual risk, evidence confidence, escalations, the policy outcome, dispositions, or control mappings. A stated direction is not a verified trend and it is not a safeguard. The residual formula is unchanged.",
+    "note_field": "direction_note",
+    "note_prompt": "What should a reviewer know about that direction?",
+    "note_help": "Optional. Context only. Not scored. One line, 300 characters or fewer. Use synthetic detail. A note does not change the residual tier.",
+    "note_max_length": 300,
+    "fields": [
+      {
+        "field": "vendor_direction",
+        "prompt": "How is this vendor relationship moving?",
+        "help": "Context only. Not scored. This is the requester's statement about the engagement. Unknown here means the requester does not know the direction. It is not a missing scoring answer, it does not make the result provisional, and it does not lower residual risk.",
+        "options": {
+          "": "Not provided",
+          "new": "New engagement",
+          "expanding": "Expanding scope",
+          "stable": "Stable scope",
+          "reducing": "Reducing scope",
+          "exiting": "Winding down",
+          "unknown": "Requester does not know"
+        }
+      },
+      {
+        "field": "residual_direction",
+        "prompt": "Which way does the requester expect residual exposure to move?",
+        "help": "Context only. Not scored. This is not the calculated residual tier. Improving, unchanged, worsening, or unknown does not raise or lower that tier. Unknown here is not a missing scoring answer.",
+        "options": {
+          "": "Not provided",
+          "improving": "Expected to fall",
+          "unchanged": "Expected to stay",
+          "worsening": "Expected to rise",
+          "unknown": "Requester does not know"
+        }
       }
     ]
   }

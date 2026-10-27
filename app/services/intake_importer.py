@@ -17,7 +17,7 @@ from datetime import date, datetime, time
 from pathlib import Path
 
 from app.services.intake_builder import (
-    IntakeError, build_intake, clause_evidence_field, field_choices, run_intake,
+    IntakeError, build_intake, clause_evidence_field, direction_column_names, field_choices, run_intake,
 )
 from app.services.intake_questionnaire import load_questionnaire
 from app.services.org_policy import load_org_policy
@@ -114,6 +114,35 @@ def column_guide():
     return guide
 
 
+def direction_column_guide():
+    """Optional columns. They are shown to a reviewer and are not scored."""
+    questionnaire = load_questionnaire()
+    spec = questionnaire["direction_context"]
+    guide = []
+    for item in spec["fields"]:
+        names = ", ".join(key for key in item["options"] if key)
+        guide.append({
+            "column": item["field"],
+            "accepted": f"Optional. Context only. Not scored. Blank, or {names}.",
+            "optional": True,
+            "scored": False,
+        })
+    guide.append({
+        "column": spec["note_field"],
+        "accepted": (
+            f"Optional. Context only. Not scored. Blank, or one line of text up to {spec['note_max_length']} characters."
+        ),
+        "optional": True,
+        "scored": False,
+    })
+    return guide
+
+
+def import_column_guide():
+    """Required questionnaire columns, then optional direction context."""
+    return [*column_guide(), *direction_column_guide()]
+
+
 def can_import(preview):
     if preview["problems"] or not preview["rows"]:
         return False
@@ -153,7 +182,10 @@ def _canonical_map(columns):
 
 
 def _empty_form():
-    return {column: "" for column in questionnaire_columns()}
+    form = {column: "" for column in questionnaire_columns()}
+    for column in direction_column_names():
+        form[column] = ""
+    return form
 
 
 def _type_name(value):
@@ -263,7 +295,7 @@ def _apply_conflicts(rows):
         if not isinstance(name, str) or not name.strip():
             continue
         groups.setdefault(name.strip().casefold(), []).append(row)
-    fields = questionnaire_columns()
+    fields = [*questionnaire_columns(), *direction_column_names()]
     for group in groups.values():
         if len(group) < 2:
             continue
@@ -324,9 +356,10 @@ def _required_headers(fmt):
 
 
 def _optional_headers(fmt):
+    direction = direction_column_names()
     if fmt == "servicenow_csv":
-        return set(OPTIONAL_CONTEXT)
-    return set()
+        return set(OPTIONAL_CONTEXT) | {f"u_{name}".lower() for name in direction}
+    return {name.lower() for name in direction}
 
 
 def _parse_grid(grid, filename, suffix, as_of, file_problems):
@@ -399,6 +432,8 @@ def _parse_grid(grid, filename, suffix, as_of, file_problems):
         if fmt == "servicenow_csv":
             for column in questionnaire_columns():
                 form[column] = mapped.get(f"u_{column}".lower(), "")
+            for column in direction_column_names():
+                form[column] = mapped.get(f"u_{column}".lower(), "")
             number = mapped.get("number", "")
             if not number:
                 shape_problems.append(f"Row {row_number}: ticket number is required.")
@@ -410,6 +445,8 @@ def _parse_grid(grid, filename, suffix, as_of, file_problems):
             row["ticket_context"] = {key: mapped[key] for key in OPTIONAL_CONTEXT if key in mapped and mapped[key]}
         else:
             for column in questionnaire_columns():
+                form[column] = mapped.get(column.lower(), "")
+            for column in direction_column_names():
                 form[column] = mapped.get(column.lower(), "")
         if shape_problems:
             row["problems"].extend(shape_problems)
@@ -588,8 +625,9 @@ def _parse_ticket(ticket, row_number, as_of, evidence_fields):
         row["problems"].append(f"Ticket {row_number}: expected an object.")
         return row
     body = ticket_body_columns()
+    direction = direction_column_names()
     required = {"number", "category", "attachments", *[f"u_{column}" for column in body]}
-    optional = set(OPTIONAL_CONTEXT)
+    optional = set(OPTIONAL_CONTEXT) | {f"u_{column}" for column in direction}
     unknown = sorted(set(ticket) - required - optional)
     shape_problems = []
     if unknown:
@@ -600,6 +638,10 @@ def _parse_ticket(ticket, row_number, as_of, evidence_fields):
         shape_problems.append(f"Ticket {row_number}: missing {', '.join(missing)}.")
     form = _empty_form()
     for column in body:
+        key = f"u_{column}"
+        if key in ticket:
+            form[column] = _json_text(ticket.get(key), f"Ticket {row_number} {key}", shape_problems)
+    for column in direction:
         key = f"u_{column}"
         if key in ticket:
             form[column] = _json_text(ticket.get(key), f"Ticket {row_number} {key}", shape_problems)
@@ -767,6 +809,8 @@ def _preview_from_confirmation(document, as_of):
         problems.append(_too_many(len(rows_in)))
         return _preview(fmt, "confirmation", problems)
     columns = questionnaire_columns()
+    context_columns = direction_column_names()
+    known_columns = set(columns) | set(context_columns)
     rows = []
     for index, item in enumerate(rows_in, start=1):
         row = _blank_row(index)
@@ -797,7 +841,7 @@ def _preview_from_confirmation(document, as_of):
             row["problems"].append(f"Row {row['row_number']}: form must be an object.")
             rows.append(row)
             continue
-        unknown_fields = sorted(set(form_in) - set(columns))
+        unknown_fields = sorted(set(form_in) - known_columns)
         if unknown_fields:
             row["problems"].append(
                 f"Row {row['row_number']}: unrecognized fields {', '.join(unknown_fields)}. They were not dropped.")
@@ -805,7 +849,7 @@ def _preview_from_confirmation(document, as_of):
         if missing_fields:
             row["problems"].append(f"Row {row['row_number']}: missing {', '.join(missing_fields)}.")
         shape = list(row["problems"])
-        for column in columns:
+        for column in [*columns, *context_columns]:
             if column not in form_in:
                 continue
             value = form_in[column]
@@ -877,6 +921,9 @@ def sample_forms():
         north[pointer["field"]] = "independent_verified"
     for clause in policy["required_contract_clauses"]:
         north[clause_evidence_field(clause["clause_id"])] = "independent_verified"
+    north["vendor_direction"] = "stable"
+    north["residual_direction"] = "unchanged"
+    north["direction_note"] = "Synthetic context: same scope as the last review. Not a score."
 
     harbor = _empty_form()
     harbor.update({
@@ -897,6 +944,9 @@ def sample_forms():
         harbor[pointer["field"]] = harbor_pointers.get(pointer["pointer_id"], "none")
     for clause in policy["required_contract_clauses"]:
         harbor[clause_evidence_field(clause["clause_id"])] = "vendor_statement"
+    harbor["vendor_direction"] = "expanding"
+    harbor["residual_direction"] = "worsening"
+    harbor["direction_note"] = "Synthetic context: more use than the last review. Not a score."
     return [north, harbor]
 
 
@@ -921,6 +971,8 @@ def _servicenow_document(forms):
         ticket = _ticket_context(form, index)
         for column in ticket_body_columns():
             ticket[f"u_{column}"] = form[column]
+        for column in direction_column_names():
+            ticket[f"u_{column}"] = form.get(column, "")
         ticket["attachments"] = [
             {
                 "sys_id": f"synthetic-att-{index:04d}-{field}",
@@ -946,7 +998,7 @@ def _servicenow_document(forms):
 def render_questionnaire_csv(forms=None):
     forms = sample_forms() if forms is None else forms
     buffer = io.StringIO(newline="")
-    columns = questionnaire_columns()
+    columns = [*questionnaire_columns(), *direction_column_names()]
     writer = csv.DictWriter(buffer, fieldnames=columns, lineterminator="\n", extrasaction="raise")
     writer.writeheader()
     for form in forms:
@@ -979,7 +1031,7 @@ def render_questionnaire_xlsx(forms=None):
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "Intake"
-    columns = questionnaire_columns()
+    columns = [*questionnaire_columns(), *direction_column_names()]
     sheet.append(columns)
     for form in forms:
         sheet.append([form.get(column, "") for column in columns])
@@ -997,7 +1049,9 @@ def render_servicenow_json(forms=None):
 def render_servicenow_csv(forms=None):
     forms = sample_forms() if forms is None else forms
     columns = ["number", "short_description", "description", "category", "state", "priority",
-               "assignment_group", "opened_at", "sys_id", *[f"u_{column}" for column in questionnaire_columns()]]
+               "assignment_group", "opened_at", "sys_id",
+               *[f"u_{column}" for column in questionnaire_columns()],
+               *[f"u_{column}" for column in direction_column_names()]]
     buffer = io.StringIO(newline="")
     writer = csv.DictWriter(buffer, fieldnames=columns, lineterminator="\n")
     writer.writeheader()
@@ -1008,6 +1062,8 @@ def render_servicenow_csv(forms=None):
             "assignment_group", "opened_at", "sys_id")}
         for column in questionnaire_columns():
             row[f"u_{column}"] = form[column]
+        for column in direction_column_names():
+            row[f"u_{column}"] = form.get(column, "")
         writer.writerow(row)
     return buffer.getvalue().encode("utf-8")
 
