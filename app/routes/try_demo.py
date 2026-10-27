@@ -9,7 +9,7 @@ generated for the page view and is not stored until that save.
 import json
 from datetime import date
 
-from flask import Blueprint, Response, abort, redirect, render_template, request, url_for
+from flask import Blueprint, Response, abort, g, redirect, render_template, request, url_for
 
 from app.db import get_db
 from app.services.intake_builder import (
@@ -24,7 +24,7 @@ from app.services.intake_importer import (
 from app.services.intake_questionnaire import load_questionnaire
 from app.services.org_policy import load_org_policy
 from app.services.scenario_runner import ScenarioNotFoundError, list_scenarios, run_scenario
-from app.services.walkthrough import carried_walk_step
+from app.services.walkthrough import SUBMISSION_COMPLETE_ATTR, carried_walk_step
 from app.services.workflow_service import DISPOSITIONS, WorkflowInputError, register_intake
 
 bp = Blueprint("try_demo", __name__, url_prefix="/try")
@@ -119,6 +119,9 @@ def assess():
         return _attachment(build_package(result), export_format)
     if export_format:
         abort(400)
+    # The result page is the form stop's completed response. The form and
+    # a validation error leave the flag unset, so Next stays withheld.
+    setattr(g, SUBMISSION_COMPLETE_ATTR, True)
     return _render_result(result, posted_form=_posted_fields(request.form))
 
 
