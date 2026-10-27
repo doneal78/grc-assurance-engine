@@ -30,11 +30,16 @@ def test_cost_formula_does_not_read_handling_minutes():
     from app.services.cost_model import REQUIRED_NUMERIC
 
     assert "handling_minutes" not in REQUIRED_NUMERIC
+    assert "rework_minutes" not in REQUIRED_NUMERIC
     result = calculate_cost()
     assert result["net_capacity_value"] == 180
     assert result["gross_capacity_value"] == 600
     assert result["cash_savings"] is None
     assert "handling_minutes" not in result
+    assert "rework_minutes" not in result
+    assumptions = load_assumptions()
+    assert "rework_minutes" not in assumptions
+    assert "handling_minutes" not in assumptions
 
 
 def test_negative_net_capacity_is_reported_when_assisted_effort_is_higher():

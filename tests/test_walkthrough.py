@@ -446,6 +446,9 @@ def test_register_advances_the_guide_and_a_plain_save_does_not(client):
     assert 'name="handling_minutes"' in body
     assert "minutes spent reviewing" in body
     assert 'name="handling_minutes" required' not in body
+    assert 'name="rework_minutes"' in body
+    assert "rework minutes are optional" in body
+    assert 'name="rework_minutes" required' not in body
     assert body.count('class="button-link walk-next"') == 0
     assert "walk=import" not in body
     assert f'action="{location.split("?")[0]}/decision?walk=decide"' in body
@@ -479,6 +482,7 @@ def test_register_advances_the_guide_and_a_plain_save_does_not(client):
     done = client.get(recorded.headers["Location"])
     done_body = done.get_data(as_text=True)
     assert "Record a decision on this page before Next." not in done_body
+    assert "Not reported" in done_body
     assert done_body.count('class="button-link walk-next"') == 2
     assert "walk=import" in done_body
     assert "Next · File import" in done_body

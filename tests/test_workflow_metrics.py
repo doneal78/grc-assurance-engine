@@ -77,7 +77,7 @@ def test_empty_database_reports_zeros_and_leaves_cycle_time_unmeasured():
     db = _db()
     metrics = observed_metrics(db)
     assert metrics["kind"] == "observed"
-    assert metrics["definition_version"] == "2"
+    assert metrics["definition_version"] == "3"
     assert metrics["feeds_cost_model"] is False
     assert "cash_savings" not in metrics
     assert "net_capacity_value" not in metrics
@@ -107,6 +107,16 @@ def test_empty_database_reports_zeros_and_leaves_cycle_time_unmeasured():
     assert handling["mean_minutes"] is None
     assert handling["feeds_cost_model"] is False
     assert handling["authenticated"] is False
+    rework = metrics["rework_time"]
+    assert rework["kind"] == "self_reported"
+    assert rework["label"] == "Self-reported rework time"
+    assert rework["recorded_count"] == 0
+    assert rework["unmeasured_decisions"] == 0
+    assert rework["median_minutes"] is None
+    assert rework["feeds_cost_model"] is False
+    assert rework["authenticated"] is False
+    assert "rework_time" not in {item["id"] for item in metrics["not_measured"]}
+    assert "authenticated_effort" in {item["id"] for item in metrics["not_measured"]}
     assert _partition(metrics) == 0
     assert observed_metrics(db) == metrics
     db.close()
@@ -404,6 +414,10 @@ def test_methods_page_describes_self_reported_handling_time(client):
     assert "not elapsed cycle time" in body
     assert "Manual touches." in body
     assert "Self-reported handling minutes are not inputs to this formula." in body
+    assert "Self-reported rework minutes are not inputs to this formula." in body
+    assert "Rework minutes are not handling minutes." in body
+    assert "Rework duration." not in body
+    assert "Authenticated effort." in body
     assert "labor capacity, not cash savings" in body
     assert "stay out of these inputs" in body
     assert "Counted from the local register" in body
@@ -499,6 +513,94 @@ def test_dashboard_shows_self_reported_minutes_apart_from_the_cost_panel(client,
     methods = client.get("/methodology").data.decode()
     assert "25 minutes" in _observed_section(methods)
     assert "180.00" not in _observed_section(methods)
+
+
+def test_rework_minutes_ignore_nulls_and_leave_the_cost_formula_unchanged():
+    from app.services.cost_model import calculate_cost
+
+    db = _db()
+    before = calculate_cost()
+    _save_intake(db, handling_minutes=10, rework_minutes=40)
+    _save_intake(db, handling_minutes=30)
+    _save_intake(db, rework_minutes=0)
+    metrics = observed_metrics(db)
+    handling = metrics["handling_time"]
+    rework = metrics["rework_time"]
+    assert handling["recorded_count"] == 2
+    assert handling["median_minutes"] == 20
+    assert rework["recorded_count"] == 2
+    assert rework["unmeasured_decisions"] == 1
+    assert rework["median_minutes"] == 20
+    assert rework["mean_minutes"] == 20
+    assert rework["minimum_minutes"] == 0
+    assert rework["maximum_minutes"] == 40
+    assert rework["total_minutes"] == 40
+    assert rework["median_label"] == "20 minutes"
+    assert rework["feeds_cost_model"] is False
+    assert "not handling minutes" in rework["definition"]
+    assert calculate_cost() == before
+    assert "rework_minutes" not in before["assumptions"]
+    assert "handling_minutes" not in before["assumptions"]
+    db.close()
+
+
+def test_rework_summary_uses_the_median_of_reported_rows_only():
+    decisions = [
+        {"risk_id": "R-1", "disposition": "approve", "handling_minutes": 10, "rework_minutes": 4},
+        {"risk_id": "R-2", "disposition": "reject", "handling_minutes": None, "rework_minutes": None},
+        {"risk_id": "R-3", "disposition": "escalate", "handling_minutes": 20, "rework_minutes": 8},
+        {"risk_id": "R-4", "disposition": "approve", "handling_minutes": "25", "rework_minutes": "9"},
+    ]
+    summary = summarize_register([], [], decisions, [])
+    rework = summary["rework_time"]
+    handling = summary["handling_time"]
+    assert handling["recorded_count"] == 2
+    assert handling["median_minutes"] == 15
+    assert rework["recorded_count"] == 2
+    assert rework["unmeasured_decisions"] == 2
+    assert rework["median_minutes"] == 6
+    assert rework["mean_minutes"] == 6
+    assert rework["median_label"] == "6 minutes"
+    rounded = summarize_register([], [], [
+        {"rework_minutes": 1},
+        {"rework_minutes": 1},
+        {"rework_minutes": 2},
+    ], [])["rework_time"]
+    assert rounded["recorded_count"] == 3
+    assert rounded["median_minutes"] == 1
+    assert rounded["mean_minutes"] == 1.33
+    assert rounded["mean_label"] == "1.33 minutes"
+    assert rounded["median_label"] == "1 minute"
+
+
+def test_dashboard_shows_rework_apart_from_handling_and_the_cost_panel(client, app):
+    from app.db import get_db
+    from app.services.cost_model import calculate_cost
+
+    before = calculate_cost()
+    with app.app_context():
+        _save_intake(get_db(), handling_minutes=25, rework_minutes=12)
+        _save_intake(get_db(), handling_minutes=5)
+    body = client.get("/").data.decode()
+    observed = _observed_section(body)
+    assert "SELF-REPORTED HANDLING TIME" in observed
+    assert "SELF-REPORTED REWORK TIME" in observed
+    assert "15 minutes" in observed
+    assert "12 minutes" in observed
+    assert "Self-reported human handling time." in observed
+    assert "Self-reported rework time." in observed
+    assert "Not handling minutes." in observed
+    assert "Not used by the cost model." in observed
+    assert "1 saved decision has no rework minutes." in observed
+    assert "$" not in observed
+    assert "180.00" in body
+    assert "600.00" in body
+    assert calculate_cost() == before
+    methods = client.get("/methodology").data.decode()
+    methods_observed = _observed_section(methods)
+    assert "12 minutes" in methods_observed
+    assert "15 minutes" in methods_observed
+    assert "180.00" not in methods_observed
 
 
 def test_dashboard_scenario_save_does_not_invent_cycle_time(client, app):

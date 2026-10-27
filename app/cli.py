@@ -135,12 +135,23 @@ def _add_persist_flags(parser):
             "Omit the flag, or leave it blank, to leave handling time unmeasured."
         ),
     )
+    parser.add_argument(
+        "--rework-minutes",
+        dest="rework_minutes",
+        default=None,
+        help=(
+            "Optional self-reported minutes spent redoing work after a first pass. "
+            "Omit the flag, or leave it blank, to leave rework time unmeasured. "
+            "This is not handling time."
+        ),
+    )
 
 
 def _flags_used(args):
     return bool(
         args.persist or args.disposition or args.rationale or args.decider
         or args.conditions or args.exception_rationale or args.handling_minutes
+        or args.rework_minutes
     )
 
 
@@ -154,6 +165,8 @@ def _decision_from_flags(args):
     }
     if args.handling_minutes is not None:
         decision["handling_minutes"] = args.handling_minutes
+    if args.rework_minutes is not None:
+        decision["rework_minutes"] = args.rework_minutes
     return decision
 
 

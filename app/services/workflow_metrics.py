@@ -1,4 +1,4 @@
-"""Observed counts, elapsed cycle time, and self-reported handling minutes.
+"""Observed counts, elapsed cycle time, and self-reported minute fields.
 
 The figures come from persisted rows and workflow-event timestamps. They are
 separate from the illustrative cost assumptions in ``cost_model.py``.
@@ -9,8 +9,10 @@ timestamp is a measured span of zero seconds. That span is the time between
 writes.
 
 Self-reported human handling time is the optional ``handling_minutes`` value
-on the current decision row. Null stays out of that average. The minutes are
-not elapsed cycle time, and this module does not pass them to the cost formula.
+on the current decision row. Self-reported rework time is the optional
+``rework_minutes`` value on that same row. Null stays out of each average.
+The two figures are not each other, they are not elapsed cycle time, and
+this module does not pass either one to the cost formula.
 """
 
 import json
@@ -21,7 +23,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from app.services.workflow_service import DISPOSITIONS
 
 
-DEFINITION_VERSION = "2"
+DEFINITION_VERSION = "3"
 
 RESIDUAL_TIERS = ("low", "moderate", "high", "critical", "undetermined")
 EVIDENCE_STATUSES = (
@@ -35,13 +37,13 @@ COST_MAPPING = (
     "Observed assessment volume is a count of saved rows. It stays out of the "
     "assessments-per-month assumption. Elapsed cycle time is a clock span between "
     "workflow events. It stays out of the baseline and assisted handling-hour "
-    "assumptions. Self-reported handling minutes stay out of that formula. "
-    "The illustrative formula is unchanged."
+    "assumptions. Self-reported handling minutes and self-reported rework "
+    "minutes stay out of that formula. The illustrative formula is unchanged."
 )
 UNMEASURED_SUMMARY = (
-    "Manual touches, handoffs, rework duration, a monthly assessment rate, "
+    "Manual touches, handoffs, a monthly assessment rate, authenticated effort, "
     "cash savings, and avoided-incident value stay unmeasured. Self-reported "
-    "handling minutes are optional and are not cash savings."
+    "handling minutes and self-reported rework minutes are optional and are not cash savings."
 )
 CYCLE_DEFINITION = (
     "Elapsed seconds from the earliest intake_received event to the earliest "
@@ -49,14 +51,22 @@ CYCLE_DEFINITION = (
     "to two decimal places. A shared timestamp counts as zero elapsed seconds. "
     "Scenario rows without intake_received, rows without a disposition event, and "
     "rows with reversed or unreadable timestamps stay outside the average. "
-    "Self-reported handling minutes are a separate figure."
+    "Self-reported handling minutes and self-reported rework minutes are separate figures."
 )
 HANDLING_DEFINITION = (
     "Self-reported whole minutes on the current decision row. Blank and null stay "
     "out of the average. The headline figure is the median. For an even count, the "
     "median is the mean of the two middle values. The mean is rounded half up to "
     "two decimal places. These minutes are not elapsed cycle time, they are not "
-    "authenticated, and they are not copied into the cost formula."
+    "rework minutes, they are not authenticated, and they are not copied into the cost formula."
+)
+REWORK_DEFINITION = (
+    "Self-reported whole minutes of rework on the current decision row. Rework is "
+    "time spent redoing work after a first pass. Blank and null stay out of the "
+    "average. The headline figure is the median. For an even count, the median is "
+    "the mean of the two middle values. The mean is rounded half up to two decimal "
+    "places. These minutes are not elapsed cycle time, they are not handling minutes, "
+    "they are not authenticated, and they are not copied into the cost formula."
 )
 NOT_MEASURED = (
     {
@@ -70,14 +80,14 @@ NOT_MEASURED = (
         "detail": "The event log does not record a handoff as its own measurement.",
     },
     {
-        "id": "rework_time",
-        "label": "Rework duration",
-        "detail": "A remediation update stores a new status. It does not store a duration.",
-    },
-    {
         "id": "monthly_assessment_rate",
         "label": "Monthly assessment rate",
         "detail": "Saved rows are a count. The register does not assign them to a reporting month.",
+    },
+    {
+        "id": "authenticated_effort",
+        "label": "Authenticated effort",
+        "detail": "Self-reported minutes are not checked against an identity system or a timesheet.",
     },
     {
         "id": "cash_savings",
@@ -101,7 +111,7 @@ def observed_metrics(db):
         "SELECT status FROM remediation_actions"
     ).fetchall()]
     decisions = [dict(row) for row in db.execute(
-        "SELECT risk_id, disposition, handling_minutes FROM decisions"
+        "SELECT risk_id, disposition, handling_minutes, rework_minutes FROM decisions"
     ).fetchall()]
     events = [dict(row) for row in db.execute(
         """SELECT risk_id, event_type, occurred_at
@@ -244,7 +254,14 @@ def summarize_register(risks, actions, decisions, events):
         },
         "decision_event_count": decision_event_count,
         "cycle_time": cycle,
-        "handling_time": _handling_block(decisions),
+        "handling_time": _self_reported_block(
+            decisions, "handling_minutes",
+            "Self-reported human handling time", HANDLING_DEFINITION,
+        ),
+        "rework_time": _self_reported_block(
+            decisions, "rework_minutes",
+            "Self-reported rework time", REWORK_DEFINITION,
+        ),
     }
 
 
@@ -432,16 +449,17 @@ def _cycle_statistics(spans):
     }
 
 
-def _handling_block(decisions):
+def _self_reported_block(decisions, field, label, definition):
     """Median of current decision rows that store a whole number of minutes.
 
     Null, a missing key, and any value that is not a non-negative int stay
     out of the average. A stored zero is a reported zero and is included.
+    Handling minutes and rework minutes each use this rule on their own field.
     """
     values = []
     unmeasured = 0
     for decision in decisions:
-        raw = decision.get("handling_minutes") if isinstance(decision, dict) else None
+        raw = decision.get(field) if isinstance(decision, dict) else None
         if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
             unmeasured += 1
             continue
@@ -463,9 +481,9 @@ def _handling_block(decisions):
     }
     return {
         "kind": "self_reported",
-        "label": "Self-reported human handling time",
+        "label": label,
         "unit": "minutes",
-        "definition": HANDLING_DEFINITION,
+        "definition": definition,
         "feeds_cost_model": False,
         "authenticated": False,
         **labeled,

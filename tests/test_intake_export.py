@@ -122,7 +122,10 @@ def test_scenario_download_and_saved_risk_download_include_the_decision(client):
         stored = package_from_saved_risk(get_risk(get_db(), risk_id))
     assert stored["decision"]["exception_rationale"] == "A named officer decides each eligibility case."
     assert stored["decision"]["handling_minutes"] is None
+    assert stored["decision"]["rework_minutes"] is None
+    assert stored["decision"]["rework_time_note"] == "Rework time was not reported."
     assert b"not reported (unmeasured)." in downloaded.data
+    assert b"Rework time: was not reported." in downloaded.data
     assert stored["automatic_approval"] is None
     assert stored["intake_answers"]
 
@@ -137,9 +140,12 @@ def test_scenario_download_and_saved_risk_download_include_the_decision(client):
     assert with_minutes.status_code == 302
     package = json.loads(client.get(f"/risks/{risk_id}/export/json").data)
     assert package["decision"]["handling_minutes"] == 40
+    assert package["decision"]["rework_minutes"] is None
+    assert package["decision"]["rework_time_note"] == "Rework time was not reported."
     assert "not an input to the cost model" in package["decision"]["handling_time_note"]
     summary = client.get(f"/risks/{risk_id}/export/markdown").data
     assert b"40 self-reported minutes" in summary
+    assert b"Rework time: was not reported." in summary
     nonsense = client.post(f"/risks/{risk_id}/decision", data={
         "disposition": "approve",
         "rationale": "The output is advisory.",
@@ -152,6 +158,42 @@ def test_scenario_download_and_saved_risk_download_include_the_decision(client):
     assert b"handling_minutes" in nonsense.data
     with client.application.app_context():
         kept = get_risk(get_db(), risk_id)["decision"]
+    assert kept["handling_minutes"] == 40
+    assert kept["rework_minutes"] is None
+    assert kept["disposition"] == "approve"
+
+    with_rework = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "approve",
+        "rationale": "The output is advisory.",
+        "decider": "AI governance reviewer",
+        "conditions": "",
+        "exception_rationale": "A named officer decides each eligibility case.",
+        "handling_minutes": "40",
+        "rework_minutes": "8",
+    }, headers=SAME_ORIGIN)
+    assert with_rework.status_code == 302
+    package = json.loads(client.get(f"/risks/{risk_id}/export/json").data)
+    assert package["decision"]["handling_minutes"] == 40
+    assert package["decision"]["rework_minutes"] == 8
+    assert "not handling minutes" in package["decision"]["rework_time_note"]
+    summary = client.get(f"/risks/{risk_id}/export/markdown").data
+    assert b"8 self-reported minutes" in summary
+    assert b"Not handling time." in summary
+    bad_rework = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "reject",
+        "rationale": "This must not replace the saved decision.",
+        "decider": "AI governance reviewer",
+        "conditions": "",
+        "exception_rationale": "",
+        "handling_minutes": "1",
+        "rework_minutes": "12.5",
+    }, headers=SAME_ORIGIN)
+    assert bad_rework.status_code == 400
+    assert b"rework_minutes" in bad_rework.data
+    assert b"8 self-reported rework minutes" in bad_rework.data
+    with client.application.app_context():
+        kept = get_risk(get_db(), risk_id)["decision"]
+    assert kept["rework_minutes"] == 8
     assert kept["handling_minutes"] == 40
     assert kept["disposition"] == "approve"
 
