@@ -27,7 +27,7 @@ Claims may include an explicit `topic`. `app/services/control_mapper.py` matches
 
 Each mapping record includes the framework and version, identifier, title, applicability note, rationale, related claim topics, source reference, and review status. The mapping-set version is returned with each match so results can be tied to the data version.
 
-`list_library` in `app/services/control_mapper.py` returns the full library, including the mapping-set version and source note, without matching claims and without changing review status. The Control mappings page at `/mappings` renders that result. Assessment and saved-risk pages render only the matched prompts, using the same field labels and the same stored review status. The templates do not add mappings and do not mark a draft entry as reviewed.
+`list_library` in `app/services/control_mapper.py` returns the full library, including the mapping-set version and source note, without matching claims and without changing review status. The Control mappings page at `/mappings` renders that result. Assessment and saved-risk pages render only the matched prompts, using the same field labels and the same stored review status. The templates do not add mappings and do not mark a draft entry as reviewed. Each card also shows a so-what sentence: what the control is asking the business to decide, and, on an assessment, the evidence status already stored on the related claim. That sentence does not change the review status, the evidence status, or the score.
 
 ## Review policy and limitations
 

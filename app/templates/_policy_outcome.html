@@ -11,6 +11,7 @@
     <li>
       <p><code>{{ item.restriction_id }}</code> — {{ item.title }}</p>
       <p>{{ item.reason }}</p>
+      <p class="so-what">{{ restriction_so_what(item) }}</p>
       <dl class="meta-list">
         <dt>Policy</dt><dd>{{ item.policy_id }} {{ item.policy_version }}</dd>
         <dt>Observed answer</dt><dd>{{ item.observed_value }}</dd>
@@ -40,6 +41,7 @@
       {% endif %}
     </div>
     <p>{{ clause.text }}</p>
+    <p class="so-what">{{ clause_so_what(clause) }}</p>
     {% if clause.evidence_status %}
     <p class="muted">{{ clause.status_reason }}</p>
     <p class="muted">Evidence basis</p>

@@ -39,6 +39,7 @@ Scenario runs are deterministic examples, not vendor records. File import on `/t
 - No external AI service participates in scoring or approval decisions.
 - One org policy file is enough. There is no tenant selector.
 - The policy outcome is calculated in the risk engine. Templates display it. They do not decide it.
+- `app/services/result_explain.py` turns that result into reviewer sentences: why a rule fired, and what a claim, clause, or mapping means for the decision. It does not change scores, tiers, or evidence statuses. `app/services/intake_replay.py` copies answers back onto the public form. A re-run still goes through intake and the risk engine. Fetch stays no unless the visitor chooses it again. An unsaved `/try/` run is not a register disposition.
 - `GET /health` reports SQLite reachability. The check is a read-only open and a catalog read. It does not rate the data, the schema, or the host.
 - Required contract clauses are data in the org policy. The evidence validator derives each clause status. The risk engine records that status and does not score it. A gap does not block the human decision.
 - A prohibited result can be approved only with an exception rationale because a person, not the score, makes the disposition. The restriction stays on the record. There is no configured non-overridable ban.

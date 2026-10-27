@@ -20,6 +20,12 @@
 </div>
 </section>
 
+{% if replay_note %}
+<section class="notice" id="replay-note">
+  <strong>Answers filled in from a previous result</strong>
+  <p>{{ replay_note }}</p>
+</section>
+{% endif %}
 <section class="content-section" id="intake">
 <h2>Or describe your own</h2>
 <p>You can also <a href="{{ url_for('try_demo.import_form') }}">import a questionnaire file or a simulated ServiceNow ticket</a>. The file is previewed before it is assessed, and nothing is saved.</p>

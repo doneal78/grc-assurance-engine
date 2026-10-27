@@ -1,29 +1,30 @@
 <!-- observed-metrics-start -->
 <p>{{ observed.cycle_time.definition }}</p>
+<p class="muted">Assessment volume counts saved assessments. Persisted dispositions count saved human decisions on those assessments. A public <code>/try/</code> run that is not saved is in neither count.</p>
 <div class="result-grid">
   <article class="result-card">
-    <p class="eyebrow">ASSESSMENT VOLUME</p>
+    <p class="eyebrow">SAVED ASSESSMENT VOLUME</p>
     <strong>{{ observed.assessment_volume.total }}</strong>
-    <p>Saved assessments: {{ observed.assessment_volume.total }}. General intake: {{ observed.assessment_volume.general_intake }}. Scenario fixtures: {{ observed.assessment_volume.scenario_fixture }}.</p>
+    <p>Saved assessments: {{ observed.assessment_volume.total }}. This is the register, not the public demo. A <code>/try/</code> run that is not saved is excluded. General intake: {{ observed.assessment_volume.general_intake }}. Scenario fixtures: {{ observed.assessment_volume.scenario_fixture }}.</p>
   </article>
   <article class="result-card">
     <p class="eyebrow">OPEN REMEDIATION</p>
     <strong>{{ observed.remediation.not_completed }}</strong>
-    <p>Open remediation: {{ observed.remediation.not_completed }}. {% for row in observed.remediation.by_status %}{{ row.count }} {{ row.name|replace('_', ' ') }}{% if not loop.last %} · {% endif %}{% endfor %}.</p>
+    <p>Open remediation: {{ observed.remediation.not_completed }}. Follow-up actions on saved assessments that are not completed. {% for row in observed.remediation.by_status %}{{ row.count }} {{ row.name|replace('_', ' ') }}{% if not loop.last %} · {% endif %}{% endfor %}.</p>
   </article>
   <article class="result-card">
-    <p class="eyebrow">PERSISTED DISPOSITIONS</p>
+    <p class="eyebrow">SAVED DECISIONS</p>
     <strong>{{ observed.dispositions.recorded }}</strong>
-    <p>Persisted dispositions: {{ observed.dispositions.recorded }}. Saved assessments with no decision row: {{ observed.dispositions.risks_without_decision }}.</p>
+    <p>Persisted dispositions: {{ observed.dispositions.recorded }}. A disposition is a person's saved decision: approve, approve with conditions, escalate, or reject. It is not the assessment volume, and it is not a public <code>/try/</code> run. Saved assessments with no decision row: {{ observed.dispositions.risks_without_decision }}.</p>
   </article>
   <article class="result-card">
     <p class="eyebrow">ELAPSED CYCLE TIME</p>
     {% if observed.cycle_time.measured_count %}
     <strong>{{ observed.cycle_time.median_label }}</strong>
-    <p>Median {{ observed.cycle_time.median_label }} across {{ observed.cycle_time.measured_count }} saved intake{% if observed.cycle_time.measured_count != 1 %}s{% endif %}. Total {{ observed.cycle_time.total_label }}. Mean {{ observed.cycle_time.mean_label }}. Shortest {{ observed.cycle_time.minimum_label }}. Longest {{ observed.cycle_time.maximum_label }}.</p>
+    <p>Median {{ observed.cycle_time.median_label }} across {{ observed.cycle_time.measured_count }} saved intake{% if observed.cycle_time.measured_count != 1 %}s{% endif %}. This clock span is only for saved records that have both events. A public <code>/try/</code> run that is not saved has no cycle time here. Total {{ observed.cycle_time.total_label }}. Mean {{ observed.cycle_time.mean_label }}. Shortest {{ observed.cycle_time.minimum_label }}. Longest {{ observed.cycle_time.maximum_label }}.</p>
     {% else %}
     <strong>Not measured</strong>
-    <p>No saved row has both an intake event and a usable disposition event.</p>
+    <p>No saved row has both an intake event and a usable disposition event. A public <code>/try/</code> run that is not saved is not in this count.</p>
     {% endif %}
   </article>
 </div>
@@ -69,7 +70,7 @@
 </div>
 <div class="table-wrap">
   <table class="metric-table">
-    <caption>Current human disposition</caption>
+    <caption>Saved decisions (persisted dispositions)</caption>
     <thead><tr><th scope="col">Disposition</th><th scope="col">Assessments</th></tr></thead>
     <tbody>
     {% for row in observed.dispositions.by_disposition %}

@@ -37,7 +37,8 @@
 </details>
 </section>
 
-<section class="content-section action-panel"><h2>Try another</h2>
-<p><a class="button-link" href="{{ url_for('try_demo.index') }}#intake">Change the inputs</a></p>
+<section class="content-section action-panel">
+  <h2>Change answers and re-run</h2>
+  <p><a class="button-link" href="{{ change_answers_href(replay_plan(scenario, posted_form), walkthrough.step_id if walkthrough and walkthrough.on_page else none) }}">Change these answers</a></p>
 </section>
 {% endblock %}

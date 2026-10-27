@@ -767,7 +767,7 @@ Show what the local register can actually support, and keep those figures apart 
 
 ### Behavior
 
-- Assessment volume is the number of rows in `risks`. An unsaved public try is absent. A `scenario_id` that starts with `intake-`, or a stored `intake_origin` of `general_intake`, counts as general intake. Other rows are scenario fixtures.
+- Assessment volume is the number of rows in `risks`. An unsaved public try is absent. A `scenario_id` that starts with `intake-`, or a stored `intake_origin` of `general_intake`, counts as general intake. Other rows are scenario fixtures. The dashboard labels this saved assessment volume and labels persisted dispositions as saved human decisions, so a public `/try/` run is not read as a register disposition.
 - Open remediation is the number of `remediation_actions` whose status is not `completed`. `in_progress` remains open.
 - Residual tier counts use `risks.residual_tier`.
 - Claim evidence counts use each stored claim's `evidence_status`. Clause evidence counts use the stored required-clause statuses and stay in their own list. A missing claim status is an evidence gap, not a confirmed control failure.

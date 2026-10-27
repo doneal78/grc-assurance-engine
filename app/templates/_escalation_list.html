@@ -2,6 +2,7 @@
 {% for item in escalations %}
 <li>
   <p><code>{{ item.rule_id }}</code> — {{ item.reason }}</p>
+  <p class="so-what">{{ escalation_rationale(item, assessment if assessment is defined else none, claims if claims is defined else none) }}</p>
   {% if item.assessment_type %}
   <dl class="meta-list">
     <dt>Assessment</dt><dd>{{ item.assessment_type }}</dd>
