@@ -62,6 +62,7 @@ def migrate(connection):
         if name not in columns:
             connection.execute(f"ALTER TABLE risks ADD COLUMN {name} TEXT")
     _allow_escalate_disposition(connection)
+    _add_handling_minutes(connection)
     connection.commit()
 
 
@@ -107,6 +108,22 @@ def _allow_escalate_disposition(connection):
         connection.execute("DROP TABLE decisions_legacy")
     finally:
         connection.execute("PRAGMA foreign_keys = ON")
+
+
+def _add_handling_minutes(connection):
+    """Add optional self-reported minutes to an existing decisions table.
+
+    Null means the person did not report handling time. Rows already stored
+    stay, with the new column empty.
+    """
+    row = connection.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='decisions'"
+    ).fetchone()
+    if row is None:
+        return
+    columns = {item[1] for item in connection.execute("PRAGMA table_info(decisions)")}
+    if "handling_minutes" not in columns:
+        connection.execute("ALTER TABLE decisions ADD COLUMN handling_minutes INTEGER")
 
 
 def init_app(app):

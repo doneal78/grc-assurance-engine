@@ -26,6 +26,17 @@ def test_calculation_is_repeatable_and_does_not_mutate_assumptions():
     assert assumptions == before
 
 
+def test_cost_formula_does_not_read_handling_minutes():
+    from app.services.cost_model import REQUIRED_NUMERIC
+
+    assert "handling_minutes" not in REQUIRED_NUMERIC
+    result = calculate_cost()
+    assert result["net_capacity_value"] == 180
+    assert result["gross_capacity_value"] == 600
+    assert result["cash_savings"] is None
+    assert "handling_minutes" not in result
+
+
 def test_negative_net_capacity_is_reported_when_assisted_effort_is_higher():
     assumptions = load_assumptions()
     assumptions["assisted_handling_hours_per_assessment"] = 3

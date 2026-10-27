@@ -126,23 +126,35 @@ def _add_persist_flags(parser):
         default="",
         help="Required only when approving a prohibited result.",
     )
+    parser.add_argument(
+        "--handling-minutes",
+        dest="handling_minutes",
+        default=None,
+        help=(
+            "Optional self-reported minutes spent reviewing. "
+            "Omit the flag, or leave it blank, to leave handling time unmeasured."
+        ),
+    )
 
 
 def _flags_used(args):
     return bool(
         args.persist or args.disposition or args.rationale or args.decider
-        or args.conditions or args.exception_rationale
+        or args.conditions or args.exception_rationale or args.handling_minutes
     )
 
 
 def _decision_from_flags(args):
-    return {
+    decision = {
         "disposition": args.disposition or "",
         "rationale": args.rationale or "",
         "decider": args.decider or "",
         "conditions": args.conditions or "",
         "exception_rationale": args.exception_rationale or "",
     }
+    if args.handling_minutes is not None:
+        decision["handling_minutes"] = args.handling_minutes
+    return decision
 
 
 def _merge_persist_flags(payload, args):

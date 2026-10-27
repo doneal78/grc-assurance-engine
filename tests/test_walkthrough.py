@@ -443,6 +443,9 @@ def test_register_advances_the_guide_and_a_plain_save_does_not(client):
     assert "exception rationale" in body
     assert "nothing is sent to ServiceNow" in body
     assert "Record a decision on this page before Next." in body
+    assert 'name="handling_minutes"' in body
+    assert "minutes spent reviewing" in body
+    assert 'name="handling_minutes" required' not in body
     assert body.count('class="button-link walk-next"') == 0
     assert "walk=import" not in body
     assert f'action="{location.split("?")[0]}/decision?walk=decide"' in body

@@ -77,7 +77,7 @@ def test_empty_database_reports_zeros_and_leaves_cycle_time_unmeasured():
     db = _db()
     metrics = observed_metrics(db)
     assert metrics["kind"] == "observed"
-    assert metrics["definition_version"] == "1"
+    assert metrics["definition_version"] == "2"
     assert metrics["feeds_cost_model"] is False
     assert "cash_savings" not in metrics
     assert "net_capacity_value" not in metrics
@@ -99,6 +99,14 @@ def test_empty_database_reports_zeros_and_leaves_cycle_time_unmeasured():
     assert cycle["excluded"] == {
         "no_intake_event": 0, "no_disposition_event": 0, "unusable_timestamps": 0,
     }
+    handling = metrics["handling_time"]
+    assert handling["kind"] == "self_reported"
+    assert handling["recorded_count"] == 0
+    assert handling["unmeasured_decisions"] == 0
+    assert handling["median_minutes"] is None
+    assert handling["mean_minutes"] is None
+    assert handling["feeds_cost_model"] is False
+    assert handling["authenticated"] is False
     assert _partition(metrics) == 0
     assert observed_metrics(db) == metrics
     db.close()
@@ -389,10 +397,13 @@ def test_dashboard_keeps_the_illustrative_cost_panel(client):
     assert "illustrative formula is unchanged" in observed
 
 
-def test_methods_page_lists_unmeasured_handling_time(client):
+def test_methods_page_describes_self_reported_handling_time(client):
     body = client.get("/methodology").data.decode()
-    assert "Human handling time." in body
-    assert "when the application wrote the event" in body
+    assert "Self-reported human handling time" in body
+    assert "not checked against an identity system" in body
+    assert "not elapsed cycle time" in body
+    assert "Manual touches." in body
+    assert "Self-reported handling minutes are not inputs to this formula." in body
     assert "labor capacity, not cash savings" in body
     assert "stay out of these inputs" in body
     assert "Counted from the local register" in body
@@ -414,6 +425,80 @@ def test_dashboard_shows_a_measured_span_without_changing_the_cost_example(clien
     assert "$" not in observed
     assert "180.00" in body
     assert "600.00" in body
+
+
+def test_handling_minutes_ignore_nulls_and_leave_the_cost_formula_unchanged():
+    from app.services.cost_model import calculate_cost
+
+    db = _db()
+    before = calculate_cost()
+    _save_intake(db, handling_minutes=10)
+    _save_intake(db)
+    _save_intake(db, handling_minutes=30)
+    metrics = observed_metrics(db)
+    handling = metrics["handling_time"]
+    assert handling["recorded_count"] == 2
+    assert handling["unmeasured_decisions"] == 1
+    assert handling["median_minutes"] == 20
+    assert handling["mean_minutes"] == 20
+    assert handling["minimum_minutes"] == 10
+    assert handling["maximum_minutes"] == 30
+    assert handling["total_minutes"] == 40
+    assert handling["median_label"] == "20 minutes"
+    assert handling["feeds_cost_model"] is False
+    assert metrics["feeds_cost_model"] is False
+    assert calculate_cost() == before
+    assert "handling_minutes" not in before["assumptions"]
+    db.close()
+
+
+def test_handling_summary_uses_the_median_of_reported_rows_only():
+    decisions = [
+        {"risk_id": "R-1", "disposition": "approve", "handling_minutes": 10},
+        {"risk_id": "R-2", "disposition": "reject", "handling_minutes": None},
+        {"risk_id": "R-3", "disposition": "escalate", "handling_minutes": 20},
+        {"risk_id": "R-4", "disposition": "approve", "handling_minutes": "25"},
+    ]
+    handling = summarize_register([], [], decisions, [])["handling_time"]
+    assert handling["recorded_count"] == 2
+    assert handling["unmeasured_decisions"] == 2
+    assert handling["median_minutes"] == 15
+    assert handling["mean_minutes"] == 15
+    assert handling["median_label"] == "15 minutes"
+    rounded = summarize_register([], [], [
+        {"handling_minutes": 1},
+        {"handling_minutes": 1},
+        {"handling_minutes": 2},
+    ], [])["handling_time"]
+    assert rounded["recorded_count"] == 3
+    assert rounded["median_minutes"] == 1
+    assert rounded["mean_minutes"] == 1.33
+    assert rounded["mean_label"] == "1.33 minutes"
+    assert rounded["median_label"] == "1 minute"
+
+
+def test_dashboard_shows_self_reported_minutes_apart_from_the_cost_panel(client, app):
+    from app.db import get_db
+    from app.services.cost_model import calculate_cost
+
+    before = calculate_cost()
+    with app.app_context():
+        _save_intake(get_db(), handling_minutes=25)
+        _save_intake(get_db())
+    body = client.get("/").data.decode()
+    observed = _observed_section(body)
+    assert "SELF-REPORTED HANDLING TIME" in observed
+    assert "25 minutes" in observed
+    assert "Self-reported human handling time." in observed
+    assert "Not used by the cost model." in observed
+    assert "1 saved decision has no minutes." in observed
+    assert "$" not in observed
+    assert "180.00" in body
+    assert "600.00" in body
+    assert calculate_cost() == before
+    methods = client.get("/methodology").data.decode()
+    assert "25 minutes" in _observed_section(methods)
+    assert "180.00" not in _observed_section(methods)
 
 
 def test_dashboard_scenario_save_does_not_invent_cycle_time(client, app):

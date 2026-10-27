@@ -23,7 +23,8 @@ from app.services.intake_questionnaire import load_questionnaire
 from app.services.org_policy import load_org_policy
 from app.services.risk_engine import load_rules
 from app.services.workflow_service import (
-    DISPOSITION_RULE, DISPOSITIONS, WorkflowInputError, decision_problems, get_risk, register_intake,
+    DISPOSITION_RULE, DISPOSITIONS, WorkflowInputError, decision_problems, get_risk,
+    parse_handling_minutes, register_intake,
 )
 
 CONTRACT_VERSION = "1.0.0"
@@ -35,13 +36,16 @@ CONTRACT_DESCRIPTION = "grc.intake.contract"
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _REQUEST_KEYS = {"form", "as_of", "contract_version", "persist", "decision"}
-_DECISION_KEYS = {"disposition", "rationale", "decider", "conditions", "exception_rationale"}
+_DECISION_KEYS = {
+    "disposition", "rationale", "decider", "conditions", "exception_rationale", "handling_minutes",
+}
 
 LIMITATIONS = (
     "Portfolio demo. Not a production GRC API and not a certification.",
     "The risk model is an illustrative portfolio model. Identical inputs and the same rule-set version produce the same result.",
     "A residual tier does not approve the vendor. Human review is required, and a configured restriction can block automatic approval.",
     "An assessment is not written to the risk register unless persist is true and a person supplies a disposition, rationale, and decider. The residual tier is not that disposition.",
+    "handling_minutes on a decision is optional and self-reported. It is not a timer, not authenticated effort, not elapsed cycle time, and not an input to the cost model.",
     "A trust-center URL is stored as pasted text unless fetch_trust_center is yes. A fetch is one HTTP GET of vendor-published material for human review. It is not verified evidence and it does not approve the vendor. File import does not fetch.",
     "A ServiceNow-shaped file is simulated input. This contract does not call ServiceNow.",
     "No external AI model scores or approves the vendor.",
@@ -127,7 +131,10 @@ def contract_document():
             "decision": (
                 "Required object when persist is true. disposition is approve, "
                 "approve_with_conditions, escalate, or reject. rationale and decider are required. "
-                "conditions and exception_rationale follow the saved-risk rules."
+                "conditions and exception_rationale follow the saved-risk rules. "
+                "handling_minutes is optional. Omit it, null, or a blank string to leave "
+                "human handling time unmeasured. A value must be a non-negative whole number "
+                "of minutes. Fractions and negative numbers are rejected and are not rewritten."
             ),
         },
         "dispositions": list(DISPOSITIONS),
@@ -438,6 +445,12 @@ def _parse_persist(payload):
     if unknown:
         problems.append("Unrecognized decision fields: " + ", ".join(unknown) + ".")
     cleaned = {}
+    if "handling_minutes" in decision:
+        minute_problems, minutes = parse_handling_minutes(decision["handling_minutes"])
+        problems.extend(minute_problems)
+        cleaned["handling_minutes"] = minutes
+    else:
+        cleaned["handling_minutes"] = None
     for key in ("disposition", "rationale", "decider", "conditions", "exception_rationale"):
         if key not in decision:
             if key in {"disposition", "rationale", "decider"}:
@@ -466,6 +479,7 @@ def _require_decision(result, decision):
         decision.get("decider", ""),
         decision.get("conditions", ""),
         decision.get("exception_rationale", ""),
+        decision.get("handling_minutes"),
     )
     if problems:
         raise BotRequestError(problems)
@@ -505,6 +519,7 @@ def _decision_document(decision):
         "policy_version": decision["policy_version"],
         "rule_set_version": decision["rule_set_version"],
         "prohibited_at_decision": decision["prohibited_at_decision"],
+        "handling_minutes": decision.get("handling_minutes"),
         "separate_from_score": True,
     }
 

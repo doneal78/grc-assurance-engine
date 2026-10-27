@@ -1,6 +1,6 @@
 # GRC Assurance Engine — Build Plan
 
-**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Questionnaire 1.1.0 adds optional vendor-direction context for a reviewer. Those fields are not scored, and the residual formula is unchanged. Trust-center citations can be pasted, or a reviewer can request one HTTP GET that stores the page for human review. A fetch is not verified evidence. File import does not fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow. Preview and confirm do not save. A person can then save one synthetic row with a disposition and rationale. A bot JSON contract and CLI run the same intake path. Assess alone does not save. `persist: true` with a human disposition does. The dashboard reports observed register counts and elapsed intake-to-disposition time, kept separate from the illustrative cost formula. Human handling time remains unmeasured. The control-mapping library is listed at `/mappings`. Mapping set 0.2.0 includes a small draft NIST SP 800-53 set and draft ISO/IEC 27001 and ISO/IEC 42001 review prompts. Those entries remain draft. Multi-tenant policy storage is not implemented. `/walkthrough` is a guided path over the existing pages, including a custom vendor and the optional trust-center choice on `/try/`, the conflicting-permissions scenario, and `/try/import`. A browser cookie remembers the last stop for 12 hours. The guide does not score or save on its own.
+**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Questionnaire 1.1.0 adds optional vendor-direction context for a reviewer. Those fields are not scored, and the residual formula is unchanged. Trust-center citations can be pasted, or a reviewer can request one HTTP GET that stores the page for human review. A fetch is not verified evidence. File import does not fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow. Preview and confirm do not save. A person can then save one synthetic row with a disposition and rationale. A bot JSON contract and CLI run the same intake path. Assess alone does not save. `persist: true` with a human disposition does. The dashboard reports observed register counts, elapsed intake-to-disposition time, and optional self-reported handling minutes on a disposition, kept separate from the illustrative cost formula. Those minutes are not a stopwatch and are not cash savings. The control-mapping library is listed at `/mappings`. Mapping set 0.2.0 includes a small draft NIST SP 800-53 set and draft ISO/IEC 27001 and ISO/IEC 42001 review prompts. Those entries remain draft. Multi-tenant policy storage is not implemented. `/walkthrough` is a guided path over the existing pages, including a custom vendor and the optional trust-center choice on `/try/`, the conflicting-permissions scenario, and `/try/import`. A browser cookie remembers the last stop for 12 hours. The guide does not score or save on its own.
 **Project type:** GRC Engineering portfolio application  
 **Development approach:** Local-first, phased implementation, test-driven business logic  
 **Primary IDE:** Cursor  
@@ -472,7 +472,7 @@ Do not connect to a live ServiceNow instance or require credentials for the MVP.
 
 ## 11. Phase 6 — Workflow Metrics and Cost of Assurance
 
-**Status:** `app/services/workflow_metrics.py` counts saved assessments, open remediation, residual tiers, claim and clause evidence statuses, and current dispositions from the local register. It measures elapsed intake-to-disposition time only when both `intake_received` and `decision_recorded` exist. The dashboard and methods page show those figures apart from `calculate_cost()`. Human handling time, a monthly rate, rework duration, and cash savings remain unmeasured. The illustrative formula, including added review and maintenance assumptions, is unchanged. One-time development cost is excluded because no source input is available. See section 22.
+**Status:** `app/services/workflow_metrics.py` counts saved assessments, open remediation, residual tiers, claim and clause evidence statuses, and current dispositions from the local register. It measures elapsed intake-to-disposition time only when both `intake_received` and `decision_recorded` exist. When a decision row stores optional self-reported handling minutes, the dashboard and methods page show the median of those rows. Blank rows stay out of that median. A monthly rate, rework duration, authenticated effort tracking, and cash savings remain unmeasured. The figures stay apart from `calculate_cost()`. The illustrative formula, including added review and maintenance assumptions, is unchanged. One-time development cost is excluded because no source input is available. See section 22.
 
 ### Objective
 
@@ -499,6 +499,8 @@ Capture, where possible:
 **Human handling time** is the time spent performing work.
 
 These are not interchangeable.
+
+A person may optionally record self-reported minutes on a disposition. That number is observed handling time for the rows that have it. It is not elapsed cycle time, and it is not copied into the illustrative formula. Blank remains unmeasured. See section 22.
 
 **Labor capacity value** estimates the value of work time made available under stated assumptions.
 
@@ -539,7 +541,7 @@ Do not monetize hypothetical avoided security incidents in the MVP.
 
 ## 12. Phase 7 — Dashboard and User Experience
 
-**Status:** Local demo landing, scenario detail, risk register, remediation, methods, the control-mappings library page (`/mappings`), and a guided walkthrough at `/walkthrough` are implemented for the synthetic fixtures. The walkthrough reuses those pages, including a custom vendor and the optional trust-center choice on the public form, the conflicting-permissions scenario, and file import, and stores only a step id in a browser cookie. On the intake, custom-vendor, and trust-center stops, Next waits until Run assessment succeeds for that stop. File import waits until confirm, and the decision stop waits until a decision is recorded. The save stop waits until the register action. Scenario pages, the dashboard, and methods still offer Next on arrival. Ready-made cards keep `?walk=` while a guide is open. The public form, file import, and JSON/CLI intake assess a vendor. Saving that assessment is opt-in. The dashboard shows observed volume, open remediation, residual-tier and evidence-status distributions, persisted disposition counts, and elapsed intake-to-disposition cycle time from stored events. Human handling effort and rework time remain unmeasured, and the page says so. The illustrative cost panel stays separate. Mapping set 0.2.0 includes draft ISO/IEC 27001 and ISO/IEC 42001 review prompts beside the NIST entries, and every current mapping remains draft.
+**Status:** Local demo landing, scenario detail, risk register, remediation, methods, the control-mappings library page (`/mappings`), and a guided walkthrough at `/walkthrough` are implemented for the synthetic fixtures. The walkthrough reuses those pages, including a custom vendor and the optional trust-center choice on the public form, the conflicting-permissions scenario, and file import, and stores only a step id in a browser cookie. On the intake, custom-vendor, and trust-center stops, Next waits until Run assessment succeeds for that stop. File import waits until confirm, and the decision stop waits until a decision is recorded. The save stop waits until the register action. Scenario pages, the dashboard, and methods still offer Next on arrival. Ready-made cards keep `?walk=` while a guide is open. The public form, file import, and JSON/CLI intake assess a vendor. Saving that assessment is opt-in. The dashboard shows observed volume, open remediation, residual-tier and evidence-status distributions, persisted disposition counts, elapsed intake-to-disposition cycle time from stored events, and self-reported handling minutes when at least one decision includes them. Rework time remains unmeasured, and the page says so. The illustrative cost panel stays separate. Mapping set 0.2.0 includes draft ISO/IEC 27001 and ISO/IEC 42001 review prompts beside the NIST entries, and every current mapping remains draft.
 
 ### Objective
 
@@ -747,8 +749,8 @@ Let a confirmed import, or an explicit API or CLI decision, put one synthetic ve
 
 ### Behavior
 
-- `/try/import` preview and confirm do not write. The result page offers a checkbox and a save button for each row. The box must be checked. The person records a disposition, a short rationale, and a decider.
-- `POST /api/v1/intake/assess` writes only when `persist` is the boolean true and `decision` includes `disposition`, `rationale`, and `decider`. Omitted `persist` means assess only. A decision sent without `persist: true` is rejected and nothing is saved.
+- `/try/import` preview and confirm do not write. The result page offers a checkbox and a save button for each row. The box must be checked. The person records a disposition, a short rationale, and a decider. Minutes spent reviewing are optional.
+- `POST /api/v1/intake/assess` writes only when `persist` is the boolean true and `decision` includes `disposition`, `rationale`, and `decider`. Omitted `persist` means assess only. A decision sent without `persist: true` is rejected and nothing is saved. Optional `handling_minutes` follows the same rules as the decision form.
 - The CLI accepts the same JSON fields, or `--persist` with `--disposition`, `--rationale`, and `--decider`. Flags and JSON persist fields cannot be combined. `assess-file --persist` applies that one disposition to every row. If any row cannot take it, none are saved.
 - Dispositions are approve, approve with conditions, escalate, and reject. The same rules as a scenario decision apply. Approving a prohibited result requires an exception rationale. Escalate and reject do not. An exception rationale is refused when it does not mean "proceed despite the restriction."
 - The residual tier stays the engine result. A low tier does not become an approval. `automatic_approval` stays null. The decision row stores the person's disposition.
@@ -757,11 +759,11 @@ Let a confirmed import, or an explicit API or CLI decision, put one synthetic ve
 
 ### Out of scope for this increment
 
-Observed human handling time, a per-visitor register, an authenticated decider, and a live ServiceNow write. Elapsed intake-to-disposition time is reported from workflow events when both milestones exist. See section 22. The hosted demo's register is still shared by everyone with the link. Do not put real vendor data in it.
+Authenticated effort tracking, a per-visitor register, an authenticated decider, and a live ServiceNow write. Optional self-reported handling minutes are described in section 22. Elapsed intake-to-disposition time is reported from workflow events when both milestones exist. The hosted demo's register is still shared by everyone with the link. Do not put real vendor data in it.
 
 ## 22. Observed workflow metrics
 
-**Status:** Implemented in `app/services/workflow_metrics.py` and shown on the dashboard and the methods page.
+**Status:** Implemented in `app/services/workflow_metrics.py` (definition version 2) and shown on the dashboard and the methods page.
 
 ### Objective
 
@@ -775,11 +777,14 @@ Show what the local register can actually support, and keep those figures apart 
 - Claim evidence counts use each stored claim's `evidence_status`. Clause evidence counts use the stored required-clause statuses and stay in their own list. A missing claim status is an evidence gap, not a confirmed control failure.
 - Disposition counts use the current `decisions` row. `decision_recorded` events are counted separately, so a replacement does not add a second current disposition.
 - Cycle time is the elapsed seconds from the earliest `intake_received` timestamp to the earliest `decision_recorded` timestamp on that same risk. The mean is rounded half up to two decimal places. A shared timestamp is a measured span of 0 elapsed seconds. A scenario with no intake event, a row with no disposition event, and a row whose timestamps are reversed or unreadable stay out of the average.
-- The illustrative cost formula is still `calculate_cost()` from `app/data/cost_assumptions.json`. Observed volume is a count of saved rows, and elapsed cycle time is a clock span, so neither value is copied into that formula.
+- The illustrative cost formula is still `calculate_cost()` from `app/data/cost_assumptions.json`. Observed volume is a count of saved rows, elapsed cycle time is a clock span, and self-reported handling minutes are a third figure. None of those values is copied into that formula.
+- `handling_minutes` is an optional field on the decision row. The scenario decision form, the import save form, and API or CLI persist accept it. Omit, null, and blank mean unmeasured and store null. A non-negative whole number of minutes is stored as that integer. Zero is a reported zero. Negative numbers, fractions, booleans, and other text are rejected and are not rewritten. A database created before the column existed gains it on startup. Older decision rows keep a null.
+- When at least one current decision has a number, the observed panel shows self-reported human handling time. The headline figure is the median of those rows. For an even count, the median is the mean of the two middle values. The mean is rounded half up to two decimal places. Nulls stay out of both. When no decision has a number, the panel says the figure is not measured. It does not show a zero average.
+- The minutes are self-reported. The application does not run a timer, and it does not check the number against an identity system or a timesheet. Replacing a decision without a number clears the previous minutes. The reviewer package includes the number when one is stored, and it says the time was not reported when the column is null.
 
 ### Out of scope for this increment
 
-Human handling time, manual touches, handoffs, rework duration, cash savings, and monetized avoided incidents. The event log is still a local trace. It can be edited by someone with access to the database.
+Authenticated effort tracking, manual touches, handoffs, rework duration, cash savings, and monetized avoided incidents. The event log is still a local trace. It can be edited by someone with access to the database. A self-reported number can be edited the same way. It is not a tamper-proof timesheet.
 
 ## 23. Trust-center fetch
 

@@ -18,7 +18,7 @@
   <pre class="payload"><code>{{ item.payload|tojson(indent=2) }}</code></pre>
   {% else %}<p>No ticket needed: no escalation rule fired, no hard restriction matched, and no evidence gap needs follow-up. A person still reviews the result.</p>{% endif %}
   <h3>Save to the risk register</h3>
-  <p>Synthetic demonstration data. Check the box and record a disposition to write this vendor. The residual tier stays the engine result. It does not set the disposition.</p>
+  <p>Synthetic demonstration data. Check the box and record a disposition to write this vendor. The residual tier stays the engine result. It does not set the disposition. Minutes spent reviewing are optional. Leave that field blank to leave human handling time unmeasured.</p>
   <form class="action-form" method="post" action="{{ url_for('try_demo.import_save', walk=walkthrough.step_id) if walkthrough else url_for('try_demo.import_save') }}">
     <textarea name="confirmation" hidden readonly>{{ confirmation|tojson }}</textarea>
     <input type="hidden" name="source_row" value="{{ item.result.source_row }}">
@@ -30,6 +30,7 @@
     <label class="wide">Rationale<textarea name="rationale" maxlength="1000" rows="3" required placeholder="Why this disposition, separate from the score"></textarea></label>
     <label class="wide">Conditions<textarea name="conditions" maxlength="1000" rows="2" placeholder="Required only for approve with conditions"></textarea></label>
     <label class="wide">Exception rationale<textarea name="exception_rationale" maxlength="1000" rows="2" placeholder="Required only to approve a prohibited result"></textarea></label>
+    <label>Human handling time (minutes spent reviewing)<input name="handling_minutes" inputmode="numeric" maxlength="19" placeholder="Optional. Leave blank if unmeasured"></label>
     <button class="button-link" type="submit">Save to risk register</button>
   </form>
 </section>

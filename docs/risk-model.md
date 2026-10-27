@@ -255,7 +255,7 @@ On a saved risk, a person records one of four dispositions:
 - escalate, which sends the case on and is not an approval
 - reject
 
-The record stores the rationale, the decider's name or role, a UTC timestamp from the server clock, the policy id and version, and the rule set version. Those last two are copied from the saved assessment. The form does not ask the reviewer to type them. Each save writes a workflow event. Saving again replaces the current decision and writes another event. The earlier rationale is not kept as a second row. The local event log is not tamper-proof.
+The record stores the rationale, the decider's name or role, a UTC timestamp from the server clock, the policy id and version, and the rule set version. Those last two are copied from the saved assessment. The form does not ask the reviewer to type them. The same form has an optional field for minutes spent reviewing. Blank stores null. A non-negative whole number is stored as self-reported handling time. It is not elapsed cycle time, it is not checked against an identity system, and it is not an input to the cost formula. Each save writes a workflow event. Saving again replaces the current decision and writes another event. A blank minutes field on that later save clears a number stored earlier. The earlier rationale is not kept as a second row. The local event log is not tamper-proof.
 
 A prohibited result cannot be approved, with or without conditions, unless the reviewer records an exception rationale. Rejection does not require one. Escalation does not require one. An exception rationale is rejected when the result is not prohibited, and it is rejected on a rejection or an escalation, so the field means only "proceed despite this restriction."
 

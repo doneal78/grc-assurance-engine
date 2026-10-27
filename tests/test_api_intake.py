@@ -230,6 +230,91 @@ def test_invalid_persist_decision_writes_no_register_row(client):
     assert _risk_names(client) == []
 
 
+def test_optional_handling_minutes_persist_or_reject_without_saving(client):
+    omitted = client.post("/api/v1/intake/assess", json=payload(persist=True, decision={
+        "disposition": "escalate",
+        "rationale": "Low residual tier is not an approval.",
+        "decider": "GRC analyst",
+    }))
+    assert omitted.status_code == 200
+    body = omitted.get_json()
+    assert body["decision"]["handling_minutes"] is None
+    assert body["decision"]["disposition"] == "escalate"
+
+    blank = client.post("/api/v1/intake/assess", json=payload(
+        form=form(vendor_name="Blank Minutes"),
+        persist=True,
+        decision={
+            "disposition": "escalate",
+            "rationale": "Blank means unmeasured.",
+            "decider": "GRC analyst",
+            "handling_minutes": "",
+        },
+    ))
+    assert blank.status_code == 200
+    assert blank.get_json()["decision"]["handling_minutes"] is None
+
+    reported = client.post("/api/v1/intake/assess", json=payload(
+        form=form(vendor_name="Reported Minutes"),
+        persist=True,
+        decision={
+            "disposition": "escalate",
+            "rationale": "A person typed the minutes.",
+            "decider": "GRC analyst",
+            "handling_minutes": 40,
+        },
+    ))
+    assert reported.status_code == 200
+    reported_body = reported.get_json()
+    assert reported_body["decision"]["handling_minutes"] == 40
+    assert reported_body["residual"]["tier"] != reported_body["decision"]["disposition"]
+
+    digit_string = client.post("/api/v1/intake/assess", json=payload(
+        form=form(vendor_name="Digit String"),
+        persist=True,
+        decision={
+            "disposition": "reject",
+            "rationale": "A digit string is the same whole number.",
+            "decider": "GRC analyst",
+            "handling_minutes": "18",
+        },
+    ))
+    assert digit_string.status_code == 200
+    assert digit_string.get_json()["decision"]["handling_minutes"] == 18
+
+    negative = client.post("/api/v1/intake/assess", json=payload(
+        form=form(vendor_name="Negative Minutes"),
+        persist=True,
+        decision={
+            "disposition": "escalate",
+            "rationale": "This must not be stored.",
+            "decider": "GRC analyst",
+            "handling_minutes": -5,
+        },
+    ))
+    assert negative.status_code == 400
+    assert negative.get_json()["persisted"] is False
+    assert negative.get_json()["assessed"] is False
+    assert any("negative" in problem for problem in negative.get_json()["problems"])
+
+    fraction = client.post("/api/v1/intake/assess", json=payload(
+        form=form(vendor_name="Fractional Minutes"),
+        persist=True,
+        decision={
+            "disposition": "escalate",
+            "rationale": "A fraction must not be rounded.",
+            "decider": "GRC analyst",
+            "handling_minutes": 12.0,
+        },
+    ))
+    assert fraction.status_code == 400
+    assert fraction.get_json()["persisted"] is False
+    assert any("fractional" in problem for problem in fraction.get_json()["problems"])
+    assert "Fractional Minutes" not in _risk_names(client)
+    assert "Negative Minutes" not in _risk_names(client)
+    assert "Reported Minutes" in _risk_names(client)
+
+
 def test_cross_site_persist_is_rejected(client):
     response = client.post(
         "/api/v1/intake/assess",
