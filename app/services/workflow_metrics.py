@@ -1,4 +1,4 @@
-"""Observed counts and elapsed cycle time from the local risk register.
+"""Observed counts, elapsed cycle time, and self-reported handling minutes.
 
 The figures come from persisted rows and workflow-event timestamps. They are
 separate from the illustrative cost assumptions in ``cost_model.py``.
@@ -6,8 +6,11 @@ separate from the illustrative cost assumptions in ``cost_model.py``.
 Elapsed cycle time is the clock span from the earliest ``intake_received``
 event to the earliest ``decision_recorded`` event on the same risk. A shared
 timestamp is a measured span of zero seconds. That span is the time between
-writes. Human handling time is a different quantity, and this module does
-not record it or turn it into money.
+writes.
+
+Self-reported human handling time is the optional ``handling_minutes`` value
+on the current decision row. Null stays out of that average. The minutes are
+not elapsed cycle time, and this module does not pass them to the cost formula.
 """
 
 import json
@@ -18,7 +21,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from app.services.workflow_service import DISPOSITIONS
 
 
-DEFINITION_VERSION = "1"
+DEFINITION_VERSION = "2"
 
 RESIDUAL_TIERS = ("low", "moderate", "high", "critical", "undetermined")
 EVIDENCE_STATUSES = (
@@ -32,11 +35,13 @@ COST_MAPPING = (
     "Observed assessment volume is a count of saved rows. It stays out of the "
     "assessments-per-month assumption. Elapsed cycle time is a clock span between "
     "workflow events. It stays out of the baseline and assisted handling-hour "
-    "assumptions. The illustrative formula is unchanged."
+    "assumptions. Self-reported handling minutes stay out of that formula. "
+    "The illustrative formula is unchanged."
 )
 UNMEASURED_SUMMARY = (
-    "Human handling time, manual touches, handoffs, rework duration, a monthly "
-    "assessment rate, cash savings, and avoided-incident value stay unmeasured."
+    "Manual touches, handoffs, rework duration, a monthly assessment rate, "
+    "cash savings, and avoided-incident value stay unmeasured. Self-reported "
+    "handling minutes are optional and are not cash savings."
 )
 CYCLE_DEFINITION = (
     "Elapsed seconds from the earliest intake_received event to the earliest "
@@ -44,14 +49,16 @@ CYCLE_DEFINITION = (
     "to two decimal places. A shared timestamp counts as zero elapsed seconds. "
     "Scenario rows without intake_received, rows without a disposition event, and "
     "rows with reversed or unreadable timestamps stay outside the average. "
-    "Human handling time stays unmeasured."
+    "Self-reported handling minutes are a separate figure."
+)
+HANDLING_DEFINITION = (
+    "Self-reported whole minutes on the current decision row. Blank and null stay "
+    "out of the average. The headline figure is the median. For an even count, the "
+    "median is the mean of the two middle values. The mean is rounded half up to "
+    "two decimal places. These minutes are not elapsed cycle time, they are not "
+    "authenticated, and they are not copied into the cost formula."
 )
 NOT_MEASURED = (
-    {
-        "id": "human_handling_time",
-        "label": "Human handling time",
-        "detail": "A workflow timestamp records when the application wrote the event. The log does not store how long a person spent.",
-    },
     {
         "id": "manual_touches",
         "label": "Manual touches",
@@ -94,7 +101,7 @@ def observed_metrics(db):
         "SELECT status FROM remediation_actions"
     ).fetchall()]
     decisions = [dict(row) for row in db.execute(
-        "SELECT risk_id, disposition FROM decisions"
+        "SELECT risk_id, disposition, handling_minutes FROM decisions"
     ).fetchall()]
     events = [dict(row) for row in db.execute(
         """SELECT risk_id, event_type, occurred_at
@@ -237,7 +244,27 @@ def summarize_register(risks, actions, decisions, events):
         },
         "decision_event_count": decision_event_count,
         "cycle_time": cycle,
+        "handling_time": _handling_block(decisions),
     }
+
+
+def format_handling_minutes(minutes):
+    """Render a minute count with its unit. ``None`` stays ``None``."""
+    if minutes is None:
+        return None
+    try:
+        value = Decimal(str(minutes))
+    except (InvalidOperation, ValueError):
+        return None
+    if not value.is_finite():
+        return None
+    if value == value.to_integral_value():
+        rendered = str(int(value))
+        unit = "minute" if value == 1 else "minutes"
+    else:
+        rendered = format(value.normalize(), "f")
+        unit = "minutes"
+    return f"{rendered} {unit}"
 
 
 def format_elapsed_seconds(seconds):
@@ -402,5 +429,74 @@ def _cycle_statistics(spans):
         "median_seconds": median,
         "mean_seconds": mean,
         "total_seconds": total,
+    }
+
+
+def _handling_block(decisions):
+    """Median of current decision rows that store a whole number of minutes.
+
+    Null, a missing key, and any value that is not a non-negative int stay
+    out of the average. A stored zero is a reported zero and is included.
+    """
+    values = []
+    unmeasured = 0
+    for decision in decisions:
+        raw = decision.get("handling_minutes") if isinstance(decision, dict) else None
+        if isinstance(raw, bool) or not isinstance(raw, int) or raw < 0:
+            unmeasured += 1
+            continue
+        values.append(raw)
+    stats = _minute_statistics(values)
+    labeled = {
+        "recorded_count": stats["recorded_count"],
+        "unmeasured_decisions": unmeasured,
+        "minimum_minutes": _number(stats["minimum_minutes"]),
+        "maximum_minutes": _number(stats["maximum_minutes"]),
+        "median_minutes": _number(stats["median_minutes"]),
+        "mean_minutes": _number(stats["mean_minutes"]),
+        "total_minutes": _number(stats["total_minutes"]),
+        "minimum_label": format_handling_minutes(stats["minimum_minutes"]),
+        "maximum_label": format_handling_minutes(stats["maximum_minutes"]),
+        "median_label": format_handling_minutes(stats["median_minutes"]),
+        "mean_label": format_handling_minutes(stats["mean_minutes"]),
+        "total_label": format_handling_minutes(stats["total_minutes"]) or "0 minutes",
+    }
+    return {
+        "kind": "self_reported",
+        "label": "Self-reported human handling time",
+        "unit": "minutes",
+        "definition": HANDLING_DEFINITION,
+        "feeds_cost_model": False,
+        "authenticated": False,
+        **labeled,
+    }
+
+
+def _minute_statistics(values):
+    if not values:
+        return {
+            "recorded_count": 0,
+            "minimum_minutes": None,
+            "maximum_minutes": None,
+            "median_minutes": None,
+            "mean_minutes": None,
+            "total_minutes": Decimal(0),
+        }
+    ordered = sorted(Decimal(value) for value in values)
+    count = len(ordered)
+    total = sum(ordered, Decimal(0))
+    mid = count // 2
+    if count % 2:
+        median = ordered[mid]
+    else:
+        median = (ordered[mid - 1] + ordered[mid]) / Decimal(2)
+    mean = (total / Decimal(count)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+    return {
+        "recorded_count": count,
+        "minimum_minutes": ordered[0],
+        "maximum_minutes": ordered[-1],
+        "median_minutes": median,
+        "mean_minutes": mean,
+        "total_minutes": total,
     }
 

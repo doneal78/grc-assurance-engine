@@ -121,8 +121,39 @@ def test_scenario_download_and_saved_risk_download_include_the_decision(client):
     with client.application.app_context():
         stored = package_from_saved_risk(get_risk(get_db(), risk_id))
     assert stored["decision"]["exception_rationale"] == "A named officer decides each eligibility case."
+    assert stored["decision"]["handling_minutes"] is None
+    assert b"not reported (unmeasured)." in downloaded.data
     assert stored["automatic_approval"] is None
     assert stored["intake_answers"]
+
+    with_minutes = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "approve",
+        "rationale": "The output is advisory.",
+        "decider": "AI governance reviewer",
+        "conditions": "",
+        "exception_rationale": "A named officer decides each eligibility case.",
+        "handling_minutes": "40",
+    }, headers=SAME_ORIGIN)
+    assert with_minutes.status_code == 302
+    package = json.loads(client.get(f"/risks/{risk_id}/export/json").data)
+    assert package["decision"]["handling_minutes"] == 40
+    assert "not an input to the cost model" in package["decision"]["handling_time_note"]
+    summary = client.get(f"/risks/{risk_id}/export/markdown").data
+    assert b"40 self-reported minutes" in summary
+    nonsense = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "approve",
+        "rationale": "The output is advisory.",
+        "decider": "AI governance reviewer",
+        "conditions": "",
+        "exception_rationale": "A named officer decides each eligibility case.",
+        "handling_minutes": "12.5",
+    }, headers=SAME_ORIGIN)
+    assert nonsense.status_code == 400
+    assert b"handling_minutes" in nonsense.data
+    with client.application.app_context():
+        kept = get_risk(get_db(), risk_id)["decision"]
+    assert kept["handling_minutes"] == 40
+    assert kept["disposition"] == "approve"
 
 
 def test_methods_page_describes_the_questionnaire(client):

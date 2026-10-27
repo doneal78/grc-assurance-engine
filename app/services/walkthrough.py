@@ -167,9 +167,9 @@ _STEPS = (
         "summary": "Record a disposition, then download the package that includes it.",
         "notice": (
             "Record escalate or reject without an exception rationale, or approve "
-            "a prohibited result only with one. The prohibited flag stays. Then "
-            "download the package: it includes the decision, and nothing is sent "
-            "to ServiceNow."
+            "a prohibited result only with one. The prohibited flag stays. Minutes "
+            "spent reviewing are optional. Then download the package: it includes "
+            "the decision, and nothing is sent to ServiceNow."
         ),
         "endpoint": "risks.detail",
         "endpoints": ("risks.detail", "risks.record_risk_decision"),
@@ -208,8 +208,9 @@ _STEPS = (
         "notice": (
             "The observed panel counts saved records. Cycle time stays empty on a "
             "scenario save, which does not store both an intake event and a "
-            "disposition event. The cost panel is modeled labor capacity, not "
-            "cash savings."
+            "disposition event. Self-reported handling minutes appear only when "
+            "a decision includes them. The cost panel is modeled labor capacity, "
+            "not cash savings."
         ),
         "endpoint": "dashboard.index",
         "view_args": {},

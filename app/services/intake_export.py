@@ -24,6 +24,22 @@ NOT_SUPPLIED = {
 }
 
 
+def _handling_time_note(minutes):
+    if minutes is None:
+        return "Not reported. Handling time for this decision is unmeasured."
+    return (
+        "Self-reported minutes spent reviewing. Optional. Not authenticated, "
+        "not elapsed cycle time, and not an input to the cost model."
+    )
+
+
+def _handling_time_line(minutes):
+    if minutes is None:
+        return "not reported (unmeasured)."
+    unit = "minute" if minutes == 1 else "minutes"
+    return f"{minutes} self-reported {unit}. Not authenticated effort tracking."
+
+
 def _decision_view(decision):
     if not decision:
         return None
@@ -38,6 +54,8 @@ def _decision_view(decision):
         "policy_version": decision["policy_version"],
         "rule_set_version": decision["rule_set_version"],
         "prohibited_at_decision": decision["prohibited_at_decision"],
+        "handling_minutes": decision.get("handling_minutes"),
+        "handling_time_note": _handling_time_note(decision.get("handling_minutes")),
     }
 
 
@@ -370,6 +388,7 @@ def render_markdown(package):
         lines.append(f"- Policy at decision: {decision['policy_id']} {decision['policy_version']}")
         lines.append(f"- Rule set at decision: {decision['rule_set_version']}")
         lines.append(f"- Policy outcome at decision: {decision['prohibited_at_decision'].replace('_', ' ')}")
+        lines.append(f"- Human handling time: {_handling_time_line(decision.get('handling_minutes'))}")
     lines.extend(["", "End of package.", ""])
     return "\n".join(lines)
 

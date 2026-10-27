@@ -421,6 +421,44 @@ def test_import_save_is_opt_in_and_a_low_tier_is_not_approval(gated_client):
     assert b"Harbor Assist" not in register.data
 
 
+def test_import_save_stores_optional_minutes_and_rejects_a_negative(gated_client):
+    from app.db import get_db
+    from app.services.workflow_service import get_risk
+
+    response = _post_file(gated_client, "vendor_intake.csv", sample_file("csv"))
+    document = _confirmation(response.data)
+    confirmed = gated_client.post("/try/import/confirm", data={"confirmation": json.dumps(document)},
+                                  headers=SAME_ORIGIN)
+    assert b"minutes spent reviewing" in confirmed.data
+    assert b'name="handling_minutes" required' not in confirmed.data
+    row = document["rows"][0]
+    fields = {
+        "confirmation": json.dumps(document),
+        "source_row": row["row_number"],
+        "persist": "yes",
+        "disposition": "escalate",
+        "rationale": "Low residual tier is not an approval.",
+        "decider": "GRC analyst",
+        "handling_minutes": "-1",
+    }
+    rejected = gated_client.post("/try/import/save", data=fields, headers=SAME_ORIGIN)
+    assert rejected.status_code == 400
+    assert b"handling_minutes" in rejected.data
+    login = {"Authorization": "Basic " + base64.b64encode(b"demo:pw").decode()}
+    assert b"Northwind Notes" not in gated_client.get("/risks", headers=login).data
+
+    fields["handling_minutes"] = "16"
+    saved = gated_client.post("/try/import/save", data=fields, headers=SAME_ORIGIN)
+    assert saved.status_code == 302
+    risk_id = saved.headers["Location"].rsplit("/", 1)[-1].split("?", 1)[0]
+    with gated_client.application.app_context():
+        decision = get_risk(get_db(), risk_id)["decision"]
+    assert decision["handling_minutes"] == 16
+    assert decision["disposition"] == "escalate"
+    detail = gated_client.get(saved.headers["Location"], headers=login)
+    assert b"16 self-reported minutes" in detail.data
+
+
 def test_preview_shows_row_errors_without_a_confirm_button(gated_client):
     forms = [dict(sample_forms()[0]), dict(sample_forms()[0])]
     forms[1]["data_sensitivity"] = "restricted"

@@ -388,6 +388,45 @@ def test_cli_persist_flag_writes_only_when_the_disposition_is_valid(tmp_path, ca
     assert risks[0]["decision_disposition"] == "escalate"
 
 
+def test_cli_handling_minutes_are_optional_and_reject_a_negative(tmp_path, capsys, monkeypatch):
+    from app import create_app
+    from app.db import get_db
+    from app.services.workflow_service import get_risk, list_risks
+
+    database = tmp_path / "minutes.sqlite3"
+    monkeypatch.setenv("DATABASE_PATH", str(database))
+    code = _cli(
+        ["assess", "-", "--persist", "--disposition", "escalate",
+         "--rationale", "Low residual tier is not an approval.", "--decider", "GRC analyst",
+         "--handling-minutes", "22"],
+        json.dumps(request()),
+    )
+    captured = capsys.readouterr()
+    assert code == EXIT_OK
+    body = json.loads(captured.out)
+    assert body["decision"]["handling_minutes"] == 22
+    assert body["decision"]["disposition"] == "escalate"
+    app = create_app({"TESTING": True, "DATABASE": str(database), "REQUIRE_AUTH": False})
+    with app.app_context():
+        stored = get_risk(get_db(), body["risk_id"])
+    assert stored["decision"]["handling_minutes"] == 22
+
+    code = _cli(
+        ["assess", "-", "--persist", "--disposition", "reject",
+         "--rationale", "A negative must not be stored.", "--decider", "GRC analyst",
+         "--handling-minutes", "-2"],
+        json.dumps(request(form=form(vendor_name="Rejected Minutes"))),
+    )
+    captured = capsys.readouterr()
+    assert code == EXIT_VALIDATION
+    error = json.loads(captured.out)
+    assert error["persisted"] is False
+    assert any("negative" in problem for problem in error["problems"])
+    with app.app_context():
+        names = [risk["scenario_name"] for risk in list_risks(get_db())]
+    assert names == ["Northwind Notes"]
+
+
 def test_cli_assess_file_without_persist_leaves_the_register_empty(tmp_path, capsys, monkeypatch):
     from app import create_app
     from app.db import get_db

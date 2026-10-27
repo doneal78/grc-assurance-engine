@@ -218,6 +218,7 @@ def _decision_from_form(form):
         "decider": form.get("decider", ""),
         "conditions": form.get("conditions", ""),
         "exception_rationale": form.get("exception_rationale", ""),
+        "handling_minutes": form.get("handling_minutes", ""),
     }
 
 
