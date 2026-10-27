@@ -45,7 +45,11 @@ def test_low_risk_intake_uses_real_engine_results():
     clause = r["risk"]["policy"]["required_contract_clauses"][0]
     assert clause["evidence_status"] == "verified"
     assert clause["evidence"][0]["evidence_id"] == "E-CC-001"
-    assert {m["control_id"] for m in r["mappings"]} == {"IA-2", "AC-6", "SC-8", "AU-2"}
+    assert {m["control_id"] for m in r["mappings"]} == {
+        "IA-2", "AC-6", "SC-8", "AU-2",
+        "A.5.15", "A.8.5", "A.5.14", "A.8.15",
+        "A.6.2.6", "A.6.2.8", "A.7.2", "A.7.3",
+    }
 
 
 @pytest.mark.parametrize("option, expected", [
@@ -142,9 +146,12 @@ def test_unknown_answers_are_undetermined_not_low():
 
 
 def test_event_log_lists_steps_in_order():
-    titles = [e["title"] for e in workflow_events(run(trust_soc2="none"))]
+    events = workflow_events(run(trust_soc2="none"))
+    titles = [e["title"] for e in events]
     assert titles == ["Intake received", "Evidence validated", "Risk evaluated", "Policy check",
                       "Escalation check", "Controls mapped", "Remediation ticket drafted"]
+    mapped = next(event["detail"] for event in events if event["title"] == "Controls mapped")
+    assert "review prompts, not a conformity or certification result" in mapped
 
 
 @pytest.mark.parametrize("overrides, expected", [

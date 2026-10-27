@@ -18,7 +18,9 @@ def test_evidence_supported_scenario_has_verified_evidence_and_draft_mappings():
     assert result["risk"]["inherent"]["tier"] == "low"
     assert result["risk"]["evidence_confidence"]["level"] == "high"
     assert all(claim["evidence_status"] == "verified" for claim in result["claims"])
-    assert {item["control_id"] for item in result["mappings"]} == {"AC-6", "IA-2", "SC-8"}
+    assert {item["control_id"] for item in result["mappings"]} == {
+        "AC-6", "IA-2", "SC-8", "A.5.15", "A.8.5", "A.5.14",
+    }
     assert all(item["review_status"] == "draft" for item in result["mappings"])
     assert result["risk"]["review_path"] == "standard_review"
     clause = result["risk"]["policy"]["required_contract_clauses"][0]
@@ -43,6 +45,9 @@ def test_high_risk_ai_scenario_is_escalated_and_missing_is_not_failure():
     clause = result["risk"]["policy"]["required_contract_clauses"][0]
     assert clause["evidence_status"] == "missing"
     assert clause["status_reason"] == "No evidence provided."
+    assert {item["control_id"] for item in result["mappings"]} == {
+        "IA-2", "AC-6", "AU-2", "A.8.5", "A.5.15", "A.8.15", "A.6.2.6", "A.6.2.8",
+    }
 
 
 def test_conflicting_scenario_retains_conflict_and_escalates():

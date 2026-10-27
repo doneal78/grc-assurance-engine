@@ -35,7 +35,7 @@ Scenario runs are deterministic examples, not vendor records. File import on `/t
 - Standard-library JSON, CSV, and SQLite are preferred for the prototype. `openpyxl` is the one added library, and it only reads `.xlsx` workbooks.
 - Flask remains at the route and presentation boundary; core functions can be tested directly.
 - Static JSON makes every demonstration input inspectable and repeatable.
-- Mapping results retain source, version, claim, and evidence references while remaining visibly draft. `/mappings` lists the whole library from `list_library`. ISO/IEC 27001 and ISO/IEC 42001 are not in that library.
+- Mapping results retain source, version, claim, and evidence references while remaining visibly draft. `/mappings` lists the whole library from `list_library`. Mapping set 0.2.0 includes draft ISO/IEC 27001 and ISO/IEC 42001 review prompts beside the NIST entries. A shared claim topic is the join. It is not cross-framework equivalence.
 - No external AI service participates in scoring or approval decisions.
 - One org policy file is enough. There is no tenant selector.
 - The policy outcome is calculated in the risk engine. Templates display it. They do not decide it.

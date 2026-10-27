@@ -125,7 +125,7 @@
         "pointer_id": "privacy",
         "field": "trust_privacy",
         "prompt": "Privacy notice listed on the trust center",
-        "help": "Cited for the privacy claim. Not listed leaves that claim missing. That is not a confirmed failure and it is not treated as verified. No control mapping is attached, because this prototype has no reviewed privacy-control mapping.",
+        "help": "Cited for the privacy claim. Not listed leaves that claim missing. That is not a confirmed failure and it is not treated as verified. A draft ISO/IEC 42001 review prompt can match this topic. That prompt is not a reviewed privacy-law control, and it does not show that a control is in place.",
         "artifact_type": "policy_document",
         "artifact_name": "Privacy notice cited from the trust center",
         "source_by_option": {

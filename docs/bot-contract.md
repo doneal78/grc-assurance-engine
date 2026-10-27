@@ -163,6 +163,6 @@ A yes answer on `decisions_affecting_people` returns policy outcome `prohibited`
 - A human decision is recorded only with persist true. Approve, approve with conditions, escalate, and reject are that disposition. The web form on a saved risk uses the same four. Assess without persist does not save one.
 - `assess-file --persist` uses one disposition for the whole file. It does not ask for a different decision per row. The import result page does, one vendor at a time.
 - The saved row is synthetic demonstration data in the local SQLite register. Saving the same request again adds another row. The decider text is not checked against a directory.
-- Draft control mappings are review prompts. A mapping does not show that a control is implemented or that a framework is met.
+- Draft control mappings are review prompts from mapping set 0.2.0, including a small ISO/IEC 27001 and ISO/IEC 42001 set. The ISO entries are draft portfolio review prompts. A mapping does not show that a control is implemented, that a framework is met, or that two frameworks are equivalent.
 - The local event log and the mock remediation ticket on the web page are separate views of an assessment. They are not part of this JSON document.
 - The CLI and the API do not call ServiceNow and do not open attachment bytes. They GET a trust-center URL only when `fetch_trust_center` is `yes`. That GET is not independent verification. File commands (`preview`, `assess-file`) do not fetch.
