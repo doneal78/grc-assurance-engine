@@ -45,7 +45,7 @@ Then open http://127.0.0.1:5000/ in a browser. The app listens on 127.0.0.1 only
 
 ## Demo walkthrough
 
-Open **Walkthrough** in the header, or go to `/walkthrough`, and choose **Start at intake**. The guide is thirteen stops on the live pages. Next and Back move between them. A cookie in this browser remembers the last stop for 12 hours. Start over on the guide page clears that cookie and does not delete the risk register. The pages do the scoring. The notes only say what to notice. An address without `?walk=` is the free-form page.
+Open **Walkthrough** in the header, or go to `/walkthrough`, and choose **Start at intake**. The guide is thirteen stops on the live pages. Back moves to the previous stop. On the intake, custom-vendor, and trust-center stops, Next stays off until Run assessment on that stop succeeds. The other stops offer Next right away. A cookie in this browser remembers the last stop for 12 hours. Start over on the guide page clears that cookie and does not delete the risk register. The pages do the scoring. The notes only say what to notice. An address without `?walk=` is the free-form page.
 
 1. **Intake** on `/try/`. The ready-made vendors are questionnaires. Running one does not save it.
 2. **Your own vendor** on the same form. Use a made-up name. Model training is asked only when AI use is not none. Run assessment uses the same engine and does not save. The four results stay separate. A low residual tier is not an approval.
@@ -110,7 +110,7 @@ The host is a small portfolio demo, not a production service. Its Lightsail bund
 
 ## Walking through the demo
 
-Open `/walkthrough` and use Next. The note on each page is the cue: a made-up vendor on the public form, an optional trust-center URL whose fetch stores an excerpt for review and is not verified evidence, four results kept apart, CC-001 verified then conflicting, a permissions claim that does escalate, a review a score cannot skip, a prohibited outcome beside a low residual tier, an opt-in save, a decision whose export includes that decision, a file import whose preview has no score, then the dashboard and methods. The cookie remembers the stop for 12 hours. The guide does not change a page unless the address includes `?walk=`.
+Open `/walkthrough`. On the intake form stops, run the assessment, then use Next. The note on each page is the cue: a made-up vendor on the public form, an optional trust-center URL whose fetch stores an excerpt for review and is not verified evidence, four results kept apart, CC-001 verified then conflicting, a permissions claim that does escalate, a review a score cannot skip, a prohibited outcome beside a low residual tier, an opt-in save, a decision whose export includes that decision, a file import whose preview has no score, then the dashboard and methods. The cookie remembers the stop for 12 hours. The guide does not change a page unless the address includes `?walk=`.
 
 The notes below are the same story, plus a few edges the stops do not require you to submit: contradicting evidence, an unknown answer, and the model-training question appearing only when AI use is not none.
 

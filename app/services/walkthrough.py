@@ -4,15 +4,23 @@ The guide names live pages and the facts a visitor should notice. It does
 not score, validate evidence, map controls, or decide a disposition. Those
 results stay in the existing services. Progress is a step id in a browser
 cookie, not a database row.
+
+Intake, custom vendor, and trust center share the public form. Those stops
+set ``await_submission``. Next stays off until the current response is a
+successful assessment for that same stop. The cookie does not store the
+submission, so a later visit to the form holds Next again.
 """
 
 from copy import deepcopy
 
-WALKTHROUGH_VERSION = "1.2.0"
+WALKTHROUGH_VERSION = "1.2.1"
 WALK_COOKIE = "walk_step"
 WALK_QUERY = "walk"
 COOKIE_MAX_AGE = 12 * 60 * 60
 PROHIBITED_SCENARIO_ID = "prohibited-ai-decisions"
+# Set on the request context only for a successful public assessment page.
+# A validation error and the form itself leave it unset.
+SUBMISSION_COMPLETE_ATTR = "walk_submission_complete"
 
 # Static coaching. Tests lock the scenario facts these sentences rely on.
 _STEPS = (
@@ -27,7 +35,9 @@ _STEPS = (
             "optional trust-center choice."
         ),
         "endpoint": "try_demo.index",
+        "endpoints": ("try_demo.index", "try_demo.assess"),
         "view_args": {},
+        "await_submission": True,
     },
     {
         "step_id": "custom",
@@ -43,6 +53,7 @@ _STEPS = (
         "endpoints": ("try_demo.index", "try_demo.assess"),
         "view_args": {},
         "anchor": "intake",
+        "await_submission": True,
     },
     {
         "step_id": "trust",
@@ -59,6 +70,7 @@ _STEPS = (
         "endpoints": ("try_demo.index", "try_demo.assess"),
         "view_args": {},
         "anchor": "trust-center",
+        "await_submission": True,
     },
     {
         "step_id": "evidence",
@@ -250,6 +262,19 @@ def page_matches(step, endpoint, view_args):
         return True
     view_args = view_args or {}
     return all(view_args.get(key) == value for key, value in step["view_args"].items())
+
+
+def submission_pending(step, submission_complete):
+    """Whether this stop must withhold Next.
+
+    A stop marked ``await_submission`` is complete only when
+    ``submission_complete`` is true. That flag means the current response
+    is a successful public assessment, not the form and not a validation
+    error. Other stops are never pending. Completion is not stored.
+    """
+    if not step.get("await_submission"):
+        return False
+    return not submission_complete
 
 
 def carried_walk_step(raw, *, advance_from=None):

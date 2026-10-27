@@ -4,12 +4,13 @@ The index lists the stops. A ``walk`` query on a live page renders the
 coaching note for that stop. The guide does not write a risk.
 """
 
-from flask import Blueprint, redirect, render_template, request, url_for
+from flask import Blueprint, g, redirect, render_template, request, url_for
 
 from app.db import get_db
 from app.services.walkthrough import (
-    PROHIBITED_SCENARIO_ID, WALK_COOKIE, WALK_QUERY, WALKTHROUGH_VERSION,
-    known_step_id, neighbors, page_matches, step_by_id, steps,
+    PROHIBITED_SCENARIO_ID, SUBMISSION_COMPLETE_ATTR, WALK_COOKIE, WALK_QUERY,
+    WALKTHROUGH_VERSION, known_step_id, neighbors, page_matches, step_by_id,
+    steps, submission_pending,
 )
 from app.services.workflow_service import risk_for_scenario
 
@@ -17,6 +18,7 @@ bp = Blueprint("walkthrough", __name__, url_prefix="/walkthrough")
 
 _SAVE_FIRST = "Save the eligibility case first."
 _HOLD = "Add to risk register continues the guide on the saved record."
+_FORM_HOLD = "Run assessment on this page before Next."
 
 
 def _saved_prohibited():
@@ -40,8 +42,13 @@ def destination(step, saved_risk):
     return url_for(step["endpoint"], **kwargs), None
 
 
-def build_coach(step_id, endpoint, view_args, saved_risk):
-    """Template data for the note on one request. URLs are absolute paths."""
+def build_coach(step_id, endpoint, view_args, saved_risk, submission_complete=False):
+    """Template data for the note on one request. URLs are absolute paths.
+
+    ``submission_complete`` is true only for the successful assessment
+    response. Form stops then offer Next. The form and a validation error
+    pass false and withhold it.
+    """
     step = step_by_id(step_id)
     on_page = page_matches(step, endpoint, view_args)
     previous, following = neighbors(step_id)
@@ -50,7 +57,9 @@ def build_coach(step_id, endpoint, view_args, saved_risk):
     next_href = None
     next_title = None
     finish = False
-    if on_page and step_id == "save" and not saved_risk:
+    if on_page and submission_pending(step, submission_complete):
+        hold = _FORM_HOLD
+    elif on_page and step_id == "save" and not saved_risk:
         hold = _HOLD
     elif on_page and following is None:
         finish = True
@@ -92,7 +101,8 @@ def coach_for_request():
     saved = None
     if step_id in {"save", "decide"}:
         saved = _saved_prohibited()
-    return build_coach(step_id, request.endpoint, request.view_args, saved)
+    complete = bool(getattr(g, SUBMISSION_COMPLETE_ATTR, False))
+    return build_coach(step_id, request.endpoint, request.view_args, saved, complete)
 
 
 def index_context(saved_risk, current_id):

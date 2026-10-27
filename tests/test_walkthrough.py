@@ -12,7 +12,7 @@ from app.services.risk_engine import evaluate
 from app.services.scenario_runner import list_scenarios, run_scenario
 from app.services.walkthrough import (
     WALKTHROUGH_VERSION, carried_walk_step, known_step_id, neighbors, page_matches,
-    progress_step_id, step_by_id, steps,
+    progress_step_id, step_by_id, steps, submission_pending,
 )
 
 SAME_ORIGIN = {"Origin": "http://localhost"}
@@ -58,7 +58,7 @@ def test_stops_are_unique_ordered_and_point_at_real_endpoints(app):
     ]
     assert len({item["step_id"] for item in ordered}) == len(ordered)
     assert [item["number"] for item in ordered] == list(range(1, 14))
-    assert WALKTHROUGH_VERSION == "1.2.0"
+    assert WALKTHROUGH_VERSION == "1.2.1"
     endpoints = {rule.endpoint for rule in app.url_map.iter_rules()}
     scenario_ids = {item["scenario_id"] for item in list_scenarios()}
     for step in ordered:
@@ -145,7 +145,7 @@ def test_step_matching_and_carried_ids_reject_unknown_values():
     assert page_matches(trust, "try_demo.index", {})
     assert page_matches(trust, "try_demo.assess", {})
     assert page_matches(intake, "try_demo.index", {})
-    assert not page_matches(intake, "try_demo.assess", {})
+    assert page_matches(intake, "try_demo.assess", {})
     assert not page_matches(custom, "try_demo.scenario", {"scenario_id": "evidence-supported"})
     imported = step_by_id("import")
     assert page_matches(imported, "try_demo.import_form", {})
@@ -163,6 +163,14 @@ def test_step_matching_and_carried_ids_reject_unknown_values():
     assert progress_step_id("evidence", "try_demo.scenario", {"scenario_id": "evidence-supported"}) == "evidence"
     assert progress_step_id("evidence", "try_demo.index", {}) is None
     assert progress_step_id("nope", "try_demo.index", {}) is None
+    for step_id in ("intake", "custom", "trust"):
+        step = step_by_id(step_id)
+        assert step["await_submission"] is True
+        assert submission_pending(step, False) is True
+        assert submission_pending(step, True) is False
+    evidence = step_by_id("evidence")
+    assert submission_pending(evidence, False) is False
+    assert submission_pending(evidence, True) is False
 
 
 def test_index_lists_every_stop_and_links_into_the_live_pages(client):
@@ -170,7 +178,7 @@ def test_index_lists_every_stop_and_links_into_the_live_pages(client):
     response = client.get("/walkthrough/")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "VERSION 1.2.0" in body
+    assert "VERSION 1.2.1" in body
     assert "13 stops" in body
     assert "Start at intake" in body
     assert 'href="/try/?walk=intake"' in body
@@ -221,7 +229,12 @@ def test_each_guided_page_shows_its_note_and_the_next_stop(client):
         number = next(item["number"] for item in steps() if item["step_id"] == step_id)
         assert f"STEP {number} OF {len(steps())}" in body
         assert "walk_step=" + step_id in response.headers.get("Set-Cookie", "")
-        if following:
+        if step_id in {"intake", "custom", "trust"}:
+            assert "Run assessment on this page before Next." in body
+            assert body.count('class="button-link walk-next"') == 0
+            assert f"walk={following}" not in body
+            assert "Finish" not in body
+        elif following:
             assert f"walk={following}" in body
             assert "Finish" not in body
         else:
@@ -397,6 +410,60 @@ def _low_form(**overrides):
         base[clause_evidence_field(clause["clause_id"])] = "independent_verified"
     base.update(overrides)
     return base
+
+
+def test_form_stops_hold_next_until_the_assessment_succeeds(client):
+    """Next stays off until this response is a successful assessment.
+
+    The intake submit used to render the other-page note because that stop
+    did not treat ``POST /try/assess`` as its own page. A validation error
+    stays on the stop and still withholds Next. The cookie keeps the stop
+    id and does not move to the following stop.
+    """
+    guided = (
+        ("intake", "custom", "Your own vendor", "/try/?walk=custom#intake"),
+        ("custom", "trust", "Trust center is optional", "/try/?walk=trust#trust-center"),
+        ("trust", "evidence", "Four separate results",
+         "/try/scenario/evidence-supported?walk=evidence"),
+    )
+    for step_id, following, next_title, next_href in guided:
+        opened = client.get(f"/try/?walk={step_id}")
+        assert f"walk_step={step_id}" in opened.headers.get("Set-Cookie", "")
+        refused = client.post(
+            f"/try/assess?walk={step_id}",
+            data=_low_form(vendor_name=""),
+            headers=SAME_ORIGIN,
+        )
+        assert refused.status_code == 400
+        refused_body = refused.get_data(as_text=True)
+        assert f'data-step="{step_id}"' in refused_body
+        assert "This note is on another page" not in refused_body
+        assert "Vendor or tool name is required." in refused_body
+        assert refused_body.count('class="button-link walk-next"') == 0
+        assert f'action="/try/assess?walk={step_id}"' in refused_body
+        assert "walk_step" not in refused.headers.get("Set-Cookie", "")
+
+        vendor = f"Harbor {step_id}"
+        posted = client.post(
+            f"/try/assess?walk={step_id}",
+            data=_low_form(vendor_name=vendor),
+            headers=SAME_ORIGIN,
+        )
+        assert posted.status_code == 200, step_id
+        result = posted.get_data(as_text=True)
+        assert f'data-step="{step_id}"' in result
+        assert "This note is on another page" not in result
+        assert "Run assessment on this page before Next." not in result
+        assert result.count('class="button-link walk-next"') == 2
+        assert f'href="{next_href}"' in result
+        assert f"Next · {next_title}" in result
+        assert f"walk={following}" in result
+        assert "INHERENT RISK" in result
+        assert "walk_step" not in posted.headers.get("Set-Cookie", "")
+        assert vendor not in client.get("/risks").get_data(as_text=True)
+        home = client.get("/walkthrough/").get_data(as_text=True)
+        title = next(item["title"] for item in steps() if item["step_id"] == step_id)
+        assert f"Continue · {title}" in home
 
 
 def test_custom_vendor_keeps_the_coach_and_does_not_save(client):
