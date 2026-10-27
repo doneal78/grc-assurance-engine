@@ -151,6 +151,58 @@ def validate_questionnaire(data, choices, policy, evidence_policy):
             topics.add(topic)
     if not pointer_ids:
         raise QuestionnaireError("trust_center needs at least one artifact pointer")
+    _validate_direction_context(data.get("direction_context"), reserved)
+
+
+def _validate_direction_context(spec, reserved):
+    """Direction context is intake for a person. It is not a scoring input."""
+    if not isinstance(spec, dict):
+        raise QuestionnaireError("direction_context is required")
+    if spec.get("scored") is not False:
+        raise QuestionnaireError("direction_context.scored must be false")
+    if not _text(spec.get("label")) or not _text(spec.get("note")):
+        raise QuestionnaireError("direction_context needs a label and a note")
+    if "not scored" not in spec["note"].lower() or "residual formula" not in spec["note"].lower():
+        raise QuestionnaireError("direction_context note must say the answers are not scored and the residual formula is unchanged")
+    note_field = spec.get("note_field")
+    if note_field != "direction_note":
+        raise QuestionnaireError("direction_context note_field must be direction_note")
+    if note_field in reserved:
+        raise QuestionnaireError("direction_note collides with another intake field")
+    if not _text(spec.get("note_prompt")) or not _text(spec.get("note_help")):
+        raise QuestionnaireError("direction_note needs a prompt and help")
+    if "not scored" not in spec["note_help"].lower():
+        raise QuestionnaireError("direction_note help must say the note is not scored")
+    limit = spec.get("note_max_length")
+    if not isinstance(limit, int) or isinstance(limit, bool) or not 1 <= limit <= 500:
+        raise QuestionnaireError("direction_note max length must be an integer from 1 to 500")
+    fields = spec.get("fields")
+    if not isinstance(fields, list) or [item.get("field") if isinstance(item, dict) else None for item in fields] != [
+        "vendor_direction", "residual_direction"
+    ]:
+        raise QuestionnaireError("direction_context fields must be vendor_direction, then residual_direction")
+    for item in fields:
+        field = item["field"]
+        if field in reserved:
+            raise QuestionnaireError(f"{field} collides with another intake field")
+        if "points" in item:
+            raise QuestionnaireError(f"{field} cannot carry points")
+        if not _text(item.get("prompt")) or not _text(item.get("help")):
+            raise QuestionnaireError(f"{field}: prompt and help are required")
+        if "not scored" not in item["help"].lower():
+            raise QuestionnaireError(f"{field} help must say the answer is not scored")
+        options = item.get("options")
+        if not isinstance(options, dict) or not options:
+            raise QuestionnaireError(f"{field}: options are required")
+        if next(iter(options)) != "" or options[""] != "Not provided":
+            raise QuestionnaireError(f"{field}: the first option must be blank, labeled Not provided")
+        for key, label in options.items():
+            if not isinstance(key, str) or not isinstance(label, str) or not label.strip():
+                raise QuestionnaireError(f"{field}: each option needs a text key and a label")
+            if key and not key.replace("_", "").isalpha():
+                raise QuestionnaireError(f"{field}: option {key} must be blank or words")
+        if "unknown" not in options:
+            raise QuestionnaireError(f"{field}: unknown must stay available and must not be scored")
 
 
 def load_questionnaire(path=DEFAULT_QUESTIONNAIRE_PATH):

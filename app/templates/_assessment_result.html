@@ -7,6 +7,7 @@
   <article class="result-card"><p class="eyebrow">RESIDUAL RISK</p><strong class="tier tier-{{ scenario.risk.residual.tier }}">{{ scenario.risk.residual.tier|title }}</strong><p>{{ scenario.risk.residual.reason }}</p><p class="so-what">What remains after the safeguards the evidence supports. This tier is not an approval.</p></article>
   <article class="result-card"><p class="eyebrow">POLICY OUTCOME</p><strong class="status status-{{ scenario.risk.policy_outcome.status|replace('_', '-') }}">{{ scenario.risk.policy_outcome.status|replace('_', ' ')|title }}</strong><p>{{ scenario.risk.policy.policy_id }} {{ scenario.risk.policy.policy_version }}</p><p class="so-what">Separate from the score. Not prohibited is not an approval.</p></article>
 </section>
+{% with direction=scenario.direction_context %}{% include "_direction_context.html" %}{% endwith %}
 {% set step_id = walkthrough.step_id if walkthrough and walkthrough.on_page else none %}
 {% set plan = replay_plan(scenario, posted_form if posted_form is defined else none) %}
 <section class="content-section rerun-panel"{% if not (loop is defined and not loop.first) %} id="change-answers"{% endif %}>

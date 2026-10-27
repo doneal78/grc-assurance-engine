@@ -10,6 +10,7 @@
   <p><a class="button-link" href="{{ change_answers_href(plan) }}">{% if plan.kind == 'unavailable' %}Open the public form{% else %}Change these answers{% endif %}</a></p>
 </section>
 <section class="result-grid"><article class="result-card"><p class="eyebrow">INHERENT RISK</p><strong class="tier tier-{{ risk.inherent_tier }}">{{ risk.inherent_tier|title }}</strong></article><article class="result-card"><p class="eyebrow">RESIDUAL RISK</p><strong class="tier tier-{{ risk.residual_tier }}">{{ risk.residual_tier|title }}</strong></article><article class="result-card"><p class="eyebrow">POLICY OUTCOME</p>{% if risk.policy_outcome %}<strong class="status status-{{ risk.policy_outcome|replace('_', '-') }}">{{ risk.policy_outcome|replace('_', ' ')|title }}</strong><p>{{ risk.policy_id }} {{ risk.policy_version }}</p>{% else %}<strong>Not on this record</strong><p>Saved before the policy check</p>{% endif %}</article><article class="result-card"><p class="eyebrow">CREATED · UTC</p><strong>{{ risk.created_at }}</strong><p>Local record</p></article></section>
+{% with direction=risk.rationale.direction_context %}{% include "_direction_context.html" %}{% endwith %}
 {% if risk.rationale.risk.policy %}
 {% with evaluation=risk.rationale.risk %}{% include "_policy_outcome.html" %}{% endwith %}
 {% else %}

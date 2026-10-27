@@ -15,7 +15,7 @@ import json
 import re
 from datetime import date
 
-from app.services.intake_builder import IntakeError, build_intake, run_intake
+from app.services.intake_builder import IntakeError, build_intake, direction_column_names, run_intake
 from app.services.intake_importer import (
     can_import, column_guide, confirmation_document, parse_upload, questionnaire_columns,
 )
@@ -45,6 +45,7 @@ LIMITATIONS = (
     "A trust-center URL is stored as pasted text unless fetch_trust_center is yes. A fetch is one HTTP GET of vendor-published material for human review. It is not verified evidence and it does not approve the vendor. File import does not fetch.",
     "A ServiceNow-shaped file is simulated input. This contract does not call ServiceNow.",
     "No external AI model scores or approves the vendor.",
+    "vendor_direction, residual_direction, and direction_note are optional intake context for a person. They are not scored. They do not change inherent risk, residual risk, evidence confidence, escalations, the policy outcome, dispositions, or control mappings.",
 )
 
 
@@ -119,7 +120,8 @@ def contract_document():
             "as_of": "Optional YYYY-MM-DD. Omitted means the server or process date. Evidence ages are calculated from this date.",
             "form": (
                 "Required object. Keys are the intake fields listed below. "
-                "fetch_trust_center is optional: omitted or no does not fetch; yes performs one HTTP GET."
+                "fetch_trust_center is optional: omitted or no does not fetch; yes performs one HTTP GET. "
+                "Direction context fields are optional and are not scored. Omitting one means not provided."
             ),
             "persist": "Optional boolean. Omitted or false assesses only. True saves a synthetic risk and requires decision.",
             "decision": (
@@ -130,6 +132,7 @@ def contract_document():
         },
         "dispositions": list(DISPOSITIONS),
         "fields": column_guide(),
+        "direction_context": _direction_contract(questionnaire),
         "optional_form_fields": [
             {
                 "field": questionnaire["trust_center"]["fetch_field"],
@@ -241,7 +244,7 @@ def parse_assess_request(payload):
         raise BotRequestError(problems)
 
     columns = questionnaire_columns()
-    optional = _optional_form_fields()
+    optional = [*_optional_form_fields(), *direction_column_names()]
     known = set(columns) | set(optional)
     unexpected = sorted(set(form) - known)
     if unexpected:
@@ -312,6 +315,7 @@ def assessment_from_result(result, saved=None):
         ],
         "claims": [_claim_view(claim) for claim in result.get("claims") or []],
         "mappings": [_mapping_view(mapping) for mapping in result.get("mappings") or []],
+        "direction_context": _direction_view(result.get("direction_context")),
         "trust_center": _trust_view(result.get("trust_center")),
         "limitations": list(LIMITATIONS),
     }
@@ -382,7 +386,8 @@ def preview_document(preview):
         "blank_rows_skipped": preview["blank_rows_skipped"],
         "context_note": (
             "Ticket priority, state, and opened_at are file context. "
-            "They do not set the residual tier or the evaluation date. "
+            "vendor_direction, residual_direction, and direction_note are intake context. "
+            "None of them set the residual tier or the evaluation date. "
             "This preview does not call the risk engine."
         ),
         "rows": [
@@ -520,6 +525,63 @@ def _parse_date(value):
         return date.fromisoformat(value), None
     except ValueError:
         return None, "as_of is not a real calendar date."
+
+
+def _direction_contract(questionnaire):
+    """Tell a caller that direction fields are optional and not scored."""
+    spec = questionnaire["direction_context"]
+    return {
+        "scored": False,
+        "optional": True,
+        "omit_means": "Not provided. The residual tier is unchanged.",
+        "label": spec["label"],
+        "note": spec["note"],
+        "fields": [
+            {
+                "field": item["field"],
+                "prompt": item["prompt"],
+                "accepted": "Omitted, blank, or one of: " + ", ".join(key for key in item["options"] if key) + ".",
+                "scored": False,
+            }
+            for item in spec["fields"]
+        ] + [{
+            "field": spec["note_field"],
+            "prompt": spec["note_prompt"],
+            "accepted": f"Omitted, blank, or one line of text up to {spec['note_max_length']} characters.",
+            "scored": False,
+        }],
+    }
+
+
+def _direction_view(stored):
+    """Copy direction context onto the assessment document. Do not score it."""
+    if not stored:
+        return {
+            "scored": False,
+            "provided": False,
+            "label": "Context only. Not scored.",
+            "note": "This result has no vendor-direction context. It is not inferred, and it is not scored.",
+            "fields": [],
+            "direction_note": "",
+        }
+    return {
+        "scored": False,
+        "provided": True,
+        "label": stored.get("label") or "Context only. Not scored.",
+        "note": stored.get("note") or "",
+        "fields": [
+            {
+                "field": item.get("field"),
+                "prompt": item.get("prompt"),
+                "value": item.get("value") or "",
+                "display": item.get("display") or "Not provided",
+                "scored": False,
+            }
+            for item in stored.get("fields") or []
+        ],
+        "note_prompt": stored.get("note_prompt") or "",
+        "direction_note": stored.get("direction_note") or "",
+    }
 
 
 def _optional_form_fields():

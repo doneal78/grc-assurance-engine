@@ -22,6 +22,9 @@
       "u_retention_deletion": "documented",
       "u_decisions_affecting_people": "no",
       "u_trust_center_url": "https://trust.example.test/northwind",
+      "u_vendor_direction": "stable",
+      "u_residual_direction": "unchanged",
+      "u_direction_note": "Synthetic context: same scope as the last review. Not a score.",
       "attachments": [
         {
           "sys_id": "synthetic-att-0001-evidence_integration_permissions",
@@ -94,6 +97,9 @@
       "u_retention_deletion": "documented",
       "u_decisions_affecting_people": "no",
       "u_trust_center_url": "",
+      "u_vendor_direction": "expanding",
+      "u_residual_direction": "worsening",
+      "u_direction_note": "Synthetic context: more use than the last review. Not a score.",
       "attachments": [
         {
           "sys_id": "synthetic-att-0002-evidence_integration_permissions",

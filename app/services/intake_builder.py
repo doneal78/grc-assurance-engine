@@ -90,6 +90,30 @@ def clause_evidence_field(clause_id):
     return f"evidence_clause_{clause_id}"
 
 
+def direction_spec():
+    """Questionnaire section for vendor-direction context. It is not a scoring input."""
+    from app.services.intake_questionnaire import load_questionnaire
+
+    return load_questionnaire()["direction_context"]
+
+
+def direction_column_names():
+    """Optional intake fields a reviewer reads beside the residual tier."""
+    spec = direction_spec()
+    return [item["field"] for item in spec["fields"]] + [spec["note_field"]]
+
+
+def acceptable_direction_note(value, spec=None):
+    """True when a direction note is empty or short synthetic text."""
+    spec = spec if spec is not None else direction_spec()
+    if not isinstance(value, str):
+        return False
+    if len(value) > spec["note_max_length"]:
+        return False
+    # One line, so a saved note can travel in a hidden form field without breaking the page.
+    return value.isprintable()
+
+
 def _ids(topic):
     suffix = topic.upper().replace("_", "-")
     return f"C-{suffix}", f"E-{suffix}"
@@ -324,6 +348,56 @@ def _review_fetch(trust, as_of):
     return trust
 
 
+def _direction_context(form, questionnaire, problems):
+    """Read optional direction context. Leave it out of the scoring assessment."""
+    spec = questionnaire["direction_context"]
+    fields = []
+    for item in spec["fields"]:
+        raw = form.get(item["field"], "")
+        if not isinstance(raw, str):
+            problems.append(f"{item['prompt'].rstrip('?')}: expected text. This answer is not scored.")
+            raw = ""
+        value = raw.strip()
+        if value not in item["options"]:
+            problems.append(
+                f"{item['prompt'].rstrip('?')}: choose one of the listed options, or leave it blank. "
+                "This answer is not scored."
+            )
+        fields.append({
+            "field": item["field"],
+            "prompt": item["prompt"],
+            "value": value,
+            "display": item["options"].get(value, value or "Not provided"),
+            "scored": False,
+        })
+    note_field = spec["note_field"]
+    raw_note = form.get(note_field, "")
+    if not isinstance(raw_note, str):
+        problems.append(f"{spec['note_prompt'].rstrip('?')}: expected text. This note is not scored.")
+        note = ""
+    else:
+        note = raw_note.strip()
+        if not acceptable_direction_note(note, spec):
+            if len(note) > spec["note_max_length"]:
+                problems.append(
+                    f"{spec['note_prompt'].rstrip('?')}: must be {spec['note_max_length']} characters or fewer. "
+                    "This note is not scored."
+                )
+            else:
+                problems.append(
+                    f"{spec['note_prompt'].rstrip('?')}: contains unsupported characters. This note is not scored."
+                )
+    return {
+        "scored": False,
+        "label": spec["label"],
+        "note": spec["note"],
+        "fields": fields,
+        "note_field": note_field,
+        "note_prompt": spec["note_prompt"],
+        "direction_note": note,
+    }
+
+
 def _context_answers(form, questionnaire, choices, problems):
     """Read scoring answers. Omit model training only when AI use is none."""
     assessment = {}
@@ -365,6 +439,7 @@ def build_intake(form, as_of, *, open_url=None, resolver=None):
 
     choices = field_choices()
     assessment, applicability = _context_answers(form, questionnaire, choices, problems)
+    direction = _direction_context(form, questionnaire, problems)
     for spec in load_org_policy()["intake_fields"]:
         field = spec["field"]
         value = form.get(field, "")
@@ -442,6 +517,7 @@ def build_intake(form, as_of, *, open_url=None, resolver=None):
         "claims": claims,
         "evidence": evidence,
         "questionnaire_version": questionnaire["questionnaire_version"],
+        "direction_context": direction,
         "trust_center": {
             "url": url,
             "fetched": bool(fetched),
@@ -473,6 +549,7 @@ def run_intake(intake, as_of):
         "questionnaire_version": intake["questionnaire_version"],
         "assessment_inputs": intake["assessment"],
         "answer_applicability": intake["answer_applicability"],
+        "direction_context": intake["direction_context"],
         "trust_center": trust_center,
         "evidence_policy_version": checked["evidence_policy_version"],
         "claims": checked["claims"],

@@ -23,7 +23,7 @@ Samples are served from `/try/import/sample/csv`, `/try/import/sample/xlsx`, `/t
 
 CSV and Excel use the public intake field names. The header row is required. Names are matched without regard to case or extra internal spaces. Answer values are case-sensitive. Surrounding spaces are removed.
 
-The current columns, in the order the sample writes them, come from intake questionnaire 1.0.0 and org policy `ORG-AI-USE` 1.1.0:
+The current columns, in the order the sample writes them, come from intake questionnaire 1.1.0 and org policy `ORG-AI-USE` 1.1.0:
 
 | Column | Role |
 | --- | --- |
@@ -39,10 +39,15 @@ The current columns, in the order the sample writes them, come from intake quest
 | `trust_center_url` | Blank, or one `http://` or `https://` URL. File import does not fetch it |
 | `trust_soc2`, `trust_security`, `trust_privacy` | One evidence key each |
 | `evidence_clause_CC-001` | One evidence key for the required contract clause |
+| `vendor_direction` | Optional. Context only. Not scored. Blank, or `new`, `expanding`, `stable`, `reducing`, `exiting`, or `unknown` |
+| `residual_direction` | Optional. Context only. Not scored. Blank, or `improving`, `unchanged`, `worsening`, or `unknown` |
+| `direction_note` | Optional. Context only. Not scored. Blank, or one line of text of 300 characters or fewer |
 
 Evidence keys: `independent_verified`, `vendor_statement`, `not_reviewed`, `expired`, `contradicts`, `none`.
 
-A new questionnaire field or contract clause changes this list. The upload page reads the live column guide. An old file that omits a new column is rejected for the missing column.
+`vendor_direction`, `residual_direction`, and `direction_note` may be omitted. A file that leaves them out is still accepted, and the answers are stored as not provided. They do not change the residual tier. `unknown` on a direction column means the requester does not know. It is not a missing scoring answer.
+
+A new required questionnaire field or contract clause changes the required list. The upload page reads the live column guide. An old file that omits a new required column is rejected for the missing column.
 
 Unknown columns are named in the error and block the import. They are not ignored.
 
@@ -71,9 +76,10 @@ Each ticket:
 | `u_vendor_name` | yes | `vendor_name` |
 | `u_data_sensitivity`, `u_integration_permissions`, `u_ai_use`, `u_model_training_on_customer_data`, `u_external_exposure`, `u_retention_deletion`, `u_decisions_affecting_people` | yes | The same answers as the questionnaire. Text, not numbers |
 | `u_trust_center_url` | yes | May be an empty string. File import does not fetch it |
+| `u_vendor_direction`, `u_residual_direction`, `u_direction_note` | no | The same optional direction context as the questionnaire. Text. Not scored. Omitted means not provided |
 | `sys_id`, `short_description`, `description`, `state`, `priority`, `assignment_group`, `opened_at` | no | Preview context only |
 
-`priority` does not set the residual tier. `opened_at` does not set the evaluation date. The evaluation date is the date the import is confirmed. Evidence ages are still calculated from that date by the intake builder, as they are for the form.
+`priority` does not set the residual tier. `opened_at` does not set the evaluation date. Direction fields do not set the residual tier either. The evaluation date is the date the import is confirmed. Evidence ages are still calculated from that date by the intake builder, as they are for the form.
 
 JSON field names are case-sensitive. Duplicate keys are an error. The repeated value is not kept.
 

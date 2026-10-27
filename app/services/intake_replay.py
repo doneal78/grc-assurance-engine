@@ -10,7 +10,9 @@ the status the validator already assigned.
 from app.services.intake_builder import (
     CLAUSE_EVIDENCE_OPTIONS,
     EVIDENCE_OPTIONS,
+    acceptable_direction_note,
     clause_evidence_field,
+    direction_column_names,
     field_choices,
 )
 from app.services.intake_questionnaire import load_questionnaire
@@ -60,6 +62,7 @@ def intake_field_names():
     names.extend(
         clause_evidence_field(clause["clause_id"]) for clause in policy["required_contract_clauses"]
     )
+    names.extend(direction_column_names())
     return names
 
 
@@ -101,6 +104,14 @@ def accept_field(key, value):
     }
     if key in clause_fields:
         return value if value in CLAUSE_EVIDENCE_OPTIONS else None
+    spec = questionnaire["direction_context"]
+    selects = {item["field"]: item["options"] for item in spec["fields"]}
+    if key in selects:
+        return value if value in selects[key] else None
+    if key == spec["note_field"]:
+        if value == "":
+            return ""
+        return value if acceptable_direction_note(value, spec) else None
     return None
 
 
@@ -193,6 +204,30 @@ def _clause_fields(source, limits):
     return fields
 
 
+def _direction_fields(source, limits):
+    """Copy stored direction context onto the form. Do not invent a direction."""
+    stored = source.get("direction_context")
+    if not isinstance(stored, dict):
+        return {}
+    fields = {}
+    for item in stored.get("fields") or []:
+        if not isinstance(item, dict):
+            continue
+        key = item.get("field")
+        accepted = accept_field(key, item.get("value") if isinstance(item.get("value"), str) else "")
+        if accepted is None:
+            limits.append(f"{key} was not a direction choice on this record, so check that question. It is not scored.")
+            continue
+        fields[key] = accepted
+    note = stored.get("direction_note") if isinstance(stored.get("direction_note"), str) else ""
+    accepted_note = accept_field("direction_note", note)
+    if accepted_note is None:
+        limits.append("The direction note was not copied. It is not scored.")
+    else:
+        fields["direction_note"] = accepted_note
+    return fields
+
+
 def _approximate_fields(source):
     limits = []
     inputs = source.get("assessment_inputs")
@@ -212,6 +247,7 @@ def _approximate_fields(source):
         fields[key] = accepted
     fields.update(_evidence_fields(source, limits))
     fields.update(_clause_fields(source, limits))
+    fields.update(_direction_fields(source, limits))
     trust_spec = load_questionnaire()["trust_center"]
     trust = source.get("trust_center") if isinstance(source.get("trust_center"), dict) else {}
     url = accept_field(trust_spec["url_field"], trust.get("url") if isinstance(trust.get("url"), str) else "")

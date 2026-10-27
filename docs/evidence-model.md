@@ -83,7 +83,7 @@ The risk engine records that status, the reason, and the evidence basis. It does
 
 ## Trust-center citations and fetch
 
-Intake questionnaire 1.0.0 can store a vendor trust-center URL and three pasted artifact choices: a SOC 2 Type II report, security documentation, and a privacy notice. Leaving `fetch_trust_center` omitted or `no` does not open the URL. There is no scraper and no new runtime dependency. The GET, when requested, uses `urllib` in `app/services/trust_center_fetch.py`.
+Intake questionnaire 1.1.0 can store a vendor trust-center URL and three pasted artifact choices: a SOC 2 Type II report, security documentation, and a privacy notice. The same questionnaire can store vendor direction, residual direction, and a short note. Those three answers are not evidence records and are not scored. Leaving `fetch_trust_center` omitted or `no` does not open the URL. There is no scraper and no new runtime dependency. The GET, when requested, uses `urllib` in `app/services/trust_center_fetch.py`.
 
 A URL with no artifact choice and no fetch creates no scored evidence record. It cannot raise evidence confidence, satisfy a contract clause, or approve the vendor. Each pasted artifact choice becomes one or more ordinary evidence records, and `validate` assigns the status. The SOC choice is cited for the authentication claim and the logging claim. The validator scores those claims separately. The security document is cited for transmission protection. The privacy notice is its own claim and has no control mapping.
 

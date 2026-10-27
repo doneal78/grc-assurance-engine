@@ -1,0 +1,17 @@
+{# Direction context is intake for a person. It is not a score. #}
+{% if direction %}
+<section class="content-section">
+  <h2>{{ direction.label }}</h2>
+  <p>{{ direction.note }}</p>
+  <dl class="meta-list">
+    {% for item in direction.fields %}
+    <dt>{{ item.prompt }}</dt>
+    <dd>{{ item.display }} <span class="muted">· not scored</span></dd>
+    {% endfor %}
+    {% if direction.note_prompt %}
+    <dt>{{ direction.note_prompt }}</dt>
+    <dd>{{ direction.direction_note or "Not provided" }} <span class="muted">· not scored</span></dd>
+    {% endif %}
+  </dl>
+</section>
+{% endif %}

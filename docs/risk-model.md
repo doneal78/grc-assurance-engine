@@ -56,6 +56,8 @@ Confidence is the average weight across all claims: high at 0.75 or above, mediu
 
 Residual risk equals the inherent tier, lowered by one tier only when all of these are true: the result is not provisional, confidence is high, no claim is conflicting, and no escalation rule fired. It is never lowered by more than one tier. A prohibited policy outcome does not block that reduction and does not raise the tier.
 
+Questionnaire 1.1.0 can also store vendor direction, residual direction, and a short note. Those answers are intake context for a person. They are not inputs to this formula. `unknown` on either direction field means the requester does not know the direction. It is not a missing scoring answer, it does not make the result provisional, and it does not fire ESC-009. A stated direction does not lower or raise the residual tier, and it is not a safeguard.
+
 ## Organization policy outcome
 
 The profile is one file, `app/data/org_policy.json`. This prototype is not multi-tenant. The current profile is illustrative policy `ORG-AI-USE` version `1.1.0`. Version 1.1.0 keeps the HR-001 and CC-001 text from 1.0.0. It marks CC-001 enforced and checks it against evidence. Point values are unchanged.

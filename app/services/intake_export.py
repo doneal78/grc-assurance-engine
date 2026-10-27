@@ -41,6 +41,39 @@ def _decision_view(decision):
     }
 
 
+def _direction_package(result):
+    """Copy direction context. A missing section is not inferred and is not scored."""
+    stored = result.get("direction_context")
+    if not stored:
+        return {
+            "scored": False,
+            "provided": False,
+            "label": "Context only. Not scored.",
+            "note": "This result has no vendor-direction context. It is not inferred, and it is not scored.",
+            "fields": [],
+            "direction_note": "",
+            "note_prompt": "",
+        }
+    return {
+        "scored": False,
+        "provided": True,
+        "label": stored.get("label") or "Context only. Not scored.",
+        "note": stored.get("note") or "",
+        "fields": [
+            {
+                "field": item.get("field"),
+                "prompt": item.get("prompt"),
+                "value": item.get("value") or "",
+                "display": item.get("display") or "Not provided",
+                "scored": False,
+            }
+            for item in stored.get("fields") or []
+        ],
+        "note_prompt": stored.get("note_prompt") or "",
+        "direction_note": stored.get("direction_note") or "",
+    }
+
+
 def _intake_answers(result):
     inputs = result.get("assessment_inputs")
     if not inputs:
@@ -135,6 +168,7 @@ def build_package(result, decision=None, saved_risk_id=None):
             "scenario_set": result.get("scenario_set_version"),
         },
         "intake_answers": answers,
+        "direction_context": _direction_package(result),
         "intake_answers_note": None if answers is not None else (
             "This saved result does not include the intake answers. It was stored before the reviewer package."
         ),
@@ -181,6 +215,7 @@ def package_from_saved_risk(risk):
         "questionnaire_version": rationale.get("questionnaire_version"),
         "assessment_inputs": rationale.get("assessment_inputs"),
         "answer_applicability": rationale.get("answer_applicability") or {},
+        "direction_context": rationale.get("direction_context"),
         "trust_center": rationale.get("trust_center"),
         "evidence_policy_version": rationale.get("evidence_policy_version"),
         "claims": rationale.get("claims") or [],
@@ -232,6 +267,20 @@ def render_markdown(package):
             if answer["applicability"] == "not_applicable":
                 suffix = " (not asked; AI use is none, so this answer is not scored)"
             lines.append(f"- {answer['prompt']} {answer['value']}{suffix}")
+    direction = package["direction_context"]
+    lines.extend([
+        "",
+        "## Direction context",
+        "",
+        direction["note"],
+        "",
+        "Scored: no. These answers do not change the residual tier, the disposition, or the control mappings.",
+    ])
+    if direction["provided"]:
+        for item in direction["fields"]:
+            lines.append(f"- {item['prompt']} {item['display'] or 'Not provided'}")
+        if direction.get("note_prompt"):
+            lines.append(f"- {direction['note_prompt']} {direction['direction_note'] or 'Not provided'}")
     lines.extend(["", "## Trust center", ""])
     trust = package["trust_center"]
     lines.append(f"- URL: {trust['url'] or 'none'}")

@@ -21,7 +21,8 @@ SAME_ORIGIN = {"Origin": "http://localhost"}
 
 def test_questionnaire_version_cites_only_real_rules():
     questionnaire = load_questionnaire()
-    assert questionnaire["questionnaire_version"] == "1.0.0"
+    assert questionnaire["questionnaire_version"] == "1.1.0"
+    assert questionnaire["direction_context"]["scored"] is False
     rules = load_rules()
     known = {factor["rule_id"] for factor in rules["inherent_factors"].values()}
     known.update(rule["rule_id"] for rule in rules["escalation_rules"])
@@ -129,7 +130,8 @@ def test_methods_page_describes_the_questionnaire(client):
     assert response.status_code == 200
     body = response.data
     assert b"Intake questionnaire" in body
-    assert b"1.0.0" in body
+    assert b"1.1.0" in body
+    assert b"not scored" in body
     assert b"does not open the page" in body
     assert b"not verified evidence" in body
     assert b"not a disposition" in body
