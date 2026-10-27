@@ -34,7 +34,10 @@ def destination(step, saved_risk):
             save = step_by_id("save")
             return url_for(save["endpoint"], **save["view_args"], **{WALK_QUERY: "save"}), _SAVE_FIRST
         return url_for("risks.detail", risk_id=saved_risk["risk_id"], **{WALK_QUERY: "decide"}), None
-    return url_for(step["endpoint"], **step["view_args"], **{WALK_QUERY: step["step_id"]}), None
+    kwargs = {**step["view_args"], WALK_QUERY: step["step_id"]}
+    if step.get("anchor"):
+        kwargs["_anchor"] = step["anchor"]
+    return url_for(step["endpoint"], **kwargs), None
 
 
 def build_coach(step_id, endpoint, view_args, saved_risk):
