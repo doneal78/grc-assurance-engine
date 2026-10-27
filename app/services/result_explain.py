@@ -82,6 +82,14 @@ CONTROL_EFFECT = {
     "AU-2": "If logging is missing or unreviewed, the business may not be able to tell what the vendor did.",
     "IA-2": "If authentication is weak or unreviewed, the business cannot be confident that only the intended people reach the service.",
     "SC-8": "If transmission protection is weak or unreviewed, information can be exposed while it moves.",
+    "A.5.15": "If access rules are missing or unreviewed, the integration may reach more information than the service needs.",
+    "A.5.14": "If transfer safeguards are missing or unreviewed, information can be exposed while it moves to or from the service.",
+    "A.8.5": "If authentication is weak or unreviewed, the business cannot be confident that only the intended people reach the service.",
+    "A.8.15": "If logging is missing or unreviewed, the business may not be able to tell what happened on the service.",
+    "A.6.2.6": "If operation and monitoring of an AI system are unreviewed, the business may not see how that system behaves in use.",
+    "A.6.2.8": "If an AI system does not keep event logs, the business may not be able to reconstruct what the system did.",
+    "A.7.2": "If use of customer data to develop or enhance an AI system is unreviewed, the business cannot tell whether its data is training material.",
+    "A.7.3": "If acquisition of data for an AI system is unreviewed, the business cannot tell where that data came from.",
 }
 
 

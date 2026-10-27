@@ -75,7 +75,11 @@ def test_assessment_copies_the_engine_result():
     clause = document["required_contract_clauses"][0]
     assert clause["clause_id"] == "CC-001"
     assert clause["evidence_status"] == "verified"
-    assert {item["control_id"] for item in document["mappings"]} == {"IA-2", "AC-6", "SC-8", "AU-2"}
+    assert {item["control_id"] for item in document["mappings"]} == {
+        "IA-2", "AC-6", "SC-8", "AU-2",
+        "A.5.15", "A.8.5", "A.5.14", "A.8.15",
+        "A.6.2.6", "A.6.2.8", "A.7.2", "A.7.3",
+    }
     assert all(item["review_status"] == "draft" for item in document["mappings"])
     assert document["trust_center"]["fetched"] is False
     assert assess_request(request()) == document

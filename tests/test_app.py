@@ -157,6 +157,11 @@ def test_high_risk_result_names_each_deeper_assessment(client):
     assert b"Next step" in response.data
     assert b"CC-001" in response.data
     assert b"No evidence records for this clause" in response.data
+    body = response.get_data(as_text=True)
+    assert "A.6.2.8" in body
+    assert "A.6.2.6" in body
+    assert "A.7.2" not in body
+    assert "A.5.14" not in body
 
 
 def test_contract_clause_conflict_page_shows_the_evidence_basis(client):
@@ -223,6 +228,8 @@ def test_mappings_page_lists_every_library_entry(client):
     assert library["source_note"] in body
     assert "does not certify a vendor or an organization" in body
     assert "does not treat one framework as equivalent to another" in body
+    assert "draft portfolio review prompts" in body
+    assert "are not in this library" not in body
     assert "ISO/IEC 27001" in body and "ISO/IEC 42001" in body
     assert "status-reviewed" not in body
     assert body.count("status-draft") == len(library["mappings"])
@@ -255,6 +262,12 @@ def test_scenario_mapping_prompts_use_library_field_labels(client):
     assert "status-draft" in body
     assert "status-reviewed" not in body
     assert "AC-6" in body
+    assert "A.5.15" in body
+    assert "A.8.5" in body
+    assert "A.5.14" in body
+    assert "A.8.15" not in body
+    assert "A.6.2.8" not in body
+    assert "A.7.2" not in body
     assert "https://csrc.nist.gov/Projects/risk-management/sp800-53-controls/downloads" in body
     assert 'href="/mappings"' in body
 
@@ -278,8 +291,11 @@ def test_methodology_page_links_to_the_mapping_library(client):
     assert response.status_code == 200
     body = response.get_data(as_text=True)
     assert 'href="/mappings"' in body
-    assert "mapping set 0.1.0" in body
+    assert "mapping set 0.2.0" in body
+    assert "draft portfolio review prompts" in body
+    assert "are not in the library" not in body
     assert "ISO/IEC 27001" in body
+    assert "ISO/IEC 42001" in body
 
 
 def test_methodology_page_explains_cost_limits(client):

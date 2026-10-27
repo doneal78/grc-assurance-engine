@@ -658,7 +658,10 @@ def workflow_events(result):
                            f"residual {risk['residual']['tier']}."),
         ("Policy check", policy_detail),
         ("Escalation check", escalation),
-        ("Controls mapped", f"{len(result['mappings'])} draft NIST SP 800-53 mapping prompts matched by claim topic."),
+        ("Controls mapped", (
+            f"{len(result['mappings'])} draft mapping prompts matched by claim topic. "
+            "They are review prompts, not a conformity or certification result."
+        )),
     ]
     if remediation_payload(result):
         steps.append(("Remediation ticket drafted", "Mock ServiceNow-style payload prepared. Not sent to any system."))

@@ -1,6 +1,6 @@
 {
-  "mapping_set_version": "0.1.0",
-  "source_note": "Control identifiers and titles were checked against NIST SP 800-53 Rev. 5, Release 5.2.0 catalog materials. Applicability and rationale are project mapping decisions and remain draft.",
+  "mapping_set_version": "0.2.0",
+  "source_note": "NIST SP 800-53 Rev. 5, Release 5.2.0 identifiers and titles were checked against the NIST controls download catalog (https://csrc.nist.gov/Projects/risk-management/sp800-53-controls/downloads). ISO/IEC 27001:2022 Annex A identifiers and short titles were checked against the ANSI National Accreditation Board 2013-to-2022 annex comparison (https://blog.ansi.org/anab/iso-iec-27001-2013-2022-comparison/). The same title words appear in the contents of BS EN ISO/IEC 27002:2022 (https://webstore.ansi.org/preview-pages/BSI/preview_30465419.pdf) and DS/ISO/IEC 27002:2022 (https://webstore.ansi.org/preview-pages/DS/preview_M362244CURES.pdf). The free ISO/IEC 27001:2022 preview names Annex A and does not list each control title. ISO/IEC 42001:2023 is identified by the ISO preview (https://webstore.ansi.org/preview-pages/ISO/preview_ISO%2BIEC%2B42001-2023.pdf), which names Annex A and does not list each control title. The four stored ISO/IEC 42001 short titles match the Sensiba readiness checklist (https://explore.sensiba.com/hubfs/White%20Papers/RAS%20WP/WP%20-%20RAS%20-%20ISO%2042001%20Readiness%20Guide.pdf), the Modulos annex list (https://docs.modulos.ai/frameworks/iso-42001/annexes-a-d), and the OG Technologies control list (https://www.ogtechnologies.co/downloads/iso-42001-annex-a-controls.pdf). No control statement text is stored. Applicability and rationale are project mapping decisions and remain draft. ISO entries are draft portfolio review prompts, not conformity, certification, or equivalence findings.",
   "mappings": [
     {
       "mapping_id": "nist-800-53-ac-6-access-control",
@@ -52,6 +52,110 @@
       "rationale": "Use as a prompt to review protections for information in transit. The mapping does not establish that a particular protection is implemented or sufficient.",
       "claim_topics": ["transmission_security"],
       "source_reference": "https://csrc.nist.gov/Projects/risk-management/sp800-53-controls/downloads",
+      "review_status": "draft"
+    },
+    {
+      "mapping_id": "iso-27001-a-5-15-access-control",
+      "framework": "ISO/IEC 27001",
+      "framework_version": "2022",
+      "control_id": "A.5.15",
+      "title": "Access control",
+      "applicability": "conditional",
+      "applicability_note": "Shown because the claim topic is integration_permissions. Relevant when a vendor integration receives access to organizational systems or information.",
+      "rationale": "Draft portfolio review prompt for whether access is limited to what the service needs. Checking the identifier and short title does not assess implementation. This entry is not a conformity or certification result.",
+      "claim_topics": ["integration_permissions"],
+      "source_reference": "https://blog.ansi.org/anab/iso-iec-27001-2013-2022-comparison/",
+      "review_status": "draft"
+    },
+    {
+      "mapping_id": "iso-27001-a-8-5-secure-authentication",
+      "framework": "ISO/IEC 27001",
+      "framework_version": "2022",
+      "control_id": "A.8.5",
+      "title": "Secure authentication",
+      "applicability": "conditional",
+      "applicability_note": "Shown because the claim topic is authentication. Relevant when organizational users authenticate to the vendor service.",
+      "rationale": "Draft portfolio review prompt for how organizational users authenticate to the service. Checking the identifier and short title does not assess implementation. This entry is not a conformity or certification result.",
+      "claim_topics": ["authentication"],
+      "source_reference": "https://blog.ansi.org/anab/iso-iec-27001-2013-2022-comparison/",
+      "review_status": "draft"
+    },
+    {
+      "mapping_id": "iso-27001-a-5-14-information-transfer",
+      "framework": "ISO/IEC 27001",
+      "framework_version": "2022",
+      "control_id": "A.5.14",
+      "title": "Information transfer",
+      "applicability": "conditional",
+      "applicability_note": "Shown because the claim topic is transmission_security. Relevant when information is transferred to, from, or through the vendor service.",
+      "rationale": "Draft portfolio review prompt for safeguards when information moves to, from, or through the service. Checking the identifier and short title does not assess implementation. This entry is not a conformity or certification result.",
+      "claim_topics": ["transmission_security"],
+      "source_reference": "https://blog.ansi.org/anab/iso-iec-27001-2013-2022-comparison/",
+      "review_status": "draft"
+    },
+    {
+      "mapping_id": "iso-27001-a-8-15-logging",
+      "framework": "ISO/IEC 27001",
+      "framework_version": "2022",
+      "control_id": "A.8.15",
+      "title": "Logging",
+      "applicability": "conditional",
+      "applicability_note": "Shown because the claim topic is audit_logging. Relevant when the service processes organizational information or performs actions whose activity needs to be reviewed.",
+      "rationale": "Draft portfolio review prompt to ask what security-relevant activity is logged and how it can be reviewed. Checking the identifier and short title does not assess implementation. This entry is not a conformity or certification result.",
+      "claim_topics": ["audit_logging"],
+      "source_reference": "https://blog.ansi.org/anab/iso-iec-27001-2013-2022-comparison/",
+      "review_status": "draft"
+    },
+    {
+      "mapping_id": "iso-42001-a-6-2-6-operation-monitoring",
+      "framework": "ISO/IEC 42001",
+      "framework_version": "2023",
+      "control_id": "A.6.2.6",
+      "title": "AI system operation and monitoring",
+      "applicability": "conditional",
+      "applicability_note": "Shown because the claim topic is audit_logging. Use this prompt when the service uses AI. The mapper does not read the AI-use answer, so a reviewer decides whether the prompt applies.",
+      "rationale": "Draft portfolio review prompt to ask how an AI system is operated and monitored. A logging claim is not evidence that this control is implemented. This entry is not a conformity or certification result.",
+      "claim_topics": ["audit_logging"],
+      "source_reference": "https://explore.sensiba.com/hubfs/White%20Papers/RAS%20WP/WP%20-%20RAS%20-%20ISO%2042001%20Readiness%20Guide.pdf",
+      "review_status": "draft"
+    },
+    {
+      "mapping_id": "iso-42001-a-6-2-8-event-logs",
+      "framework": "ISO/IEC 42001",
+      "framework_version": "2023",
+      "control_id": "A.6.2.8",
+      "title": "AI system recording of event logs",
+      "applicability": "conditional",
+      "applicability_note": "Shown because the claim topic is audit_logging. Use this prompt when the service uses AI. The mapper does not read the AI-use answer, so a reviewer decides whether the prompt applies.",
+      "rationale": "Draft portfolio review prompt to ask what event logs an AI system keeps of its own activity. A logging claim is not evidence that this control is implemented. This entry is not a conformity or certification result.",
+      "claim_topics": ["audit_logging"],
+      "source_reference": "https://explore.sensiba.com/hubfs/White%20Papers/RAS%20WP/WP%20-%20RAS%20-%20ISO%2042001%20Readiness%20Guide.pdf",
+      "review_status": "draft"
+    },
+    {
+      "mapping_id": "iso-42001-a-7-2-development-data",
+      "framework": "ISO/IEC 42001",
+      "framework_version": "2023",
+      "control_id": "A.7.2",
+      "title": "Data for development and enhancement of AI system",
+      "applicability": "conditional",
+      "applicability_note": "Shown because the claim topic is privacy. Use it to ask whether customer data is used to develop or enhance an AI system. The mapper does not read the model-training answer.",
+      "rationale": "Draft portfolio review prompt on the privacy claim, which is the tagged statement about collection, use, and retention of customer data. A privacy notice is not evidence that this control is implemented. This entry is not a conformity or certification result.",
+      "claim_topics": ["privacy"],
+      "source_reference": "https://explore.sensiba.com/hubfs/White%20Papers/RAS%20WP/WP%20-%20RAS%20-%20ISO%2042001%20Readiness%20Guide.pdf",
+      "review_status": "draft"
+    },
+    {
+      "mapping_id": "iso-42001-a-7-3-acquisition-of-data",
+      "framework": "ISO/IEC 42001",
+      "framework_version": "2023",
+      "control_id": "A.7.3",
+      "title": "Acquisition of data",
+      "applicability": "conditional",
+      "applicability_note": "Shown because the claim topic is privacy. Use it to ask how data for an AI system was acquired. The privacy claim records the cited notice. It is not a completed control assessment.",
+      "rationale": "Draft portfolio review prompt on the privacy claim. A privacy notice is not evidence that this control is implemented. This entry is not a conformity or certification result.",
+      "claim_topics": ["privacy"],
+      "source_reference": "https://explore.sensiba.com/hubfs/White%20Papers/RAS%20WP/WP%20-%20RAS%20-%20ISO%2042001%20Readiness%20Guide.pdf",
       "review_status": "draft"
     }
   ]
