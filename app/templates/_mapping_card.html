@@ -3,6 +3,7 @@
     <h3><code>{{ mapping.control_id }}</code> · {{ mapping.title }}</h3>
     <span class="status status-{{ mapping.review_status }}">{{ mapping.review_status|title }}</span>
   </div>
+  <p class="so-what">{{ mapping_so_what(mapping) }}</p>
   <dl class="meta-list">
     <dt>Framework</dt>
     <dd>{{ mapping.framework }}</dd>

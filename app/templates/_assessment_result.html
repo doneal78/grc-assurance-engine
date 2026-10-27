@@ -2,22 +2,34 @@
 <section class="notice"><strong>Illustrative result · Human review required</strong><p>Evaluation date {{ scenario.as_of }}{% if scenario.scenario_set_version %} · Scenario set {{ scenario.scenario_set_version }}{% endif %}{% if scenario.questionnaire_version %} · Questionnaire {{ scenario.questionnaire_version }}{% endif %} · Risk rules {{ scenario.risk.rule_set_version }} · Evidence policy {{ scenario.evidence_policy_version }} · Org policy {{ scenario.risk.policy.policy_id }} {{ scenario.risk.policy.policy_version }}</p></section>
 
 <section class="result-grid" aria-label="Assessment result">
-  <article class="result-card"><p class="eyebrow">INHERENT RISK</p><strong class="tier tier-{{ scenario.risk.inherent.tier }}">{{ scenario.risk.inherent.tier|title }}</strong><p>Score {{ scenario.risk.inherent.score }}{% if scenario.risk.inherent.provisional %} · provisional{% endif %}</p></article>
-  <article class="result-card"><p class="eyebrow">EVIDENCE CONFIDENCE</p><strong>{{ scenario.risk.evidence_confidence.level|title }}</strong><p>{{ scenario.risk.evidence_confidence.counts.verified }} verified · {{ scenario.risk.evidence_confidence.counts.self_attested }} self-attested · {{ scenario.risk.evidence_confidence.counts.not_reviewed }} not reviewed · {{ scenario.risk.evidence_confidence.counts.expired }} expired · {{ scenario.risk.evidence_confidence.counts.missing }} missing · {{ scenario.risk.evidence_confidence.counts.conflicting }} conflicting</p></article>
-  <article class="result-card"><p class="eyebrow">RESIDUAL RISK</p><strong class="tier tier-{{ scenario.risk.residual.tier }}">{{ scenario.risk.residual.tier|title }}</strong><p>{{ scenario.risk.residual.reason }}</p></article>
-  <article class="result-card"><p class="eyebrow">POLICY OUTCOME</p><strong class="status status-{{ scenario.risk.policy_outcome.status|replace('_', '-') }}">{{ scenario.risk.policy_outcome.status|replace('_', ' ')|title }}</strong><p>{{ scenario.risk.policy.policy_id }} {{ scenario.risk.policy.policy_version }}</p></article>
+  <article class="result-card"><p class="eyebrow">INHERENT RISK</p><strong class="tier tier-{{ scenario.risk.inherent.tier }}">{{ scenario.risk.inherent.tier|title }}</strong><p>Score {{ scenario.risk.inherent.score }}{% if scenario.risk.inherent.provisional %} · provisional{% endif %}</p><p class="so-what">Exposure from the data, the access, and the AI use before safeguards. The score is not a decision.</p></article>
+  <article class="result-card"><p class="eyebrow">EVIDENCE CONFIDENCE</p><strong>{{ scenario.risk.evidence_confidence.level|title }}</strong><p>{{ scenario.risk.evidence_confidence.counts.verified }} verified · {{ scenario.risk.evidence_confidence.counts.self_attested }} self-attested · {{ scenario.risk.evidence_confidence.counts.not_reviewed }} not reviewed · {{ scenario.risk.evidence_confidence.counts.expired }} expired · {{ scenario.risk.evidence_confidence.counts.missing }} missing · {{ scenario.risk.evidence_confidence.counts.conflicting }} conflicting</p><p class="so-what">How far the evidence supports the claims. Separate from residual risk. Missing evidence is not a failed control.</p></article>
+  <article class="result-card"><p class="eyebrow">RESIDUAL RISK</p><strong class="tier tier-{{ scenario.risk.residual.tier }}">{{ scenario.risk.residual.tier|title }}</strong><p>{{ scenario.risk.residual.reason }}</p><p class="so-what">What remains after the safeguards the evidence supports. This tier is not an approval.</p></article>
+  <article class="result-card"><p class="eyebrow">POLICY OUTCOME</p><strong class="status status-{{ scenario.risk.policy_outcome.status|replace('_', '-') }}">{{ scenario.risk.policy_outcome.status|replace('_', ' ')|title }}</strong><p>{{ scenario.risk.policy.policy_id }} {{ scenario.risk.policy.policy_version }}</p><p class="so-what">Separate from the score. Not prohibited is not an approval.</p></article>
+</section>
+{% set step_id = walkthrough.step_id if walkthrough and walkthrough.on_page else none %}
+{% set plan = replay_plan(scenario, posted_form if posted_form is defined else none) %}
+<section class="content-section rerun-panel"{% if not (loop is defined and not loop.first) %} id="change-answers"{% endif %}>
+  <h2>Change answers and re-run</h2>
+  <p>{{ plan.note }}</p>
+  <p><a class="button-link" href="{{ change_answers_href(plan, step_id) }}">{% if plan.kind == 'unavailable' %}Open the public form{% else %}Change these answers{% endif %}</a></p>
 </section>
 {% with evaluation=scenario.risk %}{% include "_policy_outcome.html" %}{% endwith %}
 
-<section class="content-section"><h2>Why this result</h2>
-{% if scenario.risk.inherent.factors %}<ul class="factor-list">{% for factor in scenario.risk.inherent.factors %}<li><span><code>{{ factor.rule_id }}</code> · {{ factor.factor|replace('_', ' ')|title }} = {{ factor.value }}</span><strong>+{{ factor.points }}</strong></li>{% endfor %}</ul>{% else %}<p>No known-value factors contributed to the score.</p>{% endif %}
-{% if scenario.risk.missing_information %}<p class="inline-warning">Unknown inputs: {{ scenario.risk.missing_information|join(', ')|replace('_', ' ') }}. The result remains provisional.</p>{% endif %}
-<p><strong>Review route:</strong> {{ scenario.risk.review_path|replace('_', ' ')|title }}</p>
-{% if scenario.risk.escalations %}{% with escalations=scenario.risk.escalations %}{% include "_escalation_list.html" %}{% endwith %}{% else %}<p>No configured escalation rule fired. Human review is still required.</p>{% endif %}
+<section class="content-section" id="why-this-result"><h2>Why this result</h2>
+<p>{{ residual_plain(scenario.risk) }}</p>
+<p>{{ confidence_plain(scenario.risk.evidence_confidence) }}</p>
+<h3>Inherent score</h3>
+<p class="muted">Each line is one scoring rule, the answer it used, and what that answer means before safeguards. The points are the illustrative rule set. They are not an approval.</p>
+{% if scenario.risk.inherent.factors %}<ul class="factor-list">{% for factor in factor_lines(scenario.risk, scenario.assessment_inputs) %}<li><div><span><code>{{ factor.rule_id }}</code> · {{ factor.label }} = {{ factor.value|replace('_', ' ') }}</span><p class="so-what">{{ factor.rationale }}</p></div><strong>+{{ factor.points }}</strong></li>{% endfor %}</ul>{% else %}<p>No known-value factors contributed to the score.</p>{% endif %}
+{% if scenario.risk.missing_information %}<p class="inline-warning">{{ missing_plain(scenario.risk) }}</p>{% endif %}
+<p><strong>Review route:</strong> {{ scenario.risk.review_path|replace('_', ' ')|title }}. {{ review_path_plain(scenario.risk) }}</p>
+{% if scenario.risk.escalations %}{% with escalations=scenario.risk.escalations, assessment=scenario.assessment_inputs, claims=scenario.claims %}{% include "_escalation_list.html" %}{% endwith %}{% else %}<p>No configured escalation rule fired. Human review is still required. A quiet rule list is not an approval.</p>{% endif %}
 </section>
 
-<section class="content-section"><h2>Claims and evidence</h2>
-{% for claim in scenario.claims %}<article class="claim-card"><div class="claim-heading"><h3>{{ claim.statement }}</h3><span class="status status-{{ claim.evidence_status|replace('_', '-') }}">{{ claim.evidence_status|replace('_', ' ')|title }}</span></div><p class="muted">{{ claim.status_reason }}</p>{% if claim.evidence %}<ul>{% for item in claim.evidence %}<li><code>{{ item.evidence_id }}</code> — {{ item.status|replace('_', ' ')|title }}: {{ item.reason }}{% if item.artifact_name %} · {{ item.artifact_name }}{% endif %}{% if item.source %} · {{ item.source|replace('_', ' ') }}{% endif %}{% if item.trust_center_url %} · <span class="trust-url">{{ item.trust_center_url }}</span>{% endif %}</li>{% endfor %}</ul>{% else %}<p>No evidence records. This is an evidence gap, not a confirmed control failure.</p>{% endif %}</article>{% endfor %}
+<section class="content-section" id="claims-and-evidence"><h2>Claims and evidence</h2>
+<p class="muted">Each claim is a statement the vendor or the intake made. The status says how far the evidence supports it. The so-what line says what that status means for the risk decision. Statuses come from the evidence validator. This page does not invent them.</p>
+{% for claim in scenario.claims %}<article class="claim-card"><div class="claim-heading"><h3>{{ claim.statement }}</h3><span class="status status-{{ claim.evidence_status|replace('_', '-') }}">{{ claim.evidence_status|replace('_', ' ')|title }}</span></div><p class="muted">{{ claim.status_reason }}</p><p class="so-what">{{ claim_so_what(claim) }}</p>{% if claim.evidence %}<ul>{% for item in claim.evidence %}<li><code>{{ item.evidence_id }}</code> — {{ item.status|replace('_', ' ')|title }}: {{ item.reason }}{% if item.artifact_name %} · {{ item.artifact_name }}{% endif %}{% if item.source %} · {{ item.source|replace('_', ' ') }}{% endif %}{% if item.trust_center_url %} · <span class="trust-url">{{ item.trust_center_url }}</span>{% endif %}</li>{% endfor %}</ul>{% else %}<p>No evidence records. This is an evidence gap, not a confirmed control failure.</p>{% endif %}</article>{% endfor %}
 </section>
 {% if scenario.trust_center %}
 <section class="content-section"><h2>Trust center</h2>
@@ -38,7 +50,7 @@
 </section>
 {% endif %}
 
-<section class="content-section"><h2>Related control mapping prompts</h2>
+<section class="content-section" id="control-mappings"><h2>Related control mapping prompts</h2>
 <p class="muted">Matched by exact claim topic from the mapping library. A match is a review prompt. It does not show that a control is implemented, that a vendor or organization conforms to a framework, or that frameworks are equivalent. The review status below is the status stored in the mapping set.</p>
 {% if scenario.mappings %}<div class="mapping-list">{% for mapping in scenario.mappings %}{% include "_mapping_card.html" %}{% endfor %}</div>{% else %}<p>No mapping matched these claim topics.</p>{% endif %}
 <p class="muted"><a href="{{ url_for('mappings.index') }}">Browse the mapping library</a></p>

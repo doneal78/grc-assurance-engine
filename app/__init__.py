@@ -119,8 +119,15 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     from app.routes.methodology import bp as methodology_bp
     from app.routes.risks import bp as risks_bp
     from app.routes.try_demo import bp as try_demo_bp
+    from app.routes.try_demo import change_answers_href
     from app.routes.walkthrough import bp as walkthrough_bp
     from app.routes.walkthrough import coach_for_request
+    from app.services.intake_replay import replay_plan
+    from app.services.result_explain import (
+        claim_so_what, clause_so_what, confidence_plain, escalation_rationale,
+        factor_lines, mapping_so_what, missing_plain, residual_plain,
+        restriction_so_what, review_path_plain,
+    )
 
     app.register_blueprint(api_bp)
     app.register_blueprint(dashboard_bp)
@@ -131,6 +138,21 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     app.register_blueprint(risks_bp)
     app.register_blueprint(try_demo_bp)
     app.register_blueprint(walkthrough_bp)
+
+    app.jinja_env.globals.update(
+        change_answers_href=change_answers_href,
+        replay_plan=replay_plan,
+        factor_lines=factor_lines,
+        missing_plain=missing_plain,
+        residual_plain=residual_plain,
+        confidence_plain=confidence_plain,
+        review_path_plain=review_path_plain,
+        escalation_rationale=escalation_rationale,
+        restriction_so_what=restriction_so_what,
+        claim_so_what=claim_so_what,
+        mapping_so_what=mapping_so_what,
+        clause_so_what=clause_so_what,
+    )
 
     @app.context_processor
     def inject_walkthrough():

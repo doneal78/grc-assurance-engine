@@ -22,10 +22,15 @@ from app.services.intake_importer import (
     confirmation_document, parse_upload, sample_file,
 )
 from app.services.intake_questionnaire import load_questionnaire
+from app.services.intake_replay import query_form
 from app.services.org_policy import load_org_policy
 from app.services.scenario_runner import ScenarioNotFoundError, list_scenarios, run_scenario
 from app.services.walkthrough import SUBMISSION_COMPLETE_ATTR, carried_walk_step
 from app.services.workflow_service import DISPOSITIONS, WorkflowInputError, register_intake
+
+# Intake, custom vendor, and trust center share the public form. A re-run
+# link keeps that stop. Other stops stay on their own pages.
+FORM_WALK_STEPS = frozenset({"intake", "custom", "trust"})
 
 bp = Blueprint("try_demo", __name__, url_prefix="/try")
 EXPORT_FORMATS = {"json", "markdown"}
@@ -81,9 +86,21 @@ def _render_result(result, posted_form=None):
                            package_markdown=render_markdown(package), posted_form=posted_form)
 
 
+def change_answers_href(plan, walk_step=None):
+    """Public form URL with the prior answers, and the form's walk stop when one is active."""
+    fields = {}
+    for key, value in (plan or {}).get("fields", {}).items():
+        if isinstance(value, str):
+            fields[key] = value
+    if walk_step in FORM_WALK_STEPS:
+        fields["walk"] = walk_step
+    return url_for("try_demo.index", **fields) + "#intake"
+
+
 @bp.get("/")
 def index():
-    return render_template("try_index.html", **_form_context())
+    form, replay_note = query_form(request.args)
+    return render_template("try_index.html", **_form_context(form), replay_note=replay_note)
 
 
 @bp.get("/scenario/<scenario_id>")
