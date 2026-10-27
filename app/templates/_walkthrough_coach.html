@@ -14,11 +14,11 @@
   {% if walkthrough.on_page %}
   <h2>{{ walkthrough.title }}</h2>
   <p>{{ walkthrough.notice }}</p>
-  {% if walkthrough.hold %}<p class="walk-hold">{{ walkthrough.hold }}</p>{% endif %}
   {% else %}
   <h2>This note is on another page</h2>
   <p>Open {{ walkthrough.title }} to read it.{% if walkthrough.blocked %} {{ walkthrough.blocked }}{% endif %}</p>
   {% endif %}
+  {% if walkthrough.hold %}<p class="walk-hold">{{ walkthrough.hold }}</p>{% endif %}
   <p class="walk-meter" aria-hidden="true">{% for n in range(walkthrough.total) %}<span{% if n < walkthrough.number %} class="is-on"{% endif %}></span>{% endfor %}</p>
   <div class="walk-coach-actions">
     {% if walkthrough.prev_href %}<a class="text-link walk-back" href="{{ walkthrough.prev_href }}">Back</a>{% endif %}

@@ -9,16 +9,14 @@ from flask import Blueprint, g, redirect, render_template, request, url_for
 from app.db import get_db
 from app.services.walkthrough import (
     PROHIBITED_SCENARIO_ID, SUBMISSION_COMPLETE_ATTR, WALK_COOKIE, WALK_QUERY,
-    WALKTHROUGH_VERSION, known_step_id, neighbors, page_matches, step_by_id,
-    steps, submission_pending,
+    WALKTHROUGH_VERSION, known_step_id, neighbors, page_matches, scenario_card_step,
+    step_by_id, steps, submission_pending, submission_satisfied,
 )
-from app.services.workflow_service import risk_for_scenario
+from app.services.workflow_service import get_risk, risk_for_scenario
 
 bp = Blueprint("walkthrough", __name__, url_prefix="/walkthrough")
 
 _SAVE_FIRST = "Save the eligibility case first."
-_HOLD = "Add to risk register continues the guide on the saved record."
-_FORM_HOLD = "Run assessment on this page before Next."
 
 
 def _saved_prohibited():
@@ -45,9 +43,10 @@ def destination(step, saved_risk):
 def build_coach(step_id, endpoint, view_args, saved_risk, submission_complete=False):
     """Template data for the note on one request. URLs are absolute paths.
 
-    ``submission_complete`` is true only for the successful assessment
-    response. Form stops then offer Next. The form and a validation error
-    pass false and withhold it.
+    ``submission_complete`` is true when this stop's awaited action has
+    succeeded. The form, a validation error, and a file that is not yet
+    confirmed pass false and withhold Next. A stop that is not waiting
+    still offers Next on its own page.
     """
     step = step_by_id(step_id)
     on_page = page_matches(step, endpoint, view_args)
@@ -57,10 +56,8 @@ def build_coach(step_id, endpoint, view_args, saved_risk, submission_complete=Fa
     next_href = None
     next_title = None
     finish = False
-    if on_page and submission_pending(step, submission_complete):
-        hold = _FORM_HOLD
-    elif on_page and step_id == "save" and not saved_risk:
-        hold = _HOLD
+    if submission_pending(step, submission_complete):
+        hold = step.get("pending_notice")
     elif on_page and following is None:
         finish = True
         next_href = url_for("walkthrough.index")
@@ -98,11 +95,60 @@ def coach_for_request():
     step_id = known_step_id(request.args.get(WALK_QUERY))
     if step_id is None or (request.endpoint or "").startswith("walkthrough."):
         return None
+    step = step_by_id(step_id)
     saved = None
+    decided = False
     if step_id in {"save", "decide"}:
         saved = _saved_prohibited()
-    complete = bool(getattr(g, SUBMISSION_COMPLETE_ATTR, False))
+    if step.get("await_kind") == "decision" and saved:
+        current = (request.view_args or {}).get("risk_id")
+        if current == saved["risk_id"]:
+            risk = get_risk(get_db(), saved["risk_id"])
+            decided = bool(risk and risk.get("decision"))
+    complete = submission_satisfied(
+        step,
+        assessed=bool(getattr(g, SUBMISSION_COMPLETE_ATTR, False)),
+        saved=bool(saved),
+        decided=decided,
+    )
     return build_coach(step_id, request.endpoint, request.view_args, saved, complete)
+
+
+def scenario_card_href(scenario_id, surface_endpoint):
+    """Ready-made card URL.
+
+    A free-form page has no walk query and keeps the plain scenario address.
+    A stop that is waiting on its own page keeps that stop on the card.
+    Any other known stop links to the guide page for that scenario.
+    """
+    active_id = known_step_id(request.args.get(WALK_QUERY))
+    on_active = False
+    if active_id is not None:
+        on_active = page_matches(step_by_id(active_id), request.endpoint, request.view_args)
+    step_id = scenario_card_step(scenario_id, surface_endpoint, active_id, on_active)
+    if step_id is None:
+        return url_for(surface_endpoint, scenario_id=scenario_id)
+    if active_id is not None and step_id == active_id and on_active:
+        return url_for(surface_endpoint, scenario_id=scenario_id, **{WALK_QUERY: step_id})
+    step = step_by_id(step_id)
+    if step["endpoint"] == surface_endpoint:
+        return url_for(surface_endpoint, scenario_id=scenario_id, **{WALK_QUERY: step_id})
+    return destination(step, None)[0]
+
+
+def import_page_href():
+    """Import link that does not drop a stop which is still waiting.
+
+    On that stop the link keeps the current id, so Next stays withheld.
+    Another known stop opens the import stop. A free-form page stays plain.
+    """
+    active_id = known_step_id(request.args.get(WALK_QUERY))
+    if active_id is None:
+        return url_for("try_demo.import_form")
+    active = step_by_id(active_id)
+    if page_matches(active, request.endpoint, request.view_args) and active.get("await_submission"):
+        return url_for("try_demo.import_form", **{WALK_QUERY: active_id})
+    return url_for("try_demo.import_form", **{WALK_QUERY: "import"})
 
 
 def index_context(saved_risk, current_id):

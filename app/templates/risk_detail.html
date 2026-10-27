@@ -25,6 +25,7 @@
 </div>
 </section>
 <section class="content-section"><h2>Human decision</h2>
+{% if decision_error %}<div class="inline-warning" role="alert"><strong>Decision not recorded.</strong> {{ decision_error }}</div>{% endif %}
 {% if risk.decision %}
 <article class="claim-card">
   <div class="claim-heading"><h3>{{ risk.decision.disposition|replace('_', ' ')|title }}</h3><span class="muted">{{ risk.decision.decided_at }} UTC</span></div>

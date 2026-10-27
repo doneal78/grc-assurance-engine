@@ -121,7 +121,7 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     from app.routes.try_demo import bp as try_demo_bp
     from app.routes.try_demo import change_answers_href
     from app.routes.walkthrough import bp as walkthrough_bp
-    from app.routes.walkthrough import coach_for_request
+    from app.routes.walkthrough import coach_for_request, import_page_href, scenario_card_href
     from app.services.intake_replay import replay_plan
     from app.services.result_explain import (
         claim_so_what, clause_so_what, confidence_plain, escalation_rationale,
@@ -141,6 +141,8 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
 
     app.jinja_env.globals.update(
         change_answers_href=change_answers_href,
+        import_page_href=import_page_href,
+        scenario_card_href=scenario_card_href,
         replay_plan=replay_plan,
         factor_lines=factor_lines,
         missing_plain=missing_plain,

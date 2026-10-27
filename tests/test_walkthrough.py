@@ -12,7 +12,8 @@ from app.services.risk_engine import evaluate
 from app.services.scenario_runner import list_scenarios, run_scenario
 from app.services.walkthrough import (
     WALKTHROUGH_VERSION, carried_walk_step, known_step_id, neighbors, page_matches,
-    progress_step_id, step_by_id, steps, submission_pending,
+    progress_step_id, scenario_card_step, scenario_stop_id, step_by_id, steps,
+    submission_pending, submission_satisfied,
 )
 
 SAME_ORIGIN = {"Origin": "http://localhost"}
@@ -58,7 +59,7 @@ def test_stops_are_unique_ordered_and_point_at_real_endpoints(app):
     ]
     assert len({item["step_id"] for item in ordered}) == len(ordered)
     assert [item["number"] for item in ordered] == list(range(1, 14))
-    assert WALKTHROUGH_VERSION == "1.2.1"
+    assert WALKTHROUGH_VERSION == "1.2.2"
     endpoints = {rule.endpoint for rule in app.url_map.iter_rules()}
     scenario_ids = {item["scenario_id"] for item in list_scenarios()}
     for step in ordered:
@@ -136,6 +137,7 @@ def test_step_matching_and_carried_ids_reject_unknown_values():
     assert not page_matches(evidence, "try_demo.scenario", {"scenario_id": "high-risk-ai"})
     assert not page_matches(evidence, "try_demo.index", {})
     assert page_matches(decide, "risks.detail", {"risk_id": "R-1"})
+    assert page_matches(decide, "risks.record_risk_decision", {"risk_id": "R-1"})
     assert not page_matches(decide, "demos.detail", {"scenario_id": "prohibited-ai-decisions"})
     custom = step_by_id("custom")
     trust = step_by_id("trust")
@@ -163,14 +165,46 @@ def test_step_matching_and_carried_ids_reject_unknown_values():
     assert progress_step_id("evidence", "try_demo.scenario", {"scenario_id": "evidence-supported"}) == "evidence"
     assert progress_step_id("evidence", "try_demo.index", {}) is None
     assert progress_step_id("nope", "try_demo.index", {}) is None
-    for step_id in ("intake", "custom", "trust"):
+    for step_id in ("intake", "custom", "trust", "import"):
         step = step_by_id(step_id)
+        assert step["await_kind"] == "assessment"
         assert step["await_submission"] is True
         assert submission_pending(step, False) is True
         assert submission_pending(step, True) is False
-    evidence = step_by_id("evidence")
-    assert submission_pending(evidence, False) is False
-    assert submission_pending(evidence, True) is False
+        assert submission_satisfied(step, assessed=False) is False
+        assert submission_satisfied(step, assessed=True) is True
+        assert submission_satisfied(step, saved=True) is False
+    save = step_by_id("save")
+    decide = step_by_id("decide")
+    assert save["await_kind"] == "register"
+    assert decide["await_kind"] == "decision"
+    assert submission_satisfied(save, saved=False) is False
+    assert submission_satisfied(save, saved=True) is True
+    assert submission_satisfied(save, assessed=True) is False
+    assert submission_satisfied(decide, decided=False) is False
+    assert submission_satisfied(decide, decided=True) is True
+    assert submission_pending(save, False) is True
+    assert submission_pending(decide, True) is False
+    for step_id in ("evidence", "clause", "conflict", "high-risk", "prohibited", "dashboard", "methods"):
+        step = step_by_id(step_id)
+        assert step.get("await_submission") is not True
+        assert submission_pending(step, False) is False
+        assert submission_pending(step, True) is False
+        assert submission_satisfied(step, assessed=True, saved=True, decided=True) is False
+    assert scenario_stop_id("evidence-supported", "try_demo.scenario") == "evidence"
+    assert scenario_stop_id("prohibited-ai-decisions", "try_demo.scenario") == "prohibited"
+    assert scenario_stop_id("prohibited-ai-decisions", "demos.detail") == "save"
+    assert scenario_stop_id("evidence-supported", "demos.detail") == "evidence"
+    assert scenario_stop_id("missing", "try_demo.scenario") is None
+    assert scenario_card_step("evidence-supported", "try_demo.scenario", None, True) is None
+    assert scenario_card_step("evidence-supported", "try_demo.scenario", "nope", True) is None
+    assert scenario_card_step("evidence-supported", "try_demo.scenario", "intake", True) == "intake"
+    assert scenario_card_step("evidence-supported", "try_demo.scenario", "custom", True) == "custom"
+    assert scenario_card_step("evidence-supported", "try_demo.scenario", "trust", True) == "trust"
+    assert scenario_card_step("high-risk-ai", "try_demo.scenario", "evidence", False) == "high-risk"
+    assert scenario_card_step("prohibited-ai-decisions", "demos.detail", "dashboard", True) == "save"
+    assert scenario_card_step("evidence-supported", "demos.detail", "dashboard", True) == "evidence"
+    assert scenario_card_step("evidence-supported", "demos.detail", "save", False) == "evidence"
 
 
 def test_index_lists_every_stop_and_links_into_the_live_pages(client):
@@ -178,7 +212,7 @@ def test_index_lists_every_stop_and_links_into_the_live_pages(client):
     response = client.get("/walkthrough/")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "VERSION 1.2.1" in body
+    assert "VERSION 1.2.2" in body
     assert "13 stops" in body
     assert "Start at intake" in body
     assert 'href="/try/?walk=intake"' in body
@@ -229,8 +263,9 @@ def test_each_guided_page_shows_its_note_and_the_next_stop(client):
         number = next(item["number"] for item in steps() if item["step_id"] == step_id)
         assert f"STEP {number} OF {len(steps())}" in body
         assert "walk_step=" + step_id in response.headers.get("Set-Cookie", "")
-        if step_id in {"intake", "custom", "trust"}:
-            assert "Run assessment on this page before Next." in body
+        if step_id in {"intake", "custom", "trust", "import"}:
+            notice = step_by_id(step_id)["pending_notice"]
+            assert notice in body
             assert body.count('class="button-link walk-next"') == 0
             assert f"walk={following}" not in body
             assert "Finish" not in body
@@ -267,6 +302,81 @@ def test_unknown_or_mismatched_walk_does_not_move_progress_or_echo_the_value(cli
     assert 'href="/try/scenario/evidence-supported?walk=evidence"' in body
     assert "walk_step" not in mismatch.headers.get("Set-Cookie", "")
     assert "Run assessment" in body
+
+
+def test_ready_made_cards_keep_the_active_stop_or_the_scenario_stop(client):
+    """A waiting stop keeps its query on the cards. Other guided pages use the scenario's stop.
+
+    Free-form /try/ and /demo/ do not gain a walk query.
+    """
+    intake = client.get("/try/?walk=intake").get_data(as_text=True)
+    assert 'href="/try/scenario/evidence-supported?walk=intake"' in intake
+    assert 'href="/try/scenario/contract-clause-conflict?walk=intake"' in intake
+    assert 'href="/try/scenario/conflicting-claims?walk=intake"' in intake
+    assert 'href="/try/scenario/high-risk-ai?walk=intake"' in intake
+    assert 'href="/try/scenario/prohibited-ai-decisions?walk=intake"' in intake
+    assert 'href="/try/scenario/evidence-supported?walk=evidence"' not in intake
+    assert 'href="/try/import?walk=intake"' in intake
+    assert 'action="/try/assess?walk=intake"' in intake
+
+    custom = client.get("/try/?walk=custom").get_data(as_text=True)
+    assert 'href="/try/scenario/high-risk-ai?walk=custom"' in custom
+    assert 'href="/try/scenario/evidence-supported?walk=intake"' not in custom
+    assert "walk=trust" not in custom
+    trust = client.get("/try/?walk=trust").get_data(as_text=True)
+    assert 'href="/try/scenario/evidence-supported?walk=trust"' in trust
+    assert "walk=evidence" not in trust
+
+    opened = client.get("/try/scenario/evidence-supported?walk=intake")
+    opened_body = opened.get_data(as_text=True)
+    assert 'data-step="intake"' in opened_body
+    assert "This note is on another page" in opened_body
+    assert "Run assessment on this page before Next." in opened_body
+    assert "walk=custom" not in opened_body
+    assert 'href="/try/?walk=intake"' in opened_body
+    assert "walk_step" not in opened.headers.get("Set-Cookie", "")
+
+    parked = client.get("/try/import?walk=custom")
+    parked_body = parked.get_data(as_text=True)
+    assert 'data-step="custom"' in parked_body
+    assert "Run assessment on this page before Next." in parked_body
+    assert parked_body.count('class="button-link walk-next"') == 1
+    assert 'href="/try/?walk=custom#intake"' in parked_body
+    assert "walk=trust" not in parked_body
+
+    mismatch = client.get("/try/?walk=evidence").get_data(as_text=True)
+    assert 'href="/try/scenario/evidence-supported?walk=evidence"' in mismatch
+    assert 'href="/try/scenario/conflicting-claims?walk=conflict"' in mismatch
+    assert 'href="/try/import?walk=import"' in mismatch
+    assert 'href="/try/scenario/evidence-supported?walk=intake"' not in mismatch
+
+    home = client.get("/?walk=dashboard").get_data(as_text=True)
+    assert 'href="/try/scenario/evidence-supported?walk=evidence"' in home
+    assert 'href="/try/scenario/contract-clause-conflict?walk=clause"' in home
+    assert 'href="/try/scenario/conflicting-claims?walk=conflict"' in home
+    assert 'href="/try/scenario/high-risk-ai?walk=high-risk"' in home
+    assert 'href="/demo/prohibited-ai-decisions?walk=save"' in home
+    assert 'href="/demo/evidence-supported"' not in home
+    assert 'data-step="dashboard"' in home
+    assert "walk=methods" in home
+
+    demo = client.get("/demo/?walk=save").get_data(as_text=True)
+    assert 'href="/demo/prohibited-ai-decisions?walk=save"' in demo
+    assert 'href="/try/scenario/evidence-supported?walk=evidence"' in demo
+    assert 'data-step="save"' in demo
+    assert "Add to risk register continues the guide" in demo
+
+    free_try = client.get("/try/").get_data(as_text=True)
+    free_demo = client.get("/demo/").get_data(as_text=True)
+    free_home = client.get("/").get_data(as_text=True)
+    assert 'href="/try/scenario/evidence-supported"' in free_try
+    assert 'href="/try/import"' in free_try
+    assert "walk=" not in free_try
+    assert 'href="/demo/prohibited-ai-decisions"' in free_demo
+    assert 'href="/demo/evidence-supported"' in free_demo
+    assert "walk=" not in free_demo
+    assert 'href="/demo/evidence-supported"' in free_home
+    assert "walk=" not in free_home
 
 
 def test_cookie_remembers_the_last_opened_stop_until_reset(client):
@@ -332,8 +442,43 @@ def test_register_advances_the_guide_and_a_plain_save_does_not(client):
     assert 'data-step="decide"' in body
     assert "exception rationale" in body
     assert "nothing is sent to ServiceNow" in body
-    assert "walk=import" in body
+    assert "Record a decision on this page before Next." in body
+    assert body.count('class="button-link walk-next"') == 0
+    assert "walk=import" not in body
     assert f'action="{location.split("?")[0]}/decision?walk=decide"' in body
+    risk_url = location.split("?", 1)[0]
+    refused = client.post(f"{risk_url}/decision?walk=decide", data={
+        "disposition": "approve",
+        "rationale": "The score is not the decision.",
+        "decider": "Portfolio reviewer",
+        "conditions": "",
+        "exception_rationale": "",
+    }, headers=SAME_ORIGIN)
+    assert refused.status_code == 400
+    refused_body = refused.get_data(as_text=True)
+    assert 'data-step="decide"' in refused_body
+    assert "This note is on another page" not in refused_body
+    assert "Decision not recorded." in refused_body
+    assert "exception rationale" in refused_body
+    assert "Record a decision on this page before Next." in refused_body
+    assert refused_body.count('class="button-link walk-next"') == 0
+    assert f'action="{risk_url}/decision?walk=decide"' in refused_body
+    assert "walk_step" not in refused.headers.get("Set-Cookie", "")
+    recorded = client.post(f"{risk_url}/decision?walk=decide", data={
+        "disposition": "escalate",
+        "rationale": "The score is not the decision.",
+        "decider": "Portfolio reviewer",
+        "conditions": "",
+        "exception_rationale": "",
+    }, headers=SAME_ORIGIN)
+    assert recorded.status_code == 302
+    assert recorded.headers["Location"].endswith("?walk=decide")
+    done = client.get(recorded.headers["Location"])
+    done_body = done.get_data(as_text=True)
+    assert "Record a decision on this page before Next." not in done_body
+    assert done_body.count('class="button-link walk-next"') == 2
+    assert "walk=import" in done_body
+    assert "Next · File import" in done_body
     resumed = client.get("/demo/prohibited-ai-decisions?walk=save")
     assert "walk=decide" in resumed.get_data(as_text=True)
     home = client.get("/walkthrough/").get_data(as_text=True)
@@ -567,11 +712,28 @@ def test_import_stop_follows_preview_and_confirm_without_scoring_early(client):
     body = page.get_data(as_text=True)
     assert "Preview a sample file" in body
     assert "ServiceNow is not called" in body
+    assert "Confirm the file on this page before Next." in body
+    assert body.count('class="button-link walk-next"') == 0
+    assert "walk=dashboard" not in body
     assert 'action="/try/import/preview?walk=import"' in body
     assert 'href="/try/import/sample/json"' in body
     plain = client.get("/try/import").get_data(as_text=True)
     assert 'action="/try/import/preview"' in plain
     assert "walk=" not in plain
+
+    rejected = client.post(
+        "/try/import/preview?walk=import",
+        data={"intake_file": (io.BytesIO(b""), "")},
+        headers=SAME_ORIGIN,
+    )
+    assert rejected.status_code == 400
+    rejected_body = rejected.get_data(as_text=True)
+    assert 'data-step="import"' in rejected_body
+    assert "This note is on another page" not in rejected_body
+    assert "Choose a CSV" in rejected_body
+    assert "Confirm the file on this page before Next." in rejected_body
+    assert rejected_body.count('class="button-link walk-next"') == 0
+    assert "walk_step" not in rejected.headers.get("Set-Cookie", "")
 
     preview = client.post(
         "/try/import/preview?walk=import",
@@ -584,6 +746,9 @@ def test_import_stop_follows_preview_and_confirm_without_scoring_early(client):
     assert "This note is on another page" not in preview_body
     assert "INHERENT RISK" not in preview_body
     assert "do not set residual risk" in preview_body
+    assert "Confirm the file on this page before Next." in preview_body
+    assert preview_body.count('class="button-link walk-next"') == 0
+    assert "walk=dashboard" not in preview_body
     assert 'action="/try/import/confirm?walk=import"' in preview_body
 
     start = preview.data.index(b"<textarea")
@@ -597,9 +762,18 @@ def test_import_stop_follows_preview_and_confirm_without_scoring_early(client):
     assert confirmed.status_code == 200
     confirmed_body = confirmed.get_data(as_text=True)
     assert 'data-step="import"' in confirmed_body
+    assert "This note is on another page" not in confirmed_body
     assert "INHERENT RISK" in confirmed_body
     assert "does not save" in confirmed_body
+    assert "Confirm the file on this page before Next." not in confirmed_body
+    assert confirmed_body.count('class="button-link walk-next"') == 2
+    assert 'href="/?walk=dashboard"' in confirmed_body
+    assert "Next · Measured and modeled" in confirmed_body
     assert 'action="/try/import/save?walk=import"' in confirmed_body
+    assert 'href="/try/import?walk=import"' in confirmed_body
+    again = client.get("/try/import?walk=import")
+    assert "Confirm the file on this page before Next." in again.get_data(as_text=True)
+    assert again.get_data(as_text=True).count('class="button-link walk-next"') == 0
     row = document["rows"][0]
     saved = client.post("/try/import/save?walk=import", data={
         "confirmation": json.dumps(document),
@@ -611,6 +785,19 @@ def test_import_stop_follows_preview_and_confirm_without_scoring_early(client):
     }, headers=SAME_ORIGIN)
     assert saved.status_code == 302
     assert saved.headers["Location"].endswith("?walk=dashboard")
+    unsaved = client.post("/try/import/save?walk=import", data={
+        "confirmation": json.dumps(document),
+        "source_row": row["row_number"],
+        "disposition": "escalate",
+        "rationale": "The checkbox was not checked.",
+        "decider": "Portfolio reviewer",
+    }, headers=SAME_ORIGIN)
+    assert unsaved.status_code == 400
+    unsaved_body = unsaved.get_data(as_text=True)
+    assert 'data-step="import"' in unsaved_body
+    assert "Nothing was saved" in unsaved_body
+    assert "Confirm the file on this page before Next." not in unsaved_body
+    assert "walk=dashboard" in unsaved_body
     plain_saved = client.post("/try/import/save", data={
         "confirmation": json.dumps(document),
         "source_row": row["row_number"],
