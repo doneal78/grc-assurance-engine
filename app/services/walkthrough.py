@@ -168,8 +168,9 @@ _STEPS = (
         "notice": (
             "Record escalate or reject without an exception rationale, or approve "
             "a prohibited result only with one. The prohibited flag stays. Minutes "
-            "spent reviewing are optional. Then download the package: it includes "
-            "the decision, and nothing is sent to ServiceNow."
+            "spent reviewing are optional, and rework minutes are optional. Then "
+            "download the package: it includes the decision, and nothing is sent "
+            "to ServiceNow."
         ),
         "endpoint": "risks.detail",
         "endpoints": ("risks.detail", "risks.record_risk_decision"),
@@ -209,8 +210,9 @@ _STEPS = (
             "The observed panel counts saved records. Cycle time stays empty on a "
             "scenario save, which does not store both an intake event and a "
             "disposition event. Self-reported handling minutes appear only when "
-            "a decision includes them. The cost panel is modeled labor capacity, "
-            "not cash savings."
+            "a decision includes them. Self-reported rework minutes are a separate "
+            "figure and appear only when a decision includes them. The cost panel "
+            "is modeled labor capacity, not cash savings."
         ),
         "endpoint": "dashboard.index",
         "view_args": {},

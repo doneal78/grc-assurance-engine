@@ -29,7 +29,7 @@ def _handling_time_note(minutes):
         return "Not reported. Handling time for this decision is unmeasured."
     return (
         "Self-reported minutes spent reviewing. Optional. Not authenticated, "
-        "not elapsed cycle time, and not an input to the cost model."
+        "not elapsed cycle time, not rework time, and not an input to the cost model."
     )
 
 
@@ -38,6 +38,25 @@ def _handling_time_line(minutes):
         return "not reported (unmeasured)."
     unit = "minute" if minutes == 1 else "minutes"
     return f"{minutes} self-reported {unit}. Not authenticated effort tracking."
+
+
+def _rework_time_note(minutes):
+    if minutes is None:
+        return "Rework time was not reported."
+    return (
+        "Self-reported minutes spent redoing work after a first pass. Optional. "
+        "Not authenticated, not elapsed cycle time, not handling minutes, "
+        "and not an input to the cost model."
+    )
+
+
+def _rework_time_line(minutes):
+    if minutes is None:
+        return "was not reported."
+    unit = "minute" if minutes == 1 else "minutes"
+    return (
+        f"{minutes} self-reported {unit}. Not authenticated effort tracking. Not handling time."
+    )
 
 
 def _decision_view(decision):
@@ -56,6 +75,8 @@ def _decision_view(decision):
         "prohibited_at_decision": decision["prohibited_at_decision"],
         "handling_minutes": decision.get("handling_minutes"),
         "handling_time_note": _handling_time_note(decision.get("handling_minutes")),
+        "rework_minutes": decision.get("rework_minutes"),
+        "rework_time_note": _rework_time_note(decision.get("rework_minutes")),
     }
 
 
@@ -389,6 +410,7 @@ def render_markdown(package):
         lines.append(f"- Rule set at decision: {decision['rule_set_version']}")
         lines.append(f"- Policy outcome at decision: {decision['prohibited_at_decision'].replace('_', ' ')}")
         lines.append(f"- Human handling time: {_handling_time_line(decision.get('handling_minutes'))}")
+        lines.append(f"- Rework time: {_rework_time_line(decision.get('rework_minutes'))}")
     lines.extend(["", "End of package.", ""])
     return "\n".join(lines)
 

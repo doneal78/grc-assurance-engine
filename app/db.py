@@ -63,6 +63,7 @@ def migrate(connection):
             connection.execute(f"ALTER TABLE risks ADD COLUMN {name} TEXT")
     _allow_escalate_disposition(connection)
     _add_handling_minutes(connection)
+    _add_rework_minutes(connection)
     connection.commit()
 
 
@@ -116,14 +117,27 @@ def _add_handling_minutes(connection):
     Null means the person did not report handling time. Rows already stored
     stay, with the new column empty.
     """
+    _add_decision_minutes(connection, "handling_minutes")
+
+
+def _add_rework_minutes(connection):
+    """Add optional self-reported rework minutes to an existing decisions table.
+
+    Null means the person did not report rework time. Rows already stored
+    stay, with the new column empty. Rework is not handling time.
+    """
+    _add_decision_minutes(connection, "rework_minutes")
+
+
+def _add_decision_minutes(connection, column):
     row = connection.execute(
         "SELECT name FROM sqlite_master WHERE type='table' AND name='decisions'"
     ).fetchone()
     if row is None:
         return
     columns = {item[1] for item in connection.execute("PRAGMA table_info(decisions)")}
-    if "handling_minutes" not in columns:
-        connection.execute("ALTER TABLE decisions ADD COLUMN handling_minutes INTEGER")
+    if column not in columns:
+        connection.execute(f"ALTER TABLE decisions ADD COLUMN {column} INTEGER")
 
 
 def init_app(app):

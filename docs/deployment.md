@@ -129,7 +129,7 @@ File import reads an uploaded CSV, `.xlsx`, or simulated ServiceNow JSON/CSV fil
 
 `POST /api/v1/intake/assess` is open because `REQUIRE_AUTH` is false. Assess alone does not write. A body with `persist` true and a human disposition does write a synthetic row to the shared register. Do not send real vendor data. See `docs/bot-contract.md`.
 
-The dashboard counts whatever synthetic rows are in the shared SQLite file. Those counts are observed for that file. They are not a baseline study, a monthly rate, or cash savings. The cost panel remains the illustrative formula in `app/data/cost_assumptions.json`. Self-reported handling minutes appear only when a saved decision includes them. They are not authenticated, and they are not copied into that formula. A same-second intake and disposition is a 0-second elapsed span in that file, which is the clock record of the save. It is not those minutes.
+The dashboard counts whatever synthetic rows are in the shared SQLite file. Those counts are observed for that file. They are not a baseline study, a monthly rate, or cash savings. The cost panel remains the illustrative formula in `app/data/cost_assumptions.json`. Self-reported handling minutes appear only when a saved decision includes them. Self-reported rework minutes appear on their own card only when a saved decision includes them. Neither is authenticated, and neither is copied into that formula. A same-second intake and disposition is a 0-second elapsed span in that file, which is the clock record of the save. It is not those minutes.
 
 ## Snapshot restore drill
 

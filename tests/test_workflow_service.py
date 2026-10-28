@@ -98,7 +98,7 @@ def _decision(db, risk_id, **overrides):
     payload.update(overrides)
     return record_decision(db, risk_id, payload["disposition"], payload["rationale"],
                            payload["decider"], payload["conditions"], payload["exception_rationale"],
-                           payload.get("handling_minutes"))
+                           payload.get("handling_minutes"), payload.get("rework_minutes"))
 
 
 def test_decision_copies_policy_and_rule_set_from_the_assessment(db):
@@ -377,10 +377,13 @@ def test_omitted_handling_minutes_stay_null(db):
     assert _decision(db, risk_id) == risk_id
     decision = get_risk(db, risk_id)["decision"]
     assert decision["handling_minutes"] is None
+    assert decision["rework_minutes"] is None
     assert "Self-reported handling minutes" not in get_risk(db, risk_id)["events"][-1]["detail"]
+    assert "Self-reported rework minutes" not in get_risk(db, risk_id)["events"][-1]["detail"]
     saved = _save_intake(db)
     intake = get_risk(db, saved)["decision"]
     assert intake["handling_minutes"] is None
+    assert intake["rework_minutes"] is None
 
 
 @pytest.mark.parametrize("value, stored", [
@@ -442,9 +445,9 @@ def test_existing_decision_gains_a_null_handling_minutes_column(tmp_path):
     import sqlite3
 
     path = tmp_path / "minutes.sqlite3"
-    schema = Path("app/schema.sql").read_text(encoding="utf-8").replace(
-        ",\n    handling_minutes INTEGER", "",
-    )
+    schema = Path("app/schema.sql").read_text(encoding="utf-8")
+    for column in ("rework_minutes", "handling_minutes"):
+        schema = schema.replace(f",\n    {column} INTEGER", "")
     connection = sqlite3.connect(path)
     connection.executescript(schema)
     connection.execute(
@@ -467,8 +470,107 @@ def test_existing_decision_gains_a_null_handling_minutes_column(tmp_path):
     connection = sqlite3.connect(path)
     columns = [row[1] for row in connection.execute("PRAGMA table_info(decisions)")]
     row = connection.execute(
-        "SELECT disposition, handling_minutes FROM decisions WHERE risk_id = 'R-OLD'"
+        "SELECT disposition, handling_minutes, rework_minutes FROM decisions WHERE risk_id = 'R-OLD'"
     ).fetchone()
     connection.close()
     assert "handling_minutes" in columns
-    assert row == ("reject", None)
+    assert "rework_minutes" in columns
+    assert row == ("reject", None, None)
+
+
+def test_existing_decision_gains_a_null_rework_minutes_column(tmp_path):
+    from app import create_app
+    import sqlite3
+
+    path = tmp_path / "rework.sqlite3"
+    schema = Path("app/schema.sql").read_text(encoding="utf-8").replace(
+        ",\n    rework_minutes INTEGER", "",
+    )
+    connection = sqlite3.connect(path)
+    connection.executescript(schema)
+    connection.execute(
+        """INSERT INTO risks
+        (risk_id, scenario_id, scenario_name, risk_statement, inherent_tier, residual_tier,
+         rationale_json, created_at, policy_id, policy_version, policy_outcome)
+        VALUES ('R-OLD', 'legacy-rework', 'Legacy', 'Synthetic statement', 'low', 'low', '{}',
+                '2026-10-01T00:00:00+00:00', 'ORG-AI-USE', '1.1.0', 'not_prohibited')"""
+    )
+    connection.execute(
+        """INSERT INTO decisions
+        (risk_id, disposition, rationale, decider, policy_id, policy_version, rule_set_version,
+         prohibited_at_decision, decided_at, handling_minutes)
+        VALUES ('R-OLD', 'reject', 'Kept.', 'Reviewer', 'ORG-AI-USE', '1.1.0', '0.3.0',
+                'not_prohibited', '2026-10-01T00:00:00+00:00', 12)"""
+    )
+    connection.commit()
+    connection.close()
+    create_app({"TESTING": True, "DATABASE": str(path), "REQUIRE_AUTH": False})
+    connection = sqlite3.connect(path)
+    columns = [row[1] for row in connection.execute("PRAGMA table_info(decisions)")]
+    row = connection.execute(
+        "SELECT disposition, handling_minutes, rework_minutes FROM decisions WHERE risk_id = 'R-OLD'"
+    ).fetchone()
+    connection.close()
+    assert "rework_minutes" in columns
+    assert row == ("reject", 12, None)
+
+
+@pytest.mark.parametrize("value, stored", [
+    (25, 25),
+    ("25", 25),
+    (" 25 ", 25),
+    (0, 0),
+    ("0", 0),
+])
+def test_valid_rework_minutes_are_stored(db, value, stored):
+    risk_id = register_scenario(db, run_scenario("evidence-supported"))
+    assert _decision(db, risk_id, handling_minutes=15, rework_minutes=value) == risk_id
+    decision = get_risk(db, risk_id)["decision"]
+    assert decision["rework_minutes"] == stored
+    assert decision["handling_minutes"] == 15
+    detail = get_risk(db, risk_id)["events"][-1]["detail"]
+    assert f"Self-reported rework minutes: {stored}." in detail
+    assert "Self-reported handling minutes: 15." in detail
+
+
+@pytest.mark.parametrize("value", [-1, "-3", "12.5", "12.0", 12.0, True, False, "abc", "01", "+5", "12 minutes", "1e2"])
+def test_invalid_rework_minutes_are_rejected_without_coercion(db, value):
+    risk_id = register_scenario(db, run_scenario("evidence-supported"))
+    _decision(db, risk_id, handling_minutes=15, rework_minutes=40)
+    before = get_risk(db, risk_id)["decision"]["decided_at"]
+    with pytest.raises(WorkflowInputError, match="rework_minutes"):
+        _decision(db, risk_id, disposition="reject", rationale="A later decision.", rework_minutes=value)
+    decision = get_risk(db, risk_id)["decision"]
+    assert decision["disposition"] == "approve"
+    assert decision["handling_minutes"] == 15
+    assert decision["rework_minutes"] == 40
+    assert decision["decided_at"] == before
+
+
+def test_blank_rework_minutes_clear_a_previously_reported_value(db):
+    risk_id = register_scenario(db, run_scenario("evidence-supported"))
+    _decision(db, risk_id, handling_minutes=15, rework_minutes=40)
+    _decision(db, risk_id, handling_minutes=15, rework_minutes="")
+    decision = get_risk(db, risk_id)["decision"]
+    assert decision["handling_minutes"] == 15
+    assert decision["rework_minutes"] is None
+    _decision(db, risk_id, handling_minutes=15, rework_minutes="   ")
+    assert get_risk(db, risk_id)["decision"]["rework_minutes"] is None
+    _decision(db, risk_id, handling_minutes=15, rework_minutes=None)
+    assert get_risk(db, risk_id)["decision"]["rework_minutes"] is None
+    assert get_risk(db, risk_id)["decision"]["handling_minutes"] == 15
+
+
+def test_invalid_rework_minutes_do_not_save_an_intake(db):
+    from app.services.workflow_service import WorkflowInputError, register_intake
+
+    result = _intake()
+    with pytest.raises(WorkflowInputError, match="rework_minutes"):
+        register_intake(db, result, {
+            "disposition": "escalate",
+            "rationale": "Low residual tier is not an approval.",
+            "decider": "GRC analyst",
+            "handling_minutes": 9,
+            "rework_minutes": "-4",
+        })
+    assert list_risks(db) == []

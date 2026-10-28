@@ -16,12 +16,17 @@ APPROVAL_DISPOSITIONS = {"approve", "approve_with_conditions"}
 DISPOSITION_RULE = "disposition must be approve, approve with conditions, escalate, or reject"
 MAX_DECISION_TEXT = 1000
 MAX_DECIDER = 100
-MAX_HANDLING_MINUTES = 2**63 - 1
-HANDLING_MINUTES_RULE = (
-    "handling_minutes must be a non-negative whole number of minutes, or be left blank"
-)
-_HANDLING_MINUTES = re.compile(r"^(0|[1-9][0-9]*)$")
+MAX_STORED_MINUTES = 2**63 - 1
+_WHOLE_MINUTES = re.compile(r"^(0|[1-9][0-9]*)$")
 _NEGATIVE_MINUTES = re.compile(r"^-\d+$")
+
+
+def _minutes_rule(field):
+    return f"{field} must be a non-negative whole number of minutes, or be left blank"
+
+
+HANDLING_MINUTES_RULE = _minutes_rule("handling_minutes")
+REWORK_MINUTES_RULE = _minutes_rule("rework_minutes")
 
 
 def _now():
@@ -148,6 +153,7 @@ def register_intake(db, result, decision, *, commit=True):
         decision.get("conditions", ""),
         decision.get("exception_rationale", ""),
         decision.get("handling_minutes"),
+        decision.get("rework_minutes"),
     )
     if problems:
         raise WorkflowInputError("; ".join(problems))
@@ -262,39 +268,54 @@ def update_action(db, action_id, status, owner, due_date, completion_notes):
     return risk_id
 
 
-def parse_handling_minutes(value):
-    """Return ``(problems, minutes)`` for one optional handling-time value.
+def parse_optional_minutes(value, field):
+    """Return ``(problems, minutes)`` for one optional minute field.
 
     ``None`` and blank text mean the person did not report a time, so the
     stored value is null. A non-negative whole number is kept as an int.
-    Negatives, fractions, booleans, and other text are rejected. They are
-    not rounded, truncated, or turned into zero.
+    Zero is a reported zero. Negatives, fractions, booleans, and other text
+    are rejected. They are not rounded, truncated, or turned into zero.
     """
+    rule = _minutes_rule(field)
     if value is None:
         return [], None
     if isinstance(value, bool):
-        return [f"{HANDLING_MINUTES_RULE}. A boolean was not stored."], None
+        return [f"{rule}. A boolean was not stored."], None
     if isinstance(value, int):
         if value < 0:
-            return ["handling_minutes cannot be negative."], None
-        if value > MAX_HANDLING_MINUTES:
-            return ["handling_minutes is too large to store."], None
+            return [f"{field} cannot be negative."], None
+        if value > MAX_STORED_MINUTES:
+            return [f"{field} is too large to store."], None
         return [], value
     if isinstance(value, float):
-        return [f"{HANDLING_MINUTES_RULE}. A fractional value was not stored."], None
+        return [f"{rule}. A fractional value was not stored."], None
     if isinstance(value, str):
         text = value.strip()
         if not text:
             return [], None
         if _NEGATIVE_MINUTES.fullmatch(text):
-            return ["handling_minutes cannot be negative."], None
-        if not _HANDLING_MINUTES.fullmatch(text):
-            return [f"{HANDLING_MINUTES_RULE}."], None
+            return [f"{field} cannot be negative."], None
+        if not _WHOLE_MINUTES.fullmatch(text):
+            return [f"{rule}."], None
         number = int(text)
-        if number > MAX_HANDLING_MINUTES:
-            return ["handling_minutes is too large to store."], None
+        if number > MAX_STORED_MINUTES:
+            return [f"{field} is too large to store."], None
         return [], number
-    return [f"{HANDLING_MINUTES_RULE}."], None
+    return [f"{rule}."], None
+
+
+def parse_handling_minutes(value):
+    """Return ``(problems, minutes)`` for optional self-reported handling time."""
+    return parse_optional_minutes(value, "handling_minutes")
+
+
+def parse_rework_minutes(value):
+    """Return ``(problems, minutes)`` for optional self-reported rework time.
+
+    Rework is time spent redoing work after a first pass. It is not handling
+    time, not elapsed cycle time, and not an input to the cost formula.
+    """
+    return parse_optional_minutes(value, "rework_minutes")
 
 
 def _required_text(value, label, limit):
@@ -307,7 +328,7 @@ def _required_text(value, label, limit):
 
 
 def decision_problems(evaluation, disposition, rationale, decider, conditions="",
-                      exception_rationale="", handling_minutes=None):
+                      exception_rationale="", handling_minutes=None, rework_minutes=None):
     """Validate a human disposition against one engine result.
 
     Returns (problems, normalized). An empty problem list means normalized is
@@ -319,6 +340,11 @@ def decision_problems(evaluation, disposition, rationale, decider, conditions=""
     person did not report how long the review took. A reported value is a
     non-negative whole number of minutes. It is not elapsed cycle time and
     it is not an input to the cost formula.
+
+    ``rework_minutes`` is optional and separate. Omitted, null, and blank
+    mean rework time was not reported. A reported value is a non-negative
+    whole number of minutes spent redoing work after a first pass. It is not
+    handling time, not elapsed cycle time, and not an input to the cost formula.
     """
     problems = []
     if disposition not in DISPOSITIONS:
@@ -346,6 +372,8 @@ def decision_problems(evaluation, disposition, rationale, decider, conditions=""
         exception_text = exception_rationale.strip()
     minute_problems, minutes = parse_handling_minutes(handling_minutes)
     problems.extend(minute_problems)
+    rework_problems, rework = parse_rework_minutes(rework_minutes)
+    problems.extend(rework_problems)
 
     evaluation = evaluation or {}
     policy = evaluation.get("policy") or {}
@@ -378,11 +406,12 @@ def decision_problems(evaluation, disposition, rationale, decider, conditions=""
         "rule_set_version": rule_set_version,
         "prohibited_at_decision": outcome_status,
         "handling_minutes": minutes,
+        "rework_minutes": rework,
     }
 
 
 def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
-                    exception_rationale="", handling_minutes=None):
+                    exception_rationale="", handling_minutes=None, rework_minutes=None):
     """Record the human disposition for one saved risk.
 
     A prohibited result can still be approved. The check cites the policy and
@@ -399,6 +428,11 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
     ``handling_minutes`` is optional self-reported review time. Blank and
     null leave the column null. A later save with a blank field clears a
     number that was stored before.
+
+    ``rework_minutes`` follows the same rule on its own column. Blank and
+    null leave rework unmeasured. A later save with a blank rework field
+    clears a number that was stored before. An invalid value rejects the
+    save and leaves the current row unchanged.
     """
     risk = get_risk(db, risk_id)
     if risk is None:
@@ -406,7 +440,7 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
     stored = risk["rationale"].get("risk", {})
     problems, normalized = decision_problems(
         stored, disposition, rationale, decider, conditions, exception_rationale,
-        handling_minutes,
+        handling_minutes, rework_minutes,
     )
     if problems:
         raise WorkflowInputError("; ".join(problems))
@@ -422,14 +456,15 @@ def _save_decision_row(db, risk_id, normalized, existing):
         normalized["disposition"], normalized["conditions"], normalized["rationale"],
         normalized["exception_rationale"], normalized["decider"], normalized["policy_id"],
         normalized["policy_version"], normalized["rule_set_version"],
-        normalized["prohibited_at_decision"], now, normalized["handling_minutes"], risk_id,
+        normalized["prohibited_at_decision"], now, normalized["handling_minutes"],
+        normalized["rework_minutes"], risk_id,
     )
     if existing:
         db.execute(
             """UPDATE decisions SET disposition = ?, conditions = ?, rationale = ?,
                exception_rationale = ?, decider = ?, policy_id = ?, policy_version = ?,
                rule_set_version = ?, prohibited_at_decision = ?, decided_at = ?,
-               handling_minutes = ?
+               handling_minutes = ?, rework_minutes = ?
                WHERE risk_id = ?""",
             values,
         )
@@ -438,8 +473,8 @@ def _save_decision_row(db, risk_id, normalized, existing):
             """INSERT INTO decisions
             (disposition, conditions, rationale, exception_rationale, decider, policy_id,
              policy_version, rule_set_version, prohibited_at_decision, decided_at,
-             handling_minutes, risk_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             handling_minutes, rework_minutes, risk_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             values,
         )
     detail = (f"{normalized['disposition']} by {normalized['decider']}. "
@@ -448,6 +483,8 @@ def _save_decision_row(db, risk_id, normalized, existing):
               f"Policy outcome {normalized['prohibited_at_decision']}.")
     if normalized["handling_minutes"] is not None:
         detail += f" Self-reported handling minutes: {normalized['handling_minutes']}."
+    if normalized["rework_minutes"] is not None:
+        detail += f" Self-reported rework minutes: {normalized['rework_minutes']}."
     if normalized["exception_rationale"]:
         detail += " Exception rationale recorded."
     if existing:

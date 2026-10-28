@@ -427,6 +427,48 @@ def test_cli_handling_minutes_are_optional_and_reject_a_negative(tmp_path, capsy
     assert names == ["Northwind Notes"]
 
 
+def test_cli_rework_minutes_are_optional_and_reject_a_fraction(tmp_path, capsys, monkeypatch):
+    from app import create_app
+    from app.db import get_db
+    from app.services.workflow_service import get_risk, list_risks
+
+    database = tmp_path / "rework.sqlite3"
+    monkeypatch.setenv("DATABASE_PATH", str(database))
+    code = _cli(
+        ["assess", "-", "--persist", "--disposition", "escalate",
+         "--rationale", "Low residual tier is not an approval.", "--decider", "GRC analyst",
+         "--handling-minutes", "9", "--rework-minutes", "7"],
+        json.dumps(request()),
+    )
+    captured = capsys.readouterr()
+    assert code == EXIT_OK
+    body = json.loads(captured.out)
+    assert body["decision"]["handling_minutes"] == 9
+    assert body["decision"]["rework_minutes"] == 7
+    app = create_app({"TESTING": True, "DATABASE": str(database), "REQUIRE_AUTH": False})
+    with app.app_context():
+        stored = get_risk(get_db(), body["risk_id"])
+    assert stored["decision"]["rework_minutes"] == 7
+    assert stored["decision"]["handling_minutes"] == 9
+
+    code = _cli(
+        ["assess", "-", "--persist", "--disposition", "reject",
+         "--rationale", "A fraction must not be stored.", "--decider", "GRC analyst",
+         "--rework-minutes", "3.5"],
+        json.dumps(request(form=form(vendor_name="Rejected Rework"))),
+    )
+    captured = capsys.readouterr()
+    assert code == EXIT_VALIDATION
+    error = json.loads(captured.out)
+    assert error["persisted"] is False
+    assert any("rework_minutes" in problem for problem in error["problems"])
+    with app.app_context():
+        names = [risk["scenario_name"] for risk in list_risks(get_db())]
+        kept = get_risk(get_db(), body["risk_id"])["decision"]
+    assert names == ["Northwind Notes"]
+    assert kept["rework_minutes"] == 7
+
+
 def test_cli_assess_file_without_persist_leaves_the_register_empty(tmp_path, capsys, monkeypatch):
     from app import create_app
     from app.db import get_db
