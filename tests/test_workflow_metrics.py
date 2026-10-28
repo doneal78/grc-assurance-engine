@@ -503,6 +503,7 @@ def test_methods_page_describes_self_reported_handling_time(client):
     assert "Cash savings dollars are not inputs to this formula." in body
     assert "<strong>Authenticated effort.</strong>" not in body
     assert "labor capacity, not cash savings" in body
+    assert "This formula does not calculate a spending reduction." in body
     assert "stay out of these inputs" in body
     assert "Counted from the local register" in body
 

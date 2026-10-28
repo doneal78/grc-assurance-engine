@@ -1,6 +1,6 @@
 # GRC Assurance Engine — Build Plan
 
-**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Questionnaire 1.1.0 adds optional vendor-direction context for a reviewer. Those fields are not scored, and the residual formula is unchanged. Trust-center citations can be pasted, or a reviewer can request one HTTP GET that stores the page for human review. A fetch is not verified evidence. File import does not fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow. Preview and confirm do not save. A person can then save one synthetic row with a disposition and rationale. A bot JSON contract and CLI run the same intake path. Assess alone does not save. `persist: true` with a human disposition does. The dashboard reports observed register counts, elapsed intake-to-disposition time, optional self-reported handling minutes, optional self-reported rework minutes, optional self-reported manual touches, and optional self-reported handoffs on a disposition, kept separate from the illustrative cost formula. Those figures are not a stopwatch and are not cash savings. The control-mapping library is listed at `/mappings`. Mapping set 0.2.0 includes a small draft NIST SP 800-53 set and draft ISO/IEC 27001 and ISO/IEC 42001 review prompts. Those entries remain draft. Multi-tenant policy storage is not implemented. `/walkthrough` is a guided path over the existing pages, including a custom vendor and the optional trust-center choice on `/try/`, the conflicting-permissions scenario, and `/try/import`. A browser cookie remembers the last stop for 12 hours. The guide does not score or save on its own.
+**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Questionnaire 1.1.0 adds optional vendor-direction context for a reviewer. Those fields are not scored, and the residual formula is unchanged. Trust-center citations can be pasted, or a reviewer can request one HTTP GET that stores the page for human review. A fetch is not verified evidence. File import does not fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow. Preview and confirm do not save. A person can then save one synthetic row with a disposition and rationale. A bot JSON contract and CLI run the same intake path. Assess alone does not save. `persist: true` with a human disposition does. The dashboard reports observed register counts, elapsed intake-to-disposition time, optional self-reported handling minutes, optional self-reported rework minutes, optional self-reported manual touches, and optional self-reported handoffs on a disposition, kept separate from the illustrative cost formula. Those four figures are not a stopwatch and are not cash savings. Observed metrics definition 8 also shows a monthly assessment rate when decision timestamps cover 30 days, authenticated effort when a signed-in reviewer stored minutes, and cash savings when that reviewer stored whole dollars. A public try does not collect the last two. Avoided-incident value stays unmonetized. None of those figures is copied into `calculate_cost()`. The control-mapping library is listed at `/mappings`. Mapping set 0.2.0 includes a small draft NIST SP 800-53 set and draft ISO/IEC 27001 and ISO/IEC 42001 review prompts. Those entries remain draft. Multi-tenant policy storage is not implemented. `/walkthrough` is a guided path over the existing pages, including a custom vendor and the optional trust-center choice on `/try/`, the conflicting-permissions scenario, and `/try/import`. A browser cookie remembers the last stop for 12 hours. The guide does not score or save on its own.
 **Project type:** GRC Engineering portfolio application  
 **Development approach:** Local-first, phased implementation, test-driven business logic  
 **Primary IDE:** Cursor  
@@ -508,7 +508,7 @@ A person may optionally record a self-reported handoff count on the same disposi
 
 **Labor capacity value** estimates the value of work time made available under stated assumptions.
 
-**Cash savings** require evidence of an actual spending reduction or avoided expenditure and must not be inferred from time reduction alone.
+**Cash savings** require evidence of an actual spending reduction or avoided expenditure and must not be inferred from time reduction alone. Definition 8 stores optional whole dollars only when a signed-in reviewer typed them. The public form does not ask for them. `calculate_cost()` still returns null for cash savings. Those dollars are not a wage times handling minutes, rework minutes, manual touches, handoffs, authenticated effort, or the monthly rate.
 
 Distinguish observed measurements from illustrative inputs. If an effort baseline is not measured, disclose that assumption.
 
@@ -528,7 +528,7 @@ Calculation:
 
 `20 × 0.5 × $60 = $600 per month`
 
-This is illustrative labor capacity value, not automatically actual cash savings.
+This is illustrative labor capacity value, not automatically actual cash savings. It is the gross example. The running formula in `docs/cost-model.md` also subtracts added review and monthly maintenance, and the methods page shows that net result ($180 with the current assumptions). The $600 line above is not the figure on the methods page.
 
 The model should account for additional human review, rework, and ongoing maintenance effort where the necessary data or disclosed assumptions exist.
 
@@ -647,6 +647,8 @@ Adapt commit messages to actual changes. Never claim a feature exists just becau
 
 ## 16. Deployment Plan
 
+**Status:** A synthetic hosted demo is documented in `docs/deployment.md`. The open register is an intentional exception to the access-control line below, and only because every record is synthetic. That exception is not a production access-control design. One snapshot restore drill, on 2026-10-27, is recorded in that deployment note. A push to `main` does not deploy. No further cloud or DNS change belongs in an application pull request.
+
 Develop and verify the application locally first.
 
 After the application is reliable:
@@ -668,6 +670,8 @@ Do not expose assessment or risk-register data publicly without appropriate acce
 No deployment, cloud resource creation, or DNS changes may happen without explicit approval.
 
 ## 17. Portfolio Deliverables
+
+**Status:** The local application, the pytest suite, `docs/architecture.md`, `docs/risk-model.md`, `docs/evidence-model.md`, `docs/control-mapping-methodology.md`, `docs/cost-model.md`, the synthetic scenarios, the simulated ServiceNow file, the README, and `/walkthrough` are in the repository. Screenshots are not stored here. The walkthrough is the demonstration path. Known limitations and what production use would still require are in the README, `docs/architecture.md`, and `docs/deployment.md`. Avoided-incident value remains unmeasured. The illustrative mappings stay draft.
 
 The completed portfolio project should include:
 
