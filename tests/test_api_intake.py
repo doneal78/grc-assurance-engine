@@ -651,6 +651,64 @@ def test_authenticated_effort_requires_a_signed_in_request(client, gated_app):
     assert blank.get_json()["decision"]["authenticated_effort_minutes"] is None
 
 
+def test_cash_savings_require_a_signed_in_request(client, gated_app):
+    import base64
+
+    refused = client.post("/api/v1/intake/assess", json=payload(persist=True, decision={
+        "disposition": "escalate",
+        "rationale": "An unsigned request must not store this.",
+        "decider": "GRC analyst",
+        "handling_minutes": 60,
+        "cash_savings_dollars": 40,
+    }))
+    assert refused.status_code == 400
+    assert refused.get_json()["persisted"] is False
+    assert any("signed-in" in problem for problem in refused.get_json()["problems"])
+    assert _risk_names(client) == []
+
+    omitted = client.post("/api/v1/intake/assess", json=payload(persist=True, decision={
+        "disposition": "escalate",
+        "rationale": "Low residual tier is not an approval.",
+        "decider": "GRC analyst",
+        "handling_minutes": 60,
+    }))
+    assert omitted.status_code == 200
+    assert omitted.get_json()["decision"]["handling_minutes"] == 60
+    assert omitted.get_json()["decision"]["cash_savings_dollars"] is None
+
+    login = {"Authorization": "Basic " + base64.b64encode(b"demo:correct horse battery staple").decode()}
+    gated = gated_app.test_client()
+    stored = gated.post("/api/v1/intake/assess", json=payload(
+        form=form(vendor_name="Signed In Savings"),
+        persist=True,
+        decision={
+            "disposition": "escalate",
+            "rationale": "Dollars entered after the password gate.",
+            "decider": "GRC analyst",
+            "handling_minutes": 60,
+            "cash_savings_dollars": 0,
+        },
+    ), headers=login)
+    assert stored.status_code == 200
+    body = stored.get_json()
+    assert body["decision"]["handling_minutes"] == 60
+    assert body["decision"]["cash_savings_dollars"] == 0
+    assert body["decision"]["cash_savings_dollars"] != body["decision"]["handling_minutes"]
+    fraction = gated.post("/api/v1/intake/assess", json=payload(
+        form=form(vendor_name="Fractional Savings"),
+        persist=True,
+        decision={
+            "disposition": "reject",
+            "rationale": "A fraction must not be rounded into dollars.",
+            "decider": "GRC analyst",
+            "cash_savings_dollars": 12.5,
+        },
+    ), headers=login)
+    assert fraction.status_code == 400
+    assert fraction.get_json()["persisted"] is False
+    assert "Fractional Savings" not in _risk_names(gated)
+
+
 def test_cross_site_persist_is_rejected(client):
     response = client.post(
         "/api/v1/intake/assess",

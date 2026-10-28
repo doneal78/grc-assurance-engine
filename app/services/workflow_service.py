@@ -37,6 +37,10 @@ AUTHENTICATED_EFFORT_RULE = _minutes_rule("authenticated_effort_minutes")
 AUTHENTICATED_EFFORT_GATE = (
     "authenticated_effort_minutes is recorded only for a signed-in reviewer"
 )
+CASH_SAVINGS_RULE = _whole_number_rule("cash_savings_dollars", "dollars")
+CASH_SAVINGS_GATE = (
+    "cash_savings_dollars is recorded only for a signed-in reviewer"
+)
 
 
 def _now():
@@ -167,7 +171,9 @@ def register_intake(db, result, decision, *, commit=True):
         decision.get("manual_touches"),
         decision.get("handoffs"),
         decision.get("authenticated_effort_minutes"),
+        decision.get("cash_savings_dollars"),
         accept_authenticated_effort=bool(decision.get("accept_authenticated_effort")),
+        accept_cash_savings=bool(decision.get("accept_cash_savings")),
     )
     if problems:
         raise WorkflowInputError("; ".join(problems))
@@ -371,6 +377,18 @@ def parse_authenticated_effort_minutes(value):
     return parse_optional_minutes(value, "authenticated_effort_minutes")
 
 
+def parse_cash_savings_dollars(value):
+    """Return ``(problems, dollars)`` for optional reported cash savings.
+
+    The number is whole dollars a signed-in reviewer entered when a spending
+    reduction was known. Blank and null mean it was not reported. Zero is a
+    reported zero. This parser does not multiply minutes by a wage, does not
+    read the cost assumptions, and does not check the password gate. The
+    caller does.
+    """
+    return parse_optional_whole_number(value, "cash_savings_dollars", "dollars")
+
+
 def _required_text(value, label, limit):
     if not isinstance(value, str):
         return None, f"{label} must contain 1 to {limit} characters"
@@ -383,7 +401,8 @@ def _required_text(value, label, limit):
 def decision_problems(evaluation, disposition, rationale, decider, conditions="",
                       exception_rationale="", handling_minutes=None, rework_minutes=None,
                       manual_touches=None, handoffs=None, authenticated_effort_minutes=None,
-                      *, accept_authenticated_effort=False):
+                      cash_savings_dollars=None, *, accept_authenticated_effort=False,
+                      accept_cash_savings=False):
     """Validate a human disposition against one engine result.
 
     Returns (problems, normalized). An empty problem list means normalized is
@@ -422,7 +441,19 @@ def decision_problems(evaluation, disposition, rationale, decider, conditions=""
     caller that leaves the flag false cannot store a number. A blank from
     those callers does not clear a number already stored. The minutes are not
     a session timer, not handling minutes, not rework minutes, not a touch
-    count, not a handoff count, not elapsed cycle time, and not an input to
+    count, not a handoff count, not elapsed cycle time, not cash savings, and
+    not an input to the cost formula.
+
+    ``cash_savings_dollars`` is optional and separate. It is stored only when
+    ``accept_cash_savings`` is true, which the same signed-in disposition
+    route sets. Omitted, null, and blank then mean the reviewer did not report
+    a spending reduction. A reported value is a non-negative whole number of
+    dollars the person typed. Zero is a reported zero. A public try, an import
+    save, and any other caller that leaves the flag false cannot store a
+    number. A blank from those callers does not clear a number already stored.
+    The dollars are not handling minutes, not rework minutes, not a touch
+    count, not a handoff count, not authenticated effort, not a wage times any
+    of those figures, not the illustrative labor rate, and not an input to
     the cost formula.
     """
     problems = []
@@ -468,6 +499,17 @@ def decision_problems(evaluation, disposition, rationale, decider, conditions=""
     else:
         keep_effort = True
         effort = None
+    savings_problems, savings = parse_cash_savings_dollars(cash_savings_dollars)
+    problems.extend(savings_problems)
+    if accept_cash_savings:
+        keep_savings = False
+    elif savings is not None:
+        problems.append(CASH_SAVINGS_GATE + ".")
+        keep_savings = True
+        savings = None
+    else:
+        keep_savings = True
+        savings = None
 
     evaluation = evaluation or {}
     policy = evaluation.get("policy") or {}
@@ -505,13 +547,16 @@ def decision_problems(evaluation, disposition, rationale, decider, conditions=""
         "handoffs": handoff_count,
         "authenticated_effort_minutes": effort,
         "keep_authenticated_effort": keep_effort,
+        "cash_savings_dollars": savings,
+        "keep_cash_savings": keep_savings,
     }
 
 
 def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
                     exception_rationale="", handling_minutes=None, rework_minutes=None,
                     manual_touches=None, handoffs=None, authenticated_effort_minutes=None,
-                    *, accept_authenticated_effort=False):
+                    cash_savings_dollars=None, *, accept_authenticated_effort=False,
+                    accept_cash_savings=False):
     """Record the human disposition for one saved risk.
 
     A prohibited result can still be approved. The check cites the policy and
@@ -549,6 +594,14 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
     field clears a number stored earlier. A save that is not signed in leaves
     the column as it was. A number sent without that flag rejects the save
     and leaves the current row unchanged.
+
+    ``cash_savings_dollars`` is stored only when ``accept_cash_savings`` is
+    true. A signed-in save with a blank field clears a number stored earlier.
+    A save that is not signed in leaves the column as it was. A number sent
+    without that flag rejects the save and leaves the current row unchanged.
+    The stored integer is the dollars the person typed. It is not a wage
+    times handling minutes, rework minutes, touches, handoffs, or
+    authenticated effort.
     """
     risk = get_risk(db, risk_id)
     if risk is None:
@@ -557,8 +610,9 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
     problems, normalized = decision_problems(
         stored, disposition, rationale, decider, conditions, exception_rationale,
         handling_minutes, rework_minutes, manual_touches, handoffs,
-        authenticated_effort_minutes,
+        authenticated_effort_minutes, cash_savings_dollars,
         accept_authenticated_effort=accept_authenticated_effort,
+        accept_cash_savings=accept_cash_savings,
     )
     if problems:
         raise WorkflowInputError("; ".join(problems))
@@ -574,13 +628,17 @@ def _save_decision_row(db, risk_id, normalized, existing):
         effort = existing.get("authenticated_effort_minutes")
     else:
         effort = normalized["authenticated_effort_minutes"]
+    if normalized["keep_cash_savings"] and existing:
+        savings = existing.get("cash_savings_dollars")
+    else:
+        savings = normalized["cash_savings_dollars"]
     values = (
         normalized["disposition"], normalized["conditions"], normalized["rationale"],
         normalized["exception_rationale"], normalized["decider"], normalized["policy_id"],
         normalized["policy_version"], normalized["rule_set_version"],
         normalized["prohibited_at_decision"], now, normalized["handling_minutes"],
         normalized["rework_minutes"], normalized["manual_touches"],
-        normalized["handoffs"], effort, risk_id,
+        normalized["handoffs"], effort, savings, risk_id,
     )
     if existing:
         db.execute(
@@ -588,7 +646,7 @@ def _save_decision_row(db, risk_id, normalized, existing):
                exception_rationale = ?, decider = ?, policy_id = ?, policy_version = ?,
                rule_set_version = ?, prohibited_at_decision = ?, decided_at = ?,
                handling_minutes = ?, rework_minutes = ?, manual_touches = ?,
-               handoffs = ?, authenticated_effort_minutes = ?
+               handoffs = ?, authenticated_effort_minutes = ?, cash_savings_dollars = ?
                WHERE risk_id = ?""",
             values,
         )
@@ -598,8 +656,8 @@ def _save_decision_row(db, risk_id, normalized, existing):
             (disposition, conditions, rationale, exception_rationale, decider, policy_id,
              policy_version, rule_set_version, prohibited_at_decision, decided_at,
              handling_minutes, rework_minutes, manual_touches, handoffs,
-             authenticated_effort_minutes, risk_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             authenticated_effort_minutes, cash_savings_dollars, risk_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             values,
         )
     detail = (f"{normalized['disposition']} by {normalized['decider']}. "
@@ -616,6 +674,8 @@ def _save_decision_row(db, risk_id, normalized, existing):
         detail += f" Self-reported handoffs: {normalized['handoffs']}."
     if not normalized["keep_authenticated_effort"] and effort is not None:
         detail += f" Authenticated effort minutes: {effort}."
+    if not normalized["keep_cash_savings"] and savings is not None:
+        detail += f" Cash savings dollars: {savings}."
     if normalized["exception_rationale"]:
         detail += " Exception rationale recorded."
     if existing:

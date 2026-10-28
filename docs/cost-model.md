@@ -36,13 +36,13 @@ The service uses decimal arithmetic and rounds output to two decimal places. If 
 
 ## Interpretation
 
-The result is **modeled labor capacity**, not actual cash savings. No payroll reduction, reduced contractor spend, or other cash outflow reduction has been measured. The model reports no cash savings. One-time development costs are unknown and excluded; they must not be combined with recurring maintenance as though they were the same cost.
+The result is **modeled labor capacity**, not actual cash savings. This formula does not measure a payroll reduction, reduced contractor spend, or other cash outflow. The model reports no cash savings. Observed cash savings, when present, are whole dollars a signed-in reviewer entered on a disposition. They are not produced by this formula. One-time development costs are unknown and excluded; they must not be combined with recurring maintenance as though they were the same cost.
 
 The modeled values above are a labeled example. They are separate from the observed register figures below. Workflow events are local trace records. A timestamp records when a row was written. Self-reported handling minutes, when a person entered them on a decision, are a separate observed figure. Self-reported rework minutes are another observed figure on that decision. Self-reported manual touches are another observed figure on that decision. Self-reported handoffs are another observed figure on that decision. The monthly assessment rate is a count of current decision timestamps when those timestamps cover 30 days. None of them is copied into this formula. Do not present the modeled values as measured results, as cash savings, or as evidence of risk reduction.
 
 ## Observed measurements
 
-Definition version 6 lives in `app/services/workflow_metrics.py`. The dashboard and the methods page render its result. An empty register shows zeros for the counts that are counts. The monthly assessment rate says Not measured when no current decision covers a 30-day window.
+Definition version 8 lives in `app/services/workflow_metrics.py`. The dashboard and the methods page render its result. An empty register shows zeros for the counts that are counts. The monthly assessment rate says Not measured when no current decision covers a 30-day window.
 
 | Figure | Source | Reading |
 | --- | --- | --- |
@@ -59,6 +59,7 @@ Definition version 6 lives in `app/services/workflow_metrics.py`. The dashboard 
 | Self-reported manual touches | `decisions.manual_touches` on the current row | Optional whole-number count of human touchpoints a person entered with the disposition. The median rules match handling minutes, and null stays out. Zero is a reported zero. When no row has a number, the panel says the figure is not measured. This is not handling time, not rework time, not elapsed cycle time, and not an input to the formula. |
 | Self-reported handoffs | `decisions.handoffs` on the current row | Optional whole-number count of times the assessment was handed between people or queues before disposition. The median rules match handling minutes, and null stays out. Zero is a reported zero. When no row has a number, the panel says the figure is not measured. This is not handling time, not rework time, not manual touches, not elapsed cycle time, and not an input to the formula. |
 | Monthly assessment rate | `decisions.decided_at` on the current row | Count of current decision rows whose timestamp falls in the closed 30-day window ending at the latest readable `decided_at`. Both ends are included. A number is shown only when the earliest readable timestamp is at least 30 days earlier, so the register covers that window. An empty register, an unreadable timestamp, a single timestamp, and any shorter span say Not measured. The count is not scaled up. An older `decision_recorded` event is not counted. A timestamp with no offset is read as UTC. The window uses the stored timestamps, not the clock when the page is opened. This is not handling time, not rework time, not manual touches, not handoffs, not elapsed cycle time, and not an input to the formula. |
+| Cash savings | `decisions.cash_savings_dollars` on the current row | Optional whole dollars a signed-in reviewer entered when a spending reduction was known. Null stays out of the median. Zero is a reported zero. When no row has a number, the panel says the figure is not measured. The number is not a wage times handling minutes, rework minutes, touches, handoffs, or authenticated effort, and it is not an input to the formula. |
 
 The mean of the measured spans is rounded half up to two decimal places. The minimum, maximum, and total stay exact. For an even count, the median is the mean of the two middle spans.
 
@@ -76,13 +77,14 @@ A same-transaction save can write `intake_received` and `decision_recorded` with
 | Self-reported manual touches | The count would have to be authenticated labor, separate from handling time and rework time, and tied to one reporting month. It is an optional number on a decision. | The median stays on its own observed card. It is not copied into baseline hours, assisted hours, review hours, or maintenance hours. |
 | Self-reported handoffs | The count would have to be authenticated labor, separate from handling time, rework time, and manual touches, and tied to one reporting month. It is an optional number on a decision. | The median stays on its own observed card. It is not copied into baseline hours, assisted hours, review hours, or maintenance hours. |
 | Authenticated effort minutes | The minutes would have to be labor hours in the formula, split into a baseline and an assisted handling time. They are an optional number a signed-in reviewer entered. | The median stays on its own observed card. It is not copied into baseline hours, assisted hours, review hours, or maintenance hours. |
+| Cash savings dollars | The dollars would have to be an output of this formula, or a wage times one of the observed counts. They are optional whole dollars a signed-in reviewer typed. | The median stays on its own observed card. `cash_savings` in this formula stays null. The dollars are not copied into gross value or net value. |
 | Open remediation, evidence status, residual tier, dispositions | These are inventory counts. The formula takes hours and a labor rate. | They stay on the observed panel. |
 
-No second dollar figure is calculated from the register. Cash savings stay unmeasured. Hypothetical avoided incidents stay unmonetized. One-time development cost stays excluded.
+This formula does not calculate a dollar figure from the register. `calculate_cost()` still returns null for cash savings. Observed cash savings are whole dollars a signed-in reviewer typed, on their own card, and only when that number was stored. Hypothetical avoided incidents stay unmonetized. One-time development cost stays excluded.
 
 ## Still unmeasured
 
-- Cash savings. The monthly assessment rate and authenticated effort minutes are not converted into money. Authenticated effort is an optional minute count on its own observed card. It is not this formula.
+- Cash savings as an output of this formula. The monthly assessment rate and authenticated effort minutes are not converted into money. Observed cash savings are optional whole dollars on their own card. They are not this formula.
 - The four self-reported figures are still whatever a person typed. There is no timesheet for them. Authenticated effort is separate: a signed-in reviewer entered it, and the application still does not time the session.
 - Avoided-incident value
 

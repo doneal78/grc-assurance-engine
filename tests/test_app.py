@@ -500,6 +500,78 @@ def test_authenticated_effort_field_follows_the_password_gate(tmp_path):
     assert decision["handling_minutes"] == 12
 
 
+def test_cash_savings_field_follows_the_password_gate(tmp_path):
+    import base64
+    from app import create_app
+    from app.db import get_db
+    from app.services.workflow_service import get_risk
+
+    open_app = create_app({
+        "TESTING": True, "DATABASE": str(tmp_path / "open-savings.sqlite3"), "REQUIRE_AUTH": False,
+    })
+    open_client = open_app.test_client()
+    saved = open_client.post("/demo/evidence-supported/register", headers=SAME_ORIGIN)
+    risk_url = saved.headers["Location"]
+    page = open_client.get(risk_url)
+    assert b'name="handling_minutes"' in page.data
+    assert b'name="cash_savings_dollars"' not in page.data
+    refused = open_client.post(risk_url + "/decision", data={
+        "disposition": "approve",
+        "rationale": "The score is not the decision.",
+        "decider": "Portfolio reviewer",
+        "cash_savings_dollars": "40",
+    }, headers=SAME_ORIGIN)
+    assert refused.status_code == 400
+    assert b"signed-in" in refused.data
+    with open_app.app_context():
+        assert get_risk(get_db(), risk_url.rsplit("/", 1)[-1])["decision"] is None
+
+    gated = create_app({
+        "TESTING": True, "DATABASE": str(tmp_path / "gated-savings.sqlite3"),
+        "REQUIRE_AUTH": True, "DEMO_USERNAME": "demo", "DEMO_PASSWORD": "pw",
+    })
+    client = gated.test_client()
+    login = {"Authorization": "Basic " + base64.b64encode(b"demo:pw").decode()}
+    headers = {**SAME_ORIGIN, **login}
+    assert b'name="cash_savings_dollars"' not in client.get("/try/").data
+    assert b'name="cash_savings_dollars"' not in client.get("/try/import").data
+    saved = client.post("/demo/evidence-supported/register", headers=headers)
+    risk_url = saved.headers["Location"]
+    page = client.get(risk_url, headers=login)
+    assert b'name="cash_savings_dollars"' in page.data
+    assert b'name="cash_savings_dollars" required' not in page.data
+    assert b'name="handling_minutes"' in page.data
+    recorded = client.post(risk_url + "/decision", data={
+        "disposition": "approve",
+        "rationale": "The score is not the decision.",
+        "decider": "Portfolio reviewer",
+        "handling_minutes": "60",
+        "cash_savings_dollars": "40",
+    }, headers=headers)
+    assert recorded.status_code == 302
+    risk_id = risk_url.rsplit("/", 1)[-1]
+    with gated.app_context():
+        decision = get_risk(get_db(), risk_id)["decision"]
+    assert decision["handling_minutes"] == 60
+    assert decision["cash_savings_dollars"] == 40
+    assert decision["cash_savings_dollars"] != decision["handling_minutes"]
+    detail = client.get(recorded.headers["Location"], headers=login)
+    assert b"40 dollars entered by a signed-in reviewer" in detail.data
+    assert b"60 self-reported minutes" in detail.data
+    cleared = client.post(risk_url + "/decision", data={
+        "disposition": "approve",
+        "rationale": "Blank clears the signed-in dollars.",
+        "decider": "Portfolio reviewer",
+        "handling_minutes": "60",
+        "cash_savings_dollars": "",
+    }, headers=headers)
+    assert cleared.status_code == 302
+    with gated.app_context():
+        decision = get_risk(get_db(), risk_id)["decision"]
+    assert decision["cash_savings_dollars"] is None
+    assert decision["handling_minutes"] == 60
+
+
 def test_non_ascii_basic_credentials_return_401_not_500(tmp_path):
     import base64
     from app import create_app

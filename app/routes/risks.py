@@ -64,7 +64,9 @@ def record_risk_decision(risk_id):
             request.form.get("handling_minutes", ""), request.form.get("rework_minutes", ""),
             request.form.get("manual_touches", ""), request.form.get("handoffs", ""),
             request.form.get("authenticated_effort_minutes"),
+            request.form.get("cash_savings_dollars"),
             accept_authenticated_effort=request_is_signed_in(),
+            accept_cash_savings=request_is_signed_in(),
         )
     except WorkflowInputError as exc:
         risk = get_risk(get_db(), risk_id)

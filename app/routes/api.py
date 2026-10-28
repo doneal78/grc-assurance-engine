@@ -37,6 +37,7 @@ def intake_assess():
     try:
         document = assess_request_text(
             raw, db=get_db(), accept_authenticated_effort=request_is_signed_in(),
+            accept_cash_savings=request_is_signed_in(),
         )
     except BotRequestError as exc:
         return _error("validation", exc.problems, 400)
