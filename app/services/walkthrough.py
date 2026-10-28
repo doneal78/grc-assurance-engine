@@ -168,8 +168,8 @@ _STEPS = (
         "notice": (
             "Record escalate or reject without an exception rationale, or approve "
             "a prohibited result only with one. The prohibited flag stays. Minutes "
-            "spent reviewing are optional, rework minutes are optional, and manual "
-            "touches are optional. Then "
+            "spent reviewing are optional, rework minutes are optional, manual "
+            "touches are optional, and handoffs are optional. Then "
             "download the package: it includes the decision, and nothing is sent "
             "to ServiceNow."
         ),
@@ -214,7 +214,9 @@ _STEPS = (
             "a decision includes them. Self-reported rework minutes are a separate "
             "figure and appear only when a decision includes them. Self-reported "
             "manual touches are a separate count and appear only when a decision "
-            "includes them. The cost panel is modeled labor capacity, not cash savings."
+            "includes them. Self-reported handoffs are a separate count and appear "
+            "only when a decision includes them. The cost panel is modeled labor "
+            "capacity, not cash savings."
         ),
         "endpoint": "dashboard.index",
         "view_args": {},

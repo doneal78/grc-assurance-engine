@@ -155,13 +155,24 @@ def _add_persist_flags(parser):
             "This is not handling time, rework time, or elapsed cycle time."
         ),
     )
+    parser.add_argument(
+        "--handoffs",
+        dest="handoffs",
+        default=None,
+        help=(
+            "Optional self-reported count of times this assessment was handed "
+            "between people or queues before disposition. Omit the flag, or leave "
+            "it blank, to leave handoffs unmeasured. This is not handling time, "
+            "rework time, manual touches, or elapsed cycle time."
+        ),
+    )
 
 
 def _flags_used(args):
     return bool(
         args.persist or args.disposition or args.rationale or args.decider
         or args.conditions or args.exception_rationale or args.handling_minutes
-        or args.rework_minutes or args.manual_touches
+        or args.rework_minutes or args.manual_touches or args.handoffs
     )
 
 
@@ -179,6 +190,8 @@ def _decision_from_flags(args):
         decision["rework_minutes"] = args.rework_minutes
     if args.manual_touches is not None:
         decision["manual_touches"] = args.manual_touches
+    if args.handoffs is not None:
+        decision["handoffs"] = args.handoffs
     return decision
 
 

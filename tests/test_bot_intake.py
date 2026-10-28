@@ -513,6 +513,53 @@ def test_cli_manual_touches_are_optional_and_reject_a_fraction(tmp_path, capsys,
     assert kept["manual_touches"] == 3
 
 
+def test_cli_handoffs_are_optional_and_reject_a_fraction(tmp_path, capsys, monkeypatch):
+    from app import create_app
+    from app.db import get_db
+    from app.services.workflow_service import get_risk, list_risks
+
+    database = tmp_path / "handoffs.sqlite3"
+    monkeypatch.setenv("DATABASE_PATH", str(database))
+    code = _cli(
+        ["assess", "-", "--persist", "--disposition", "escalate",
+         "--rationale", "Low residual tier is not an approval.", "--decider", "GRC analyst",
+         "--handling-minutes", "9", "--rework-minutes", "7", "--manual-touches", "3",
+         "--handoffs", "2"],
+        json.dumps(request()),
+    )
+    captured = capsys.readouterr()
+    assert code == EXIT_OK
+    body = json.loads(captured.out)
+    assert body["decision"]["handling_minutes"] == 9
+    assert body["decision"]["rework_minutes"] == 7
+    assert body["decision"]["manual_touches"] == 3
+    assert body["decision"]["handoffs"] == 2
+    app = create_app({"TESTING": True, "DATABASE": str(database), "REQUIRE_AUTH": False})
+    with app.app_context():
+        stored = get_risk(get_db(), body["risk_id"])
+    assert stored["decision"]["handoffs"] == 2
+    assert stored["decision"]["manual_touches"] == 3
+    assert stored["decision"]["handling_minutes"] == 9
+    assert stored["decision"]["rework_minutes"] == 7
+
+    code = _cli(
+        ["assess", "-", "--persist", "--disposition", "reject",
+         "--rationale", "A fraction must not be stored.", "--decider", "GRC analyst",
+         "--handoffs", "1.5"],
+        json.dumps(request(form=form(vendor_name="Rejected Handoffs"))),
+    )
+    captured = capsys.readouterr()
+    assert code == EXIT_VALIDATION
+    error = json.loads(captured.out)
+    assert error["persisted"] is False
+    assert any("handoffs" in problem for problem in error["problems"])
+    with app.app_context():
+        names = [risk["scenario_name"] for risk in list_risks(get_db())]
+        kept = get_risk(get_db(), body["risk_id"])["decision"]
+    assert names == ["Northwind Notes"]
+    assert kept["handoffs"] == 2
+
+
 def test_cli_assess_file_without_persist_leaves_the_register_empty(tmp_path, capsys, monkeypatch):
     from app import create_app
     from app.db import get_db

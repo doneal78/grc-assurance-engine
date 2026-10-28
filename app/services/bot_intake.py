@@ -24,7 +24,7 @@ from app.services.org_policy import load_org_policy
 from app.services.risk_engine import load_rules
 from app.services.workflow_service import (
     DISPOSITION_RULE, DISPOSITIONS, WorkflowInputError, decision_problems, get_risk,
-    parse_handling_minutes, parse_manual_touches, parse_rework_minutes, register_intake,
+    parse_handling_minutes, parse_handoffs, parse_manual_touches, parse_rework_minutes, register_intake,
 )
 
 CONTRACT_VERSION = "1.0.0"
@@ -38,7 +38,7 @@ _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _REQUEST_KEYS = {"form", "as_of", "contract_version", "persist", "decision"}
 _DECISION_KEYS = {
     "disposition", "rationale", "decider", "conditions", "exception_rationale",
-    "handling_minutes", "rework_minutes", "manual_touches",
+    "handling_minutes", "rework_minutes", "manual_touches", "handoffs",
 }
 
 LIMITATIONS = (
@@ -49,6 +49,7 @@ LIMITATIONS = (
     "handling_minutes on a decision is optional and self-reported. It is not a timer, not authenticated effort, not elapsed cycle time, and not an input to the cost model.",
     "rework_minutes on a decision is optional and self-reported. It is time spent redoing work after a first pass. It is not handling minutes, not a timer, not authenticated effort, not elapsed cycle time, and not an input to the cost model.",
     "manual_touches on a decision is optional and self-reported. It is a count of human touchpoints on that assessment. It is not handling minutes, not rework minutes, not a timer, not authenticated effort, not elapsed cycle time, and not an input to the cost model.",
+    "handoffs on a decision is optional and self-reported. It is a count of times the assessment was handed between people or queues before disposition. It is not handling minutes, not rework minutes, not manual touches, not a timer, not authenticated effort, not elapsed cycle time, and not an input to the cost model.",
     "A trust-center URL is stored as pasted text unless fetch_trust_center is yes. A fetch is one HTTP GET of vendor-published material for human review. It is not verified evidence and it does not approve the vendor. File import does not fetch.",
     "A ServiceNow-shaped file is simulated input. This contract does not call ServiceNow.",
     "No external AI model scores or approves the vendor.",
@@ -142,7 +143,10 @@ def contract_document():
                 "rework time unmeasured. The same whole-number rules apply. It is not handling time. "
                 "manual_touches is optional and separate. Omit it, null, or a blank string to leave "
                 "the touchpoint count unmeasured. The same whole-number rules apply. It is not "
-                "handling time and it is not rework time."
+                "handling time and it is not rework time. "
+                "handoffs is optional and separate. Omit it, null, or a blank string to leave "
+                "the handoff count unmeasured. The same whole-number rules apply. It is not "
+                "handling time, rework time, or a manual-touch count."
             ),
         },
         "dispositions": list(DISPOSITIONS),
@@ -471,6 +475,12 @@ def _parse_persist(payload):
         cleaned["manual_touches"] = touches
     else:
         cleaned["manual_touches"] = None
+    if "handoffs" in decision:
+        handoff_problems, handoff_count = parse_handoffs(decision["handoffs"])
+        problems.extend(handoff_problems)
+        cleaned["handoffs"] = handoff_count
+    else:
+        cleaned["handoffs"] = None
     for key in ("disposition", "rationale", "decider", "conditions", "exception_rationale"):
         if key not in decision:
             if key in {"disposition", "rationale", "decider"}:
@@ -502,6 +512,7 @@ def _require_decision(result, decision):
         decision.get("handling_minutes"),
         decision.get("rework_minutes"),
         decision.get("manual_touches"),
+        decision.get("handoffs"),
     )
     if problems:
         raise BotRequestError(problems)
@@ -544,6 +555,7 @@ def _decision_document(decision):
         "handling_minutes": decision.get("handling_minutes"),
         "rework_minutes": decision.get("rework_minutes"),
         "manual_touches": decision.get("manual_touches"),
+        "handoffs": decision.get("handoffs"),
         "separate_from_score": True,
     }
 
