@@ -452,6 +452,9 @@ def test_register_advances_the_guide_and_a_plain_save_does_not(client):
     assert 'name="manual_touches"' in body
     assert "manual touches are optional" in body
     assert 'name="manual_touches" required' not in body
+    assert 'name="handoffs"' in body
+    assert "handoffs are optional" in body
+    assert 'name="handoffs" required' not in body
     assert body.count('class="button-link walk-next"') == 0
     assert "walk=import" not in body
     assert f'action="{location.split("?")[0]}/decision?walk=decide"' in body

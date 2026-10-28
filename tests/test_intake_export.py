@@ -124,10 +124,13 @@ def test_scenario_download_and_saved_risk_download_include_the_decision(client):
     assert stored["decision"]["handling_minutes"] is None
     assert stored["decision"]["rework_minutes"] is None
     assert stored["decision"]["manual_touches"] is None
+    assert stored["decision"]["handoffs"] is None
     assert stored["decision"]["rework_time_note"] == "Rework time was not reported."
     assert stored["decision"]["manual_touches_note"] == "Manual touches were not reported."
+    assert stored["decision"]["handoffs_note"] == "Handoffs were not reported."
     assert b"not reported (unmeasured)." in downloaded.data
     assert b"Rework time: was not reported." in downloaded.data
+    assert b"Handoffs: handoffs were not reported." in downloaded.data
     assert stored["automatic_approval"] is None
     assert stored["intake_answers"]
 
@@ -254,8 +257,77 @@ def test_scenario_download_and_saved_risk_download_include_the_decision(client):
     package = json.loads(client.get(f"/risks/{risk_id}/export/json").data)
     assert package["decision"]["manual_touches"] is None
     assert package["decision"]["manual_touches_note"] == "Manual touches were not reported."
+    assert package["decision"]["handoffs"] is None
+    assert package["decision"]["handoffs_note"] == "Handoffs were not reported."
     summary = client.get(f"/risks/{risk_id}/export/markdown").data
     assert b"Manual touches: manual touches were not reported." in summary
+    assert b"Handoffs: handoffs were not reported." in summary
+
+    with_handoffs = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "approve",
+        "rationale": "The output is advisory.",
+        "decider": "AI governance reviewer",
+        "conditions": "",
+        "exception_rationale": "A named officer decides each eligibility case.",
+        "handling_minutes": "40",
+        "rework_minutes": "8",
+        "manual_touches": "3",
+        "handoffs": "2",
+    }, headers=SAME_ORIGIN)
+    assert with_handoffs.status_code == 302
+    package = json.loads(client.get(f"/risks/{risk_id}/export/json").data)
+    assert package["decision"]["handoffs"] == 2
+    assert package["decision"]["manual_touches"] == 3
+    assert package["decision"]["handling_minutes"] == 40
+    assert package["decision"]["rework_minutes"] == 8
+    assert "not handling minutes" in package["decision"]["handoffs_note"]
+    assert "not rework minutes" in package["decision"]["handoffs_note"]
+    assert "not manual touches" in package["decision"]["handoffs_note"]
+    summary = client.get(f"/risks/{risk_id}/export/markdown").data
+    assert b"2 self-reported handoffs" in summary
+    assert b"Not manual touches." in summary
+    bad_handoffs = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "reject",
+        "rationale": "This must not replace the saved decision.",
+        "decider": "AI governance reviewer",
+        "conditions": "",
+        "exception_rationale": "",
+        "handling_minutes": "1",
+        "rework_minutes": "1",
+        "manual_touches": "1",
+        "handoffs": "1.5",
+    }, headers=SAME_ORIGIN)
+    assert bad_handoffs.status_code == 400
+    assert b"handoffs" in bad_handoffs.data
+    assert b"2 self-reported handoffs" in bad_handoffs.data
+    with client.application.app_context():
+        kept = get_risk(get_db(), risk_id)["decision"]
+    assert kept["handoffs"] == 2
+    assert kept["manual_touches"] == 3
+    assert kept["rework_minutes"] == 8
+    assert kept["handling_minutes"] == 40
+    assert kept["disposition"] == "approve"
+
+    cleared_handoffs = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "approve",
+        "rationale": "The output is advisory.",
+        "decider": "AI governance reviewer",
+        "conditions": "",
+        "exception_rationale": "A named officer decides each eligibility case.",
+        "handling_minutes": "40",
+        "rework_minutes": "8",
+        "manual_touches": "3",
+        "handoffs": "",
+    }, headers=SAME_ORIGIN)
+    assert cleared_handoffs.status_code == 302
+    package = json.loads(client.get(f"/risks/{risk_id}/export/json").data)
+    assert package["decision"]["handoffs"] is None
+    assert package["decision"]["handoffs_note"] == "Handoffs were not reported."
+    assert package["decision"]["manual_touches"] == 3
+    assert package["decision"]["handling_minutes"] == 40
+    summary = client.get(f"/risks/{risk_id}/export/markdown").data
+    assert b"Handoffs: handoffs were not reported." in summary
+    assert b"3 self-reported touches" in summary
 
 
 def test_methods_page_describes_the_questionnaire(client):

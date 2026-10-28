@@ -544,6 +544,52 @@ def test_import_save_stores_optional_manual_touches_and_rejects_text(gated_clien
     assert b"16 self-reported minutes" in detail.data
 
 
+def test_import_save_stores_optional_handoffs_and_rejects_a_fraction(gated_client):
+    from app.db import get_db
+    from app.services.workflow_service import get_risk
+
+    response = _post_file(gated_client, "vendor_intake.csv", sample_file("csv"))
+    document = _confirmation(response.data)
+    confirmed = gated_client.post("/try/import/confirm", data={"confirmation": json.dumps(document)},
+                                  headers=SAME_ORIGIN)
+    assert b'name="handoffs"' in confirmed.data
+    assert b'name="handoffs" required' not in confirmed.data
+    row = document["rows"][0]
+    fields = {
+        "confirmation": json.dumps(document),
+        "source_row": row["row_number"],
+        "persist": "yes",
+        "disposition": "escalate",
+        "rationale": "Low residual tier is not an approval.",
+        "decider": "GRC analyst",
+        "handling_minutes": "16",
+        "rework_minutes": "8",
+        "manual_touches": "3",
+        "handoffs": "1.5",
+    }
+    rejected = gated_client.post("/try/import/save", data=fields, headers=SAME_ORIGIN)
+    assert rejected.status_code == 400
+    assert b"handoffs" in rejected.data
+    login = {"Authorization": "Basic " + base64.b64encode(b"demo:pw").decode()}
+    assert b"Northwind Notes" not in gated_client.get("/risks", headers=login).data
+
+    fields["handoffs"] = "2"
+    saved = gated_client.post("/try/import/save", data=fields, headers=SAME_ORIGIN)
+    assert saved.status_code == 302
+    risk_id = saved.headers["Location"].rsplit("/", 1)[-1].split("?", 1)[0]
+    with gated_client.application.app_context():
+        decision = get_risk(get_db(), risk_id)["decision"]
+    assert decision["handling_minutes"] == 16
+    assert decision["rework_minutes"] == 8
+    assert decision["manual_touches"] == 3
+    assert decision["handoffs"] == 2
+    detail = gated_client.get(saved.headers["Location"], headers=login)
+    assert b"2 self-reported handoffs" in detail.data
+    assert b"3 self-reported touches" in detail.data
+    assert b"8 self-reported rework minutes" in detail.data
+    assert b"16 self-reported minutes" in detail.data
+
+
 def test_preview_shows_row_errors_without_a_confirm_button(gated_client):
     forms = [dict(sample_forms()[0]), dict(sample_forms()[0])]
     forms[1]["data_sensitivity"] = "restricted"

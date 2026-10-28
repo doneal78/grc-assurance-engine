@@ -79,6 +79,27 @@ def _manual_touches_line(count):
     )
 
 
+def _handoffs_note(count):
+    if count is None:
+        return "Handoffs were not reported."
+    return (
+        "Self-reported count of times the assessment was handed between people "
+        "or queues before disposition. Optional. Not authenticated, not elapsed "
+        "cycle time, not handling minutes, not rework minutes, not manual touches, "
+        "and not an input to the cost model."
+    )
+
+
+def _handoffs_line(count):
+    if count is None:
+        return "handoffs were not reported."
+    unit = "handoff" if count == 1 else "handoffs"
+    return (
+        f"{count} self-reported {unit}. Not authenticated. "
+        "Not handling minutes. Not rework minutes. Not manual touches."
+    )
+
+
 def _decision_view(decision):
     if not decision:
         return None
@@ -99,6 +120,8 @@ def _decision_view(decision):
         "rework_time_note": _rework_time_note(decision.get("rework_minutes")),
         "manual_touches": decision.get("manual_touches"),
         "manual_touches_note": _manual_touches_note(decision.get("manual_touches")),
+        "handoffs": decision.get("handoffs"),
+        "handoffs_note": _handoffs_note(decision.get("handoffs")),
     }
 
 
@@ -434,6 +457,7 @@ def render_markdown(package):
         lines.append(f"- Human handling time: {_handling_time_line(decision.get('handling_minutes'))}")
         lines.append(f"- Rework time: {_rework_time_line(decision.get('rework_minutes'))}")
         lines.append(f"- Manual touches: {_manual_touches_line(decision.get('manual_touches'))}")
+        lines.append(f"- Handoffs: {_handoffs_line(decision.get('handoffs'))}")
     lines.extend(["", "End of package.", ""])
     return "\n".join(lines)
 

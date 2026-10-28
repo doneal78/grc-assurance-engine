@@ -38,11 +38,11 @@ The service uses decimal arithmetic and rounds output to two decimal places. If 
 
 The result is **modeled labor capacity**, not actual cash savings. No payroll reduction, reduced contractor spend, or other cash outflow reduction has been measured. The model reports no cash savings. One-time development costs are unknown and excluded; they must not be combined with recurring maintenance as though they were the same cost.
 
-The modeled values above are a labeled example. They are separate from the observed register figures below. Workflow events are local trace records. A timestamp records when a row was written. Self-reported handling minutes, when a person entered them on a decision, are a separate observed figure. Self-reported rework minutes are another observed figure on that decision. Self-reported manual touches are another observed figure on that decision. None of them is copied into this formula. Do not present the modeled values as measured results, as cash savings, or as evidence of risk reduction.
+The modeled values above are a labeled example. They are separate from the observed register figures below. Workflow events are local trace records. A timestamp records when a row was written. Self-reported handling minutes, when a person entered them on a decision, are a separate observed figure. Self-reported rework minutes are another observed figure on that decision. Self-reported manual touches are another observed figure on that decision. Self-reported handoffs are another observed figure on that decision. None of them is copied into this formula. Do not present the modeled values as measured results, as cash savings, or as evidence of risk reduction.
 
 ## Observed measurements
 
-Definition version 4 lives in `app/services/workflow_metrics.py`. The dashboard and the methods page render its result. An empty register shows zeros.
+Definition version 5 lives in `app/services/workflow_metrics.py`. The dashboard and the methods page render its result. An empty register shows zeros.
 
 | Figure | Source | Reading |
 | --- | --- | --- |
@@ -57,10 +57,11 @@ Definition version 4 lives in `app/services/workflow_metrics.py`. The dashboard 
 | Self-reported human handling time | `decisions.handling_minutes` on the current row | Optional whole minutes a person entered with the disposition. Null stays out of the median and the mean. The headline figure is the median. For an even count, the median is the mean of the two middle values. The mean is rounded half up to two decimal places. Zero is a reported zero. When no row has a number, the panel says the figure is not measured. |
 | Self-reported rework time | `decisions.rework_minutes` on the current row | Optional whole minutes a person entered for time spent redoing work after a first pass. The median rules match handling minutes, and null stays out. Zero is a reported zero. When no row has a number, the panel says the figure is not measured. This is not handling time, not elapsed cycle time, and not an input to the formula. |
 | Self-reported manual touches | `decisions.manual_touches` on the current row | Optional whole-number count of human touchpoints a person entered with the disposition. The median rules match handling minutes, and null stays out. Zero is a reported zero. When no row has a number, the panel says the figure is not measured. This is not handling time, not rework time, not elapsed cycle time, and not an input to the formula. |
+| Self-reported handoffs | `decisions.handoffs` on the current row | Optional whole-number count of times the assessment was handed between people or queues before disposition. The median rules match handling minutes, and null stays out. Zero is a reported zero. When no row has a number, the panel says the figure is not measured. This is not handling time, not rework time, not manual touches, not elapsed cycle time, and not an input to the formula. |
 
 The mean of the measured spans is rounded half up to two decimal places. The minimum, maximum, and total stay exact. For an even count, the median is the mean of the two middle spans.
 
-A same-transaction save can write `intake_received` and `decision_recorded` with the same timestamp. The resulting 0 elapsed seconds is the clock record of that write. It is a measured elapsed span. It is not the self-reported handling minutes on that decision, it is not the self-reported rework minutes, and it is not the self-reported manual-touch count. Those fields are unmeasured when left blank.
+A same-transaction save can write `intake_received` and `decision_recorded` with the same timestamp. The resulting 0 elapsed seconds is the clock record of that write. It is a measured elapsed span. It is not the self-reported handling minutes on that decision, it is not the self-reported rework minutes, it is not the self-reported manual-touch count, and it is not the self-reported handoff count. Those fields are unmeasured when left blank.
 
 ## Why the observed series stays out of the formula
 
@@ -71,14 +72,14 @@ A same-transaction save can write `intake_received` and `decision_recorded` with
 | Self-reported handling minutes | The minutes would have to be authenticated labor hours, split into a baseline and an assisted handling time, and tied to one reporting month. They are an optional number on a decision. | The median stays on the observed panel. Baseline hours remain 2.0 and assisted hours remain 1.5. |
 | Self-reported rework minutes | The minutes would have to be authenticated rework hours, separate from handling time, and tied to one reporting month. They are an optional number on a decision. | The median stays on its own observed card. It is not copied into baseline hours, assisted hours, review hours, or maintenance hours. |
 | Self-reported manual touches | The count would have to be authenticated labor, separate from handling time and rework time, and tied to one reporting month. It is an optional number on a decision. | The median stays on its own observed card. It is not copied into baseline hours, assisted hours, review hours, or maintenance hours. |
+| Self-reported handoffs | The count would have to be authenticated labor, separate from handling time, rework time, and manual touches, and tied to one reporting month. It is an optional number on a decision. | The median stays on its own observed card. It is not copied into baseline hours, assisted hours, review hours, or maintenance hours. |
 | Open remediation, evidence status, residual tier, dispositions | These are inventory counts. The formula takes hours and a labor rate. | They stay on the observed panel. |
 
 No second dollar figure is calculated from the register. Cash savings stay unmeasured. Hypothetical avoided incidents stay unmonetized. One-time development cost stays excluded.
 
 ## Still unmeasured
 
-- Authenticated effort tracking. The optional minutes and the optional touch count are whatever the person typed. There is no identity check and no timesheet.
-- Handoffs
+- Authenticated effort tracking. The optional minutes, the optional touch count, and the optional handoff count are whatever the person typed. There is no identity check and no timesheet.
 - A monthly assessment rate
 - Cash savings
 - Avoided-incident value

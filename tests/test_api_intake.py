@@ -496,6 +496,104 @@ def test_optional_manual_touches_persist_or_reject_without_saving(client):
     assert "Reported Touches" in _risk_names(client)
 
 
+def test_optional_handoffs_persist_or_reject_without_saving(client):
+    omitted = client.post("/api/v1/intake/assess", json=payload(persist=True, decision={
+        "disposition": "escalate",
+        "rationale": "Low residual tier is not an approval.",
+        "decider": "GRC analyst",
+        "handling_minutes": 11,
+        "rework_minutes": 3,
+        "manual_touches": 2,
+    }))
+    assert omitted.status_code == 200
+    body = omitted.get_json()
+    assert body["decision"]["handling_minutes"] == 11
+    assert body["decision"]["rework_minutes"] == 3
+    assert body["decision"]["manual_touches"] == 2
+    assert body["decision"]["handoffs"] is None
+
+    blank = client.post("/api/v1/intake/assess", json=payload(
+        form=form(vendor_name="Blank Handoffs"),
+        persist=True,
+        decision={
+            "disposition": "escalate",
+            "rationale": "Blank means unmeasured.",
+            "decider": "GRC analyst",
+            "handoffs": "",
+        },
+    ))
+    assert blank.status_code == 200
+    assert blank.get_json()["decision"]["handoffs"] is None
+    assert blank.get_json()["decision"]["handling_minutes"] is None
+    assert blank.get_json()["decision"]["rework_minutes"] is None
+    assert blank.get_json()["decision"]["manual_touches"] is None
+
+    reported = client.post("/api/v1/intake/assess", json=payload(
+        form=form(vendor_name="Reported Handoffs"),
+        persist=True,
+        decision={
+            "disposition": "escalate",
+            "rationale": "A person typed the handoff count.",
+            "decider": "GRC analyst",
+            "handling_minutes": 6,
+            "rework_minutes": 1,
+            "manual_touches": 2,
+            "handoffs": 4,
+        },
+    ))
+    assert reported.status_code == 200
+    reported_body = reported.get_json()
+    assert reported_body["decision"]["handoffs"] == 4
+    assert reported_body["decision"]["handling_minutes"] == 6
+    assert reported_body["decision"]["rework_minutes"] == 1
+    assert reported_body["decision"]["manual_touches"] == 2
+
+    digit_string = client.post("/api/v1/intake/assess", json=payload(
+        form=form(vendor_name="Handoffs Digit String"),
+        persist=True,
+        decision={
+            "disposition": "reject",
+            "rationale": "A digit string is the same whole number.",
+            "decider": "GRC analyst",
+            "handoffs": "0",
+        },
+    ))
+    assert digit_string.status_code == 200
+    assert digit_string.get_json()["decision"]["handoffs"] == 0
+
+    negative = client.post("/api/v1/intake/assess", json=payload(
+        form=form(vendor_name="Negative Handoffs"),
+        persist=True,
+        decision={
+            "disposition": "escalate",
+            "rationale": "This must not be stored.",
+            "decider": "GRC analyst",
+            "handoffs": -5,
+        },
+    ))
+    assert negative.status_code == 400
+    assert negative.get_json()["persisted"] is False
+    assert any("handoffs" in problem and "negative" in problem for problem in negative.get_json()["problems"])
+
+    fraction = client.post("/api/v1/intake/assess", json=payload(
+        form=form(vendor_name="Fractional Handoffs"),
+        persist=True,
+        decision={
+            "disposition": "escalate",
+            "rationale": "A fraction must not be rounded.",
+            "decider": "GRC analyst",
+            "handling_minutes": 4,
+            "handoffs": 1.5,
+        },
+    ))
+    assert fraction.status_code == 400
+    assert fraction.get_json()["persisted"] is False
+    assert any("fractional" in problem for problem in fraction.get_json()["problems"])
+    assert "Fractional Handoffs" not in _risk_names(client)
+    assert "Negative Handoffs" not in _risk_names(client)
+    assert "Reported Handoffs" in _risk_names(client)
+
+
 def test_cross_site_persist_is_rejected(client):
     response = client.post(
         "/api/v1/intake/assess",

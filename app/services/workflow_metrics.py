@@ -11,9 +11,11 @@ writes.
 Self-reported human handling time is the optional ``handling_minutes`` value
 on the current decision row. Self-reported rework time is the optional
 ``rework_minutes`` value on that same row. Self-reported manual touches are
-the optional ``manual_touches`` count on that same row. Null stays out of
-each average. The three figures are not each other, they are not elapsed
-cycle time, and this module does not pass any of them to the cost formula.
+the optional ``manual_touches`` count on that same row. Self-reported
+handoffs are the optional ``handoffs`` count on that same row. Null stays
+out of each average. The four figures are not each other, they are not
+elapsed cycle time, and this module does not pass any of them to the cost
+formula.
 """
 
 import json
@@ -24,7 +26,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from app.services.workflow_service import DISPOSITIONS
 
 
-DEFINITION_VERSION = "4"
+DEFINITION_VERSION = "5"
 
 RESIDUAL_TIERS = ("low", "moderate", "high", "critical", "undetermined")
 EVIDENCE_STATUSES = (
@@ -39,14 +41,14 @@ COST_MAPPING = (
     "assessments-per-month assumption. Elapsed cycle time is a clock span between "
     "workflow events. It stays out of the baseline and assisted handling-hour "
     "assumptions. Self-reported handling minutes, self-reported rework "
-    "minutes, and self-reported manual touches stay out of that formula. "
-    "The illustrative formula is unchanged."
+    "minutes, self-reported manual touches, and self-reported handoffs stay "
+    "out of that formula. The illustrative formula is unchanged."
 )
 UNMEASURED_SUMMARY = (
-    "Handoffs, a monthly assessment rate, authenticated effort, "
-    "cash savings, and avoided-incident value stay unmeasured. Self-reported "
-    "handling minutes, self-reported rework minutes, and self-reported manual "
-    "touches are optional and are not cash savings."
+    "A monthly assessment rate, authenticated effort, cash savings, and "
+    "avoided-incident value stay unmeasured. Self-reported handling minutes, "
+    "self-reported rework minutes, self-reported manual touches, and "
+    "self-reported handoffs are optional and are not cash savings."
 )
 CYCLE_DEFINITION = (
     "Elapsed seconds from the earliest intake_received event to the earliest "
@@ -54,16 +56,16 @@ CYCLE_DEFINITION = (
     "to two decimal places. A shared timestamp counts as zero elapsed seconds. "
     "Scenario rows without intake_received, rows without a disposition event, and "
     "rows with reversed or unreadable timestamps stay outside the average. "
-    "Self-reported handling minutes, self-reported rework minutes, and "
-    "self-reported manual touches are separate figures."
+    "Self-reported handling minutes, self-reported rework minutes, "
+    "self-reported manual touches, and self-reported handoffs are separate figures."
 )
 HANDLING_DEFINITION = (
     "Self-reported whole minutes on the current decision row. Blank and null stay "
     "out of the average. The headline figure is the median. For an even count, the "
     "median is the mean of the two middle values. The mean is rounded half up to "
     "two decimal places. These minutes are not elapsed cycle time, they are not "
-    "rework minutes, they are not a manual-touch count, they are not authenticated, "
-    "and they are not copied into the cost formula."
+    "rework minutes, they are not a manual-touch count, they are not a handoff "
+    "count, they are not authenticated, and they are not copied into the cost formula."
 )
 REWORK_DEFINITION = (
     "Self-reported whole minutes of rework on the current decision row. Rework is "
@@ -71,8 +73,8 @@ REWORK_DEFINITION = (
     "average. The headline figure is the median. For an even count, the median is "
     "the mean of the two middle values. The mean is rounded half up to two decimal "
     "places. These minutes are not elapsed cycle time, they are not handling minutes, "
-    "they are not a manual-touch count, they are not authenticated, and they are not "
-    "copied into the cost formula."
+    "they are not a manual-touch count, they are not a handoff count, they are not "
+    "authenticated, and they are not copied into the cost formula."
 )
 MANUAL_TOUCHES_DEFINITION = (
     "Self-reported whole-number count of human touchpoints on the current decision "
@@ -80,15 +82,19 @@ MANUAL_TOUCHES_DEFINITION = (
     "reports it. Blank and null stay out of the average. The headline figure is the "
     "median. For an even count, the median is the mean of the two middle values. The "
     "mean is rounded half up to two decimal places. This count is not elapsed cycle "
-    "time, it is not handling minutes, it is not rework minutes, it is not "
-    "authenticated, and it is not copied into the cost formula."
+    "time, it is not handling minutes, it is not rework minutes, it is not a "
+    "handoff count, it is not authenticated, and it is not copied into the cost formula."
+)
+HANDOFFS_DEFINITION = (
+    "Self-reported whole-number count of times the assessment was handed between "
+    "people or queues before disposition, on the current decision row. Blank and "
+    "null stay out of the average. The headline figure is the median. For an even "
+    "count, the median is the mean of the two middle values. The mean is rounded "
+    "half up to two decimal places. This count is not elapsed cycle time, it is "
+    "not handling minutes, it is not rework minutes, it is not a manual-touch "
+    "count, it is not authenticated, and it is not copied into the cost formula."
 )
 NOT_MEASURED = (
-    {
-        "id": "handoffs",
-        "label": "Handoffs",
-        "detail": "The event log does not record a handoff as its own measurement.",
-    },
     {
         "id": "monthly_assessment_rate",
         "label": "Monthly assessment rate",
@@ -97,7 +103,7 @@ NOT_MEASURED = (
     {
         "id": "authenticated_effort",
         "label": "Authenticated effort",
-        "detail": "Self-reported minutes and self-reported manual touches are not checked against an identity system or a timesheet.",
+        "detail": "Self-reported minutes, self-reported manual touches, and self-reported handoffs are not checked against an identity system or a timesheet.",
     },
     {
         "id": "cash_savings",
@@ -121,7 +127,7 @@ def observed_metrics(db):
         "SELECT status FROM remediation_actions"
     ).fetchall()]
     decisions = [dict(row) for row in db.execute(
-        "SELECT risk_id, disposition, handling_minutes, rework_minutes, manual_touches FROM decisions"
+        "SELECT risk_id, disposition, handling_minutes, rework_minutes, manual_touches, handoffs FROM decisions"
     ).fetchall()]
     events = [dict(row) for row in db.execute(
         """SELECT risk_id, event_type, occurred_at
@@ -276,6 +282,11 @@ def summarize_register(risks, actions, decisions, events):
             decisions, "manual_touches",
             "Self-reported manual touches", MANUAL_TOUCHES_DEFINITION,
             singular="touch", plural="touches",
+        ),
+        "handoffs": _self_reported_block(
+            decisions, "handoffs",
+            "Self-reported handoffs", HANDOFFS_DEFINITION,
+            singular="handoff", plural="handoffs",
         ),
     }
 
@@ -474,9 +485,9 @@ def _self_reported_block(decisions, field, label, definition, singular="minute",
 
     Null, a missing key, and any value that is not a non-negative int stay
     out of the average. A stored zero is a reported zero and is included.
-    Handling minutes, rework minutes, and manual touches each use this rule
-    on their own field. ``plural`` names the statistic keys, such as minutes
-    or touches.
+    Handling minutes, rework minutes, manual touches, and handoffs each use
+    this rule on their own field. ``plural`` names the statistic keys, such
+    as minutes, touches, or handoffs.
     """
     values = []
     unmeasured = 0

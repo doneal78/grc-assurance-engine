@@ -221,6 +221,7 @@ def _decision_from_form(form):
         "handling_minutes": form.get("handling_minutes", ""),
         "rework_minutes": form.get("rework_minutes", ""),
         "manual_touches": form.get("manual_touches", ""),
+        "handoffs": form.get("handoffs", ""),
     }
 
 
