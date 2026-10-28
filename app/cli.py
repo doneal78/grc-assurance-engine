@@ -145,13 +145,23 @@ def _add_persist_flags(parser):
             "This is not handling time."
         ),
     )
+    parser.add_argument(
+        "--manual-touches",
+        dest="manual_touches",
+        default=None,
+        help=(
+            "Optional self-reported count of human touchpoints on this assessment. "
+            "Omit the flag, or leave it blank, to leave manual touches unmeasured. "
+            "This is not handling time, rework time, or elapsed cycle time."
+        ),
+    )
 
 
 def _flags_used(args):
     return bool(
         args.persist or args.disposition or args.rationale or args.decider
         or args.conditions or args.exception_rationale or args.handling_minutes
-        or args.rework_minutes
+        or args.rework_minutes or args.manual_touches
     )
 
 
@@ -167,6 +177,8 @@ def _decision_from_flags(args):
         decision["handling_minutes"] = args.handling_minutes
     if args.rework_minutes is not None:
         decision["rework_minutes"] = args.rework_minutes
+    if args.manual_touches is not None:
+        decision["manual_touches"] = args.manual_touches
     return decision
 
 

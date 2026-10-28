@@ -21,12 +21,17 @@ _WHOLE_MINUTES = re.compile(r"^(0|[1-9][0-9]*)$")
 _NEGATIVE_MINUTES = re.compile(r"^-\d+$")
 
 
+def _whole_number_rule(field, unit):
+    return f"{field} must be a non-negative whole number of {unit}, or be left blank"
+
+
 def _minutes_rule(field):
-    return f"{field} must be a non-negative whole number of minutes, or be left blank"
+    return _whole_number_rule(field, "minutes")
 
 
 HANDLING_MINUTES_RULE = _minutes_rule("handling_minutes")
 REWORK_MINUTES_RULE = _minutes_rule("rework_minutes")
+MANUAL_TOUCHES_RULE = _whole_number_rule("manual_touches", "touches")
 
 
 def _now():
@@ -154,6 +159,7 @@ def register_intake(db, result, decision, *, commit=True):
         decision.get("exception_rationale", ""),
         decision.get("handling_minutes"),
         decision.get("rework_minutes"),
+        decision.get("manual_touches"),
     )
     if problems:
         raise WorkflowInputError("; ".join(problems))
@@ -268,15 +274,16 @@ def update_action(db, action_id, status, owner, due_date, completion_notes):
     return risk_id
 
 
-def parse_optional_minutes(value, field):
-    """Return ``(problems, minutes)`` for one optional minute field.
+def parse_optional_whole_number(value, field, unit):
+    """Return ``(problems, number)`` for one optional self-reported whole number.
 
-    ``None`` and blank text mean the person did not report a time, so the
+    ``None`` and blank text mean the person did not report a number, so the
     stored value is null. A non-negative whole number is kept as an int.
     Zero is a reported zero. Negatives, fractions, booleans, and other text
     are rejected. They are not rounded, truncated, or turned into zero.
+    ``unit`` is the word in the rejection message, such as minutes or touches.
     """
-    rule = _minutes_rule(field)
+    rule = _whole_number_rule(field, unit)
     if value is None:
         return [], None
     if isinstance(value, bool):
@@ -304,6 +311,11 @@ def parse_optional_minutes(value, field):
     return [f"{rule}."], None
 
 
+def parse_optional_minutes(value, field):
+    """Return ``(problems, minutes)`` for one optional self-reported minute field."""
+    return parse_optional_whole_number(value, field, "minutes")
+
+
 def parse_handling_minutes(value):
     """Return ``(problems, minutes)`` for optional self-reported handling time."""
     return parse_optional_minutes(value, "handling_minutes")
@@ -318,6 +330,16 @@ def parse_rework_minutes(value):
     return parse_optional_minutes(value, "rework_minutes")
 
 
+def parse_manual_touches(value):
+    """Return ``(problems, count)`` for optional self-reported manual touches.
+
+    The count is human touchpoints on that assessment, as the person reports
+    them. It is not handling minutes, not rework minutes, not elapsed cycle
+    time, and not an input to the cost formula.
+    """
+    return parse_optional_whole_number(value, "manual_touches", "touches")
+
+
 def _required_text(value, label, limit):
     if not isinstance(value, str):
         return None, f"{label} must contain 1 to {limit} characters"
@@ -328,7 +350,8 @@ def _required_text(value, label, limit):
 
 
 def decision_problems(evaluation, disposition, rationale, decider, conditions="",
-                      exception_rationale="", handling_minutes=None, rework_minutes=None):
+                      exception_rationale="", handling_minutes=None, rework_minutes=None,
+                      manual_touches=None):
     """Validate a human disposition against one engine result.
 
     Returns (problems, normalized). An empty problem list means normalized is
@@ -345,6 +368,12 @@ def decision_problems(evaluation, disposition, rationale, decider, conditions=""
     mean rework time was not reported. A reported value is a non-negative
     whole number of minutes spent redoing work after a first pass. It is not
     handling time, not elapsed cycle time, and not an input to the cost formula.
+
+    ``manual_touches`` is optional and separate. Omitted, null, and blank
+    mean a touchpoint count was not reported. A reported value is a
+    non-negative whole number of human touchpoints on that assessment. It is
+    not handling minutes, not rework minutes, not elapsed cycle time, and not
+    an input to the cost formula.
     """
     problems = []
     if disposition not in DISPOSITIONS:
@@ -374,6 +403,8 @@ def decision_problems(evaluation, disposition, rationale, decider, conditions=""
     problems.extend(minute_problems)
     rework_problems, rework = parse_rework_minutes(rework_minutes)
     problems.extend(rework_problems)
+    touch_problems, touches = parse_manual_touches(manual_touches)
+    problems.extend(touch_problems)
 
     evaluation = evaluation or {}
     policy = evaluation.get("policy") or {}
@@ -407,11 +438,13 @@ def decision_problems(evaluation, disposition, rationale, decider, conditions=""
         "prohibited_at_decision": outcome_status,
         "handling_minutes": minutes,
         "rework_minutes": rework,
+        "manual_touches": touches,
     }
 
 
 def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
-                    exception_rationale="", handling_minutes=None, rework_minutes=None):
+                    exception_rationale="", handling_minutes=None, rework_minutes=None,
+                    manual_touches=None):
     """Record the human disposition for one saved risk.
 
     A prohibited result can still be approved. The check cites the policy and
@@ -433,6 +466,11 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
     null leave rework unmeasured. A later save with a blank rework field
     clears a number that was stored before. An invalid value rejects the
     save and leaves the current row unchanged.
+
+    ``manual_touches`` follows the same rule on its own column. Blank and
+    null leave the touchpoint count unmeasured. A later save with a blank
+    manual-touches field clears a number that was stored before. An invalid
+    value rejects the save and leaves the current row unchanged.
     """
     risk = get_risk(db, risk_id)
     if risk is None:
@@ -440,7 +478,7 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
     stored = risk["rationale"].get("risk", {})
     problems, normalized = decision_problems(
         stored, disposition, rationale, decider, conditions, exception_rationale,
-        handling_minutes, rework_minutes,
+        handling_minutes, rework_minutes, manual_touches,
     )
     if problems:
         raise WorkflowInputError("; ".join(problems))
@@ -457,14 +495,14 @@ def _save_decision_row(db, risk_id, normalized, existing):
         normalized["exception_rationale"], normalized["decider"], normalized["policy_id"],
         normalized["policy_version"], normalized["rule_set_version"],
         normalized["prohibited_at_decision"], now, normalized["handling_minutes"],
-        normalized["rework_minutes"], risk_id,
+        normalized["rework_minutes"], normalized["manual_touches"], risk_id,
     )
     if existing:
         db.execute(
             """UPDATE decisions SET disposition = ?, conditions = ?, rationale = ?,
                exception_rationale = ?, decider = ?, policy_id = ?, policy_version = ?,
                rule_set_version = ?, prohibited_at_decision = ?, decided_at = ?,
-               handling_minutes = ?, rework_minutes = ?
+               handling_minutes = ?, rework_minutes = ?, manual_touches = ?
                WHERE risk_id = ?""",
             values,
         )
@@ -473,8 +511,8 @@ def _save_decision_row(db, risk_id, normalized, existing):
             """INSERT INTO decisions
             (disposition, conditions, rationale, exception_rationale, decider, policy_id,
              policy_version, rule_set_version, prohibited_at_decision, decided_at,
-             handling_minutes, rework_minutes, risk_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             handling_minutes, rework_minutes, manual_touches, risk_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             values,
         )
     detail = (f"{normalized['disposition']} by {normalized['decider']}. "
@@ -485,6 +523,8 @@ def _save_decision_row(db, risk_id, normalized, existing):
         detail += f" Self-reported handling minutes: {normalized['handling_minutes']}."
     if normalized["rework_minutes"] is not None:
         detail += f" Self-reported rework minutes: {normalized['rework_minutes']}."
+    if normalized["manual_touches"] is not None:
+        detail += f" Self-reported manual touches: {normalized['manual_touches']}."
     if normalized["exception_rationale"]:
         detail += " Exception rationale recorded."
     if existing:

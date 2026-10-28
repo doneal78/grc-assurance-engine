@@ -123,7 +123,9 @@ def test_scenario_download_and_saved_risk_download_include_the_decision(client):
     assert stored["decision"]["exception_rationale"] == "A named officer decides each eligibility case."
     assert stored["decision"]["handling_minutes"] is None
     assert stored["decision"]["rework_minutes"] is None
+    assert stored["decision"]["manual_touches"] is None
     assert stored["decision"]["rework_time_note"] == "Rework time was not reported."
+    assert stored["decision"]["manual_touches_note"] == "Manual touches were not reported."
     assert b"not reported (unmeasured)." in downloaded.data
     assert b"Rework time: was not reported." in downloaded.data
     assert stored["automatic_approval"] is None
@@ -195,7 +197,65 @@ def test_scenario_download_and_saved_risk_download_include_the_decision(client):
         kept = get_risk(get_db(), risk_id)["decision"]
     assert kept["rework_minutes"] == 8
     assert kept["handling_minutes"] == 40
+    assert kept["manual_touches"] is None
     assert kept["disposition"] == "approve"
+
+    with_touches = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "approve",
+        "rationale": "The output is advisory.",
+        "decider": "AI governance reviewer",
+        "conditions": "",
+        "exception_rationale": "A named officer decides each eligibility case.",
+        "handling_minutes": "40",
+        "rework_minutes": "8",
+        "manual_touches": "3",
+    }, headers=SAME_ORIGIN)
+    assert with_touches.status_code == 302
+    package = json.loads(client.get(f"/risks/{risk_id}/export/json").data)
+    assert package["decision"]["manual_touches"] == 3
+    assert package["decision"]["handling_minutes"] == 40
+    assert package["decision"]["rework_minutes"] == 8
+    assert "not handling minutes" in package["decision"]["manual_touches_note"]
+    assert "not rework minutes" in package["decision"]["manual_touches_note"]
+    summary = client.get(f"/risks/{risk_id}/export/markdown").data
+    assert b"3 self-reported touches" in summary
+    assert b"Not rework minutes." in summary
+    bad_touches = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "reject",
+        "rationale": "This must not replace the saved decision.",
+        "decider": "AI governance reviewer",
+        "conditions": "",
+        "exception_rationale": "",
+        "handling_minutes": "1",
+        "rework_minutes": "1",
+        "manual_touches": "2.5",
+    }, headers=SAME_ORIGIN)
+    assert bad_touches.status_code == 400
+    assert b"manual_touches" in bad_touches.data
+    assert b"3 self-reported touches" in bad_touches.data
+    with client.application.app_context():
+        kept = get_risk(get_db(), risk_id)["decision"]
+    assert kept["manual_touches"] == 3
+    assert kept["rework_minutes"] == 8
+    assert kept["handling_minutes"] == 40
+    assert kept["disposition"] == "approve"
+
+    cleared = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "approve",
+        "rationale": "The output is advisory.",
+        "decider": "AI governance reviewer",
+        "conditions": "",
+        "exception_rationale": "A named officer decides each eligibility case.",
+        "handling_minutes": "40",
+        "rework_minutes": "8",
+        "manual_touches": "",
+    }, headers=SAME_ORIGIN)
+    assert cleared.status_code == 302
+    package = json.loads(client.get(f"/risks/{risk_id}/export/json").data)
+    assert package["decision"]["manual_touches"] is None
+    assert package["decision"]["manual_touches_note"] == "Manual touches were not reported."
+    summary = client.get(f"/risks/{risk_id}/export/markdown").data
+    assert b"Manual touches: manual touches were not reported." in summary
 
 
 def test_methods_page_describes_the_questionnaire(client):
