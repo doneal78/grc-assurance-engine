@@ -7,6 +7,16 @@ import pytest
 from app.services.cost_model import CostInputError, calculate_cost, load_assumptions
 
 
+def test_cost_model_doc_keeps_authenticated_effort_beside_cash_savings():
+    from pathlib import Path
+
+    text = Path("docs/cost-model.md").read_text(encoding="utf-8")
+    assert "| Authenticated effort | `decisions.authenticated_effort_minutes`" in text
+    assert "| Cash savings | `decisions.cash_savings_dollars`" in text
+    assert "The formula reports no cash savings." in text
+    assert "The model reports no cash savings." not in text
+
+
 def test_documented_assumptions_reproduce_capacity_value():
     result = calculate_cost()
     assert result["gross_capacity_hours"] == 10

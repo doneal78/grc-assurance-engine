@@ -2,9 +2,28 @@
 
 ## Current state
 
-As of October 14, 2026, the demo is live and open at `https://grc-assurance.davidoneal.dev`, with no login. The password gate was removed on purpose: every record is synthetic, and the demo is shared by link. The DNS record is proxied through Cloudflare, a Configuration Rule sets SSL to Full (strict) for this hostname only, and Nginx serves HTTPS at the origin with a Cloudflare Origin CA certificate. These checks passed from outside the server on that date: `/health` returned the health JSON over HTTPS, `http://` requests redirected to `https://`, the public certificate was issued by Google Trust Services, and Nginx returned HTTP 429 once a single visitor exceeded the rate limit.
+The demo is open at `https://grc-assurance.davidoneal.dev`, with no login, when the host is up. A push to `main` does not install a commit. The pin is the SHA last written to `/etc/grc-assurance-revision` after local `/health` passes. This documentation change did not SSH to the instance, did not read that file, and did not dispatch GitHub Actions. Cloudflare proxies the hostname, so a public DNS lookup does not show the origin address.
 
-`infra/deploy-app-revision.sh` installs one full commit SHA on a host that already has the unit, the virtualenv, and the database. Merge `8dcfea2139ba86134697fe83fb4f64734e3155ce` was installed that way. Local `/health` passed, and `/etc/grc-assurance-revision` was written with that SHA. The process then exited non-zero: the EXIT trap expanded the function-local name `tarball` after `main` returned, and `set -u` reported it as an unbound variable. The `sqlite3` CLI was not on the host until it was installed for that run. curl and python3 were already there. This follow-up keeps the tarball path in a global for that trap, and it adds the `sqlite3` package to the bootstrap install line. Committing it does not install it. This change did not SSH to the instance, did not create GitHub secrets, and did not change the CloudFormation stack. The October 14 checks describe the host as it was then. They are not a verification of this follow-up.
+### Checks recorded on October 14, 2026
+
+On that date the demo was live and open, with no login. The password gate was removed on purpose: every record is synthetic, and the demo is shared by link. The DNS record was proxied through Cloudflare, a Configuration Rule set SSL to Full (strict) for this hostname only, and Nginx served HTTPS at the origin with a Cloudflare Origin CA certificate. These checks passed from outside the server on that date: `/health` returned the health JSON over HTTPS, `http://` requests redirected to `https://`, the public certificate was issued by Google Trust Services, and Nginx returned HTTP 429 once a single visitor exceeded the rate limit. This documentation change did not repeat those checks.
+
+`infra/deploy-app-revision.sh` installs one full commit SHA on a host that already has the unit, the virtualenv, and the database. Merge `8dcfea2139ba86134697fe83fb4f64734e3155ce` was installed that way. Local `/health` passed, and `/etc/grc-assurance-revision` was written with that SHA. The process then exited non-zero: the EXIT trap expanded the function-local name `tarball` after `main` returned, and `set -u` reported it as an unbound variable. The `sqlite3` CLI was not on the host until it was installed for that run. curl and python3 were already there. A later commit keeps the tarball path in a global for that trap, and it adds the `sqlite3` package to the bootstrap install line. Committing that fix did not install it and did not SSH to the instance. The October 14 checks describe the host as it was then.
+
+### Owner-recorded notes after that install
+
+These notes are the owner's record. This documentation change did not repeat them and did not SSH.
+
+- On 2026-10-27 a snapshot restore drill was run. The recorded result is under Snapshot restore drill. The copy's pin was `257a67e4f2e2245b6f15e9775fa6181d78f93e85`. The production static IP was left at `77.112.210.29`, and the copy was deleted. This file does not re-check that the origin is still that address.
+- The owner reports that the systemd unit was later switched to the `grc-assurance` account by re-running `infra/lightsail-bootstrap.sh`. The bootstrap in this repository creates that account when it is missing and sets `User=` to it. The app-revision script does not change `User=`. The live account was not re-checked for this note.
+- The owner states that on 2026-10-28 the public demo was serving `da9329c2aed979fcf6465392b9b4393fa03e7421` (observed metrics definition 8). That is the owner's statement of the deployed commit on that date. It is not a pin read from the host during this documentation change.
+
+### Not re-checked from this repository
+
+- Whether the Nginx file on the host matches `infra/nginx-site.conf`. The app-revision script copies that file only with `--update-nginx`.
+- Whether GitHub Actions has completed a deploy. The workflow still cannot SSH until the secrets exist and the administrator `/32` allows the runner.
+- Whether a snapshot newer than the 2026-10-27 drill would restore. That drill covers the snapshot used that day.
+- The October 14 certificate, redirect, and HTTP 429 checks.
 
 ## Hosting design
 
@@ -45,7 +64,7 @@ Routine updates use `infra/deploy-app-revision.sh`. It is the app-revision path 
 The app-revision script:
 
 - Requires `--revision` or `GRC_REVISION` to be a full 40-character commit SHA. A branch name or a short SHA is refused. It does not read `/etc/grc-assurance-revision` to decide what to install. The bootstrap still does that on a re-run with no `GRC_REVISION`.
-- Backs up the live SQLite file with the `sqlite3` `.backup` command, which uses SQLite's online backup API, before it changes the app tree. The CLI has to be on `PATH`. The script does not install OS packages and does not skip the backup when `sqlite3` is missing. Each backup is a new file under `/var/lib/grc-assurance/backups/`. The script does not delete old backups, and it does not delete `/var/lib/grc-assurance/` or `grc_assurance.sqlite3`. Those files are on the same disk as the demo. They are not a substitute for the Lightsail snapshot, and the snapshot restore drill below is still untested.
+- Backs up the live SQLite file with the `sqlite3` `.backup` command, which uses SQLite's online backup API, before it changes the app tree. The CLI has to be on `PATH`. The script does not install OS packages and does not skip the backup when `sqlite3` is missing. Each backup is a new file under `/var/lib/grc-assurance/backups/`. The script does not delete old backups, and it does not delete `/var/lib/grc-assurance/` or `grc_assurance.sqlite3`. Those files are on the same disk as the demo. They are not a substitute for the Lightsail snapshot. One restore drill is recorded below. A later snapshot stays untested until another drill is recorded.
 - Downloads `https://github.com/doneal78/grc-assurance-engine/archive/<sha>.tar.gz` and replaces `/opt/grc-assurance-engine` through the bootstrap's `replace_app_tree`. That keeps `.venv` and `instance/`.
 - Reinstalls Python dependencies with the existing `.venv`. It does not create the virtualenv.
 - Restarts `grc-assurance-engine` as the `User=` already set on the unit. It does not create an account and it does not rewrite the unit. If the unit still runs as `ubuntu`, it stays `ubuntu`.
@@ -91,37 +110,37 @@ The job SSHes only when these repository secrets exist. This repository does not
 | `LIGHTSAIL_KNOWN_HOSTS` | yes | Output of `ssh-keyscan -H <static-ip>` from a machine that can already reach the host. The workflow uses that file and does not accept a different key. |
 | `LIGHTSAIL_SSH_USER` | no | SSH account. The default is `ubuntu`. That account needs passwordless `sudo`. |
 
-The Lightsail firewall allows SSH only from the administrator `/32` in the CloudFormation `AdminCidr` parameter. A GitHub-hosted runner uses a different address. This workflow does not change that rule, and it does not open port 22. Until SSH from the runner is allowed, a dispatch that has the secrets still fails at the SSH step. The host command above does not have that limit, because it runs inside a session that is already allowed. No deploy has been run from Actions for this change.
+The Lightsail firewall allows SSH only from the administrator `/32` in the CloudFormation `AdminCidr` parameter. A GitHub-hosted runner uses a different address. This workflow does not change that rule, and it does not open port 22. Until SSH from the runner is allowed, a dispatch that has the secrets still fails at the SSH step. The host command above does not have that limit, because it runs inside a session that is already allowed. No deploy was run from Actions for the change that added this workflow. This documentation change did not dispatch it, and it does not record whether a later dispatch succeeded.
 
 ## Known gaps
 
 ### Host state after the `8dcfea2139ba86134697fe83fb4f64734e3155ce` dogfood
 
-That install used the app-revision script. It does not rewrite the systemd unit, and it does not reload Nginx unless `--update-nginx` is set. The reported run did not include an Nginx change. This follow-up was not part of that install. Committing this follow-up did not SSH to the instance, reload Nginx, or update the CloudFormation stack.
+This table is the state reported for that install. It is not a description of the host after the owner-recorded notes above. That install used the app-revision script. It does not rewrite the systemd unit, and it does not reload Nginx unless `--update-nginx` is set. The reported run did not include an Nginx change. The EXIT-trap follow-up was not part of that install. Committing that follow-up did not SSH to the instance, reload Nginx, or update the CloudFormation stack.
 
 | Gap | In the repository | On the live host after that dogfood |
 | --- | --- | --- |
-| Installed revision | App updates install one full SHA and record it in `/etc/grc-assurance-revision` only after local `/health` passes. | The pin file was written with `8dcfea2139ba86134697fe83fb4f64734e3155ce`. This follow-up is not installed yet. |
+| Installed revision | App updates install one full SHA and record it in `/etc/grc-assurance-revision` only after local `/health` passes. | The pin file was written with `8dcfea2139ba86134697fe83fb4f64734e3155ce`. Later pins are not listed in this table. |
 | Stale app files | A deploy deletes app-tree files that are not in the pinned tarball. It keeps `.venv` and `instance/`. The SQLite path stays outside the app tree. | That run replaced the app tree and kept `.venv` and `instance/`. |
-| Service account | The bootstrap unit runs as `grc-assurance`, created on the host when missing. The `ubuntu` account remains for SSH. The app-revision script does not change `User=`. | The unit still uses whatever account it had before that run. |
+| Service account | The bootstrap unit runs as `grc-assurance`, created on the host when missing. The `ubuntu` account remains for SSH. The app-revision script does not change `User=`. | After that run, the unit still used whatever account it had before the run. A later bootstrap re-run is an owner report, not a row in this table. |
 | Database readiness | `GET /health` opens the configured SQLite file read-only. Reachable is HTTP 200 and `"database": "reachable"`. Unreachable is HTTP 503 and `"database": "unreachable"`. The body has no path and no driver message. | Local `/health` passed, which requires `"status":"ok"` and `"database":"reachable"`. |
 | Deploy exit status | The EXIT trap keeps the downloaded tarball path in `CLEANUP_TAR_FILE`, which is not a function local, so a finished `main` can return 0 under `set -u`. | That run exited non-zero after the pin was written, with `tarball: unbound variable`. |
-| `sqlite3` CLI | The bootstrap installs the `sqlite3` package. The app-revision script stops if the CLI is missing and does not skip the backup. | The package was missing. It was installed on the host before the health check passed. This follow-up does not re-run the bootstrap. |
+| `sqlite3` CLI | The bootstrap installs the `sqlite3` package. The app-revision script stops if the CLI is missing and does not skip the backup. | The package was missing. It was installed on the host before the health check passed. That follow-up did not re-run the bootstrap. |
 | `/api/` rate limit | `infra/nginx-site.conf` limits `/api/` to 20 requests a minute per visitor (burst 10) and 5 requests a second across visitors (burst 20), the same budget as `/try/`. Other pages stay at 120 requests a minute per visitor. | The reported run did not include `--update-nginx`. The live site file changes only when that flag is used or the file is copied by hand. |
 
 A database result of `reachable` means the file opened read-only and its catalog could be read. It does not validate schema completeness, integrity, disk space, or backups. It does not make the demo production-ready.
 
 ### Still open
 
-Daily snapshots are configured and have not been restore-tested. The procedure in Snapshot restore drill is something a person can run. This change did not run it, and there is no recorded result.
+One snapshot restore drill is recorded below, for the snapshot used on 2026-10-27. A later snapshot is untested until another drill is recorded. This documentation change did not run a drill.
 
 There is no login. `REQUIRE_AUTH` stays false on purpose for the open demo. Anyone with the link can use the demo and add synthetic records to the shared risk register. The register must never hold real data.
 
 SQLite supports this single instance only. There is no second host, no replica, and no highly available database.
 
-The app-revision script and the manual workflow are the update path for a host that is already bootstrapped. The workflow does not run on push. It cannot SSH until the secrets in Updating and rolling back exist, and the instance SSH rule is still the administrator `/32`. Nginx changes only when `--update-nginx` is passed. The bootstrap remains the first-install path.
+The app-revision script and the manual workflow are the update path for a host that is already bootstrapped. The workflow does not run on push. It cannot SSH until the secrets in Updating and rolling back exist, and the instance SSH rule is still the administrator `/32`. Nginx changes only when `--update-nginx` is passed. The bootstrap remains the first-install path and the path that rewrites the systemd unit.
 
-The dedicated account, the read-only health check, and the tighter `/api/` limit are ordinary host hygiene. They are not a production hardening claim.
+The owner reports a later bootstrap re-run that set the `grc-assurance` account. This file does not re-check `User=`. A dedicated account, the read-only health check, and the tighter `/api/` limit are ordinary host hygiene. They are not a production hardening claim.
 
 ### Unchanged product behavior
 
@@ -133,16 +152,34 @@ The dashboard counts whatever synthetic rows are in the shared SQLite file. Thos
 
 ## Snapshot restore drill
 
-This drill has not been executed. Running it creates a second Lightsail instance and can add charges. Do it only with an account owner who accepts that cost.
+Running the drill creates a second Lightsail instance and can add charges. Do it only with an account owner who accepts that cost.
+
+### Recorded result, 2026-10-27
+
+The owner recorded one drill outside this repository, at `C:\Users\oneal\grc-assurance-snapshot-restore-drill-2026-10-27.txt` on the owner's machine. This documentation change did not repeat the drill and did not copy that file into git.
+
+| Check | Recorded result |
+| --- | --- |
+| Source instance | `grc-assurance-engine-demo` |
+| Temporary copy | `grc-assurance-restore-drill-202610271020`, created from a snapshot of that instance, then deleted |
+| Unit on the copy | `systemctl is-active grc-assurance-engine` reported active |
+| Health on the copy | `http://127.0.0.1:8000/health` reported the database reachable |
+| Data on the copy | A synthetic row in `risks` was still present in `/var/lib/grc-assurance/grc_assurance.sqlite3` |
+| Pin on the copy | `257a67e4f2e2245b6f15e9775fa6181d78f93e85` |
+| Production address | Left on the original instance at `77.112.210.29`. The DNS name was not moved. |
+
+That record shows the snapshot used that day could boot, serve `/health` with the database reachable, and keep a synthetic row. It does not show that a later snapshot would restore, that the current disk matches that snapshot, or that the demo is production-ready. The address in the table is the address the drill left in place. This change did not re-resolve it.
+
+### Procedure for a later drill
 
 1. In Lightsail for `us-east-2`, open instance `grc-assurance-engine-demo` and note the latest automatic snapshot. The template requests a daily snapshot at 08:00 UTC.
 2. Create a new instance from that snapshot. Leave the production static IP and the DNS name on the original instance.
-3. On the copy, check `systemctl is-active grc-assurance-engine`, request `http://127.0.0.1:8000/health`, and confirm a known synthetic row is still in `/var/lib/grc-assurance/grc_assurance.sqlite3`. After this revision is installed, the health JSON includes `"database": "reachable"` when the file can be read. A copy made from an older snapshot still has the health JSON from that snapshot.
-4. Delete the copy when the check is finished. Record the date and the result somewhere outside this repository. Until that record exists, treat snapshots as untested recovery points.
+3. On the copy, check `systemctl is-active grc-assurance-engine`, request `http://127.0.0.1:8000/health`, and confirm a known synthetic row is still in `/var/lib/grc-assurance/grc_assurance.sqlite3`. The health JSON includes `"database": "reachable"` when the file can be read. A copy made from an older snapshot still has the health JSON from that snapshot.
+4. Delete the copy when the check is finished. Record the date and the result somewhere outside this repository. Until that later record exists, treat snapshots taken after 2026-10-27 as untested recovery points.
 
 ## Operations and limitations
 
-The instance and its daily snapshots incur AWS charges, so set an account budget alert. A snapshot is a recovery point for this one disk. It becomes a tested recovery path only after the drill above has been run and recorded. SQLite supports this single instance only; do not scale the design horizontally or use it for real vendor records. There is no login: anyone with the link can use the demo and add synthetic records to the shared risk register, so it must never hold real data. Nginx rate limits are whatever site file is installed on the host. The repository file limits `/try/` and `/api/` more tightly than other pages, and the live file matches that only after a person installs it. `deploy-app-revision.sh` does that only with `--update-nginx`. `/health` in this revision checks that the SQLite file can be read. That check is not a production readiness test. The demo is an illustrative portfolio prototype, not a production GRC service or certification tool.
+The instance and its daily snapshots incur AWS charges, so set an account budget alert. A snapshot is a recovery point for this one disk. The 2026-10-27 drill is one recorded recovery of the snapshot used that day. A later snapshot is untested until another drill is recorded. SQLite supports this single instance only; do not scale the design horizontally or use it for real vendor records. There is no login: anyone with the link can use the demo and add synthetic records to the shared risk register, so it must never hold real data. Nginx rate limits are whatever site file is installed on the host. The repository file limits `/try/` and `/api/` more tightly than other pages, and the live file matches that only after a person installs it. `deploy-app-revision.sh` does that only with `--update-nginx`. `/health` checks that the SQLite file can be read. That check is not a production readiness test. The demo is an illustrative portfolio prototype, not a production GRC service or certification tool.
 
 ## Local verification
 

@@ -30,6 +30,19 @@ A saved risk can then store one human decision: approve, approve with conditions
 
 Scenario runs are deterministic examples, not vendor records. File import on `/try/import` previews synthetic rows and assesses them on confirm. The ServiceNow shape is not a live integration. A row is stored only after a separate save. The bot contract returns one assessment or a file batch. It stores them only when persist is true and a person supplies a disposition. There is no general-purpose finding management. Observed metrics cover the saved register only: volume, open remediation, distributions, disposition counts, elapsed intake-to-disposition time, optional self-reported handling minutes, optional self-reported rework minutes, optional self-reported manual touches, optional self-reported handoffs, and a monthly assessment rate from current decision timestamps when those timestamps cover at least 30 days. A shorter history leaves the rate Not measured. Authenticated effort is that separate optional minute count, shown only when a signed-in reviewer stored it, and Not measured otherwise. Cash savings are that separate optional dollar count, shown only when a signed-in reviewer stored it, and Not measured otherwise. They are not produced by the cost formula. The cost panel remains the illustrative formula. The optional HTTP Basic gate can require a shared password when `REQUIRE_AUTH` is enabled. The hosted demo leaves it off, so a persist call and an import save write to the shared register. It is not an identity system or production access-control design. The workflow log can be modified by someone with access to the database and is not tamper-proof. The local Flask development server must not be exposed publicly. A trust-center fetch collects a public page for review. It is not independent verification, and the address check is not a complete SSRF sandbox.
 
+## What production use would still require
+
+A reviewer should expect the gaps below. The application stays an illustrative portfolio prototype.
+
+- A decider identity. The optional password is one shared demo gate. It is not per-person authentication, and the hosted demo leaves it off. The name typed into the form is not checked against a directory.
+- A register that is not shared by everyone with the link.
+- An event log that a person with database access cannot edit. The local log is a trace. It is not tamper-evident.
+- Authoritative review of the draft ISO/IEC 27001 and ISO/IEC 42001 mappings before anyone treats them as reviewed. A mapping is not conformity.
+- A live workflow system, if one is required. ServiceNow here is a file shape and a mock ticket. Nothing is sent.
+- Off-box backups and a repeated snapshot restore drill. One drill, on 2026-10-27, is recorded in `docs/deployment.md`. It covers the snapshot used that day. A later snapshot is untested until another drill is recorded.
+- Avoided-incident value, if an organization wants that figure. This application leaves it unmonetized. The labor-capacity example is not that figure, and it is not cash savings.
+- More than one host. SQLite on this single instance is the demo design. It is not a highly available database.
+
 ## Design choices
 
 - Standard-library JSON, CSV, and SQLite are preferred for the prototype. `openpyxl` is the one added library, and it only reads `.xlsx` workbooks.

@@ -59,7 +59,7 @@ def test_stops_are_unique_ordered_and_point_at_real_endpoints(app):
     ]
     assert len({item["step_id"] for item in ordered}) == len(ordered)
     assert [item["number"] for item in ordered] == list(range(1, 14))
-    assert WALKTHROUGH_VERSION == "1.2.3"
+    assert WALKTHROUGH_VERSION == "1.2.4"
     endpoints = {rule.endpoint for rule in app.url_map.iter_rules()}
     scenario_ids = {item["scenario_id"] for item in list_scenarios()}
     for step in ordered:
@@ -212,7 +212,7 @@ def test_index_lists_every_stop_and_links_into_the_live_pages(client):
     response = client.get("/walkthrough/")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "VERSION 1.2.3" in body
+    assert "VERSION 1.2.4" in body
     assert "13 stops" in body
     assert "Start at intake" in body
     assert 'href="/try/?walk=intake"' in body
@@ -454,6 +454,7 @@ def test_register_advances_the_guide_and_a_plain_save_does_not(client):
     assert 'name="manual_touches" required' not in body
     assert 'name="handoffs"' in body
     assert "handoffs are optional" in body
+    assert "does not ask for authenticated effort or cash savings" in body
     assert 'name="handoffs" required' not in body
     assert 'name="authenticated_effort_minutes"' not in body
     assert 'name="cash_savings_dollars"' not in body

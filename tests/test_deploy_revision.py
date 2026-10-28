@@ -626,3 +626,12 @@ def test_deployment_doc_describes_the_script_and_the_remaining_gaps():
     assert "does not skip the backup" in text
     assert "unbound variable" in text
     assert "sqlite3" in text
+    assert "2026-10-27" in text
+    assert "grc-assurance-restore-drill-202610271020" in text
+    assert "257a67e4f2e2245b6f15e9775fa6181d78f93e85" in text
+    assert "da9329c2aed979fcf6465392b9b4393fa03e7421" in text
+    assert "The owner states" in text
+    assert "did not SSH" in text
+    assert "has not been executed" not in text
+    assert "still untested" not in text
+    assert "not installed yet" not in text

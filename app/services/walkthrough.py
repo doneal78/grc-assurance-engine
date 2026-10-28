@@ -15,7 +15,7 @@ The decision stop succeeds when that saved risk has a recorded decision.
 
 from copy import deepcopy
 
-WALKTHROUGH_VERSION = "1.2.3"
+WALKTHROUGH_VERSION = "1.2.4"
 WALK_COOKIE = "walk_step"
 WALK_QUERY = "walk"
 COOKIE_MAX_AGE = 12 * 60 * 60
@@ -169,9 +169,11 @@ _STEPS = (
             "Record escalate or reject without an exception rationale, or approve "
             "a prohibited result only with one. The prohibited flag stays. Minutes "
             "spent reviewing are optional, rework minutes are optional, manual "
-            "touches are optional, and handoffs are optional. Then "
-            "download the package: it includes the decision, and nothing is sent "
-            "to ServiceNow."
+            "touches are optional, and handoffs are optional. This public form "
+            "does not ask for authenticated effort or cash savings. Those "
+            "dashboard cards stay Not measured unless a signed-in disposition "
+            "stored a number. Then download the package: it includes the "
+            "decision, and nothing is sent to ServiceNow."
         ),
         "endpoint": "risks.detail",
         "endpoints": ("risks.detail", "risks.record_risk_decision"),
