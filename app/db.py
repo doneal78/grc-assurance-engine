@@ -67,6 +67,7 @@ def migrate(connection):
     _add_manual_touches(connection)
     _add_handoffs(connection)
     _add_authenticated_effort_minutes(connection)
+    _add_cash_savings_dollars(connection)
     connection.commit()
 
 
@@ -162,6 +163,18 @@ def _add_authenticated_effort_minutes(connection):
     handoff count, and not elapsed cycle time.
     """
     _add_decision_minutes(connection, "authenticated_effort_minutes")
+
+
+def _add_cash_savings_dollars(connection):
+    """Add optional signed-in cash-savings dollars to an existing decisions table.
+
+    Null means a signed-in reviewer did not report a spending reduction for
+    that disposition. Rows already stored stay, with the new column empty.
+    The column is not handling time, not rework time, not a touch count, not
+    a handoff count, not authenticated effort, and not a wage times those
+    figures.
+    """
+    _add_decision_minutes(connection, "cash_savings_dollars")
 
 
 def _add_decision_minutes(connection, column):

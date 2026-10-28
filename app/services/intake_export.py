@@ -120,6 +120,26 @@ def _authenticated_effort_line(minutes):
     )
 
 
+def _cash_savings_note(dollars):
+    if dollars is None:
+        return "Cash savings were not reported."
+    return (
+        "Whole dollars a signed-in reviewer entered for a known spending reduction. "
+        "Optional. Not a wage times handling minutes, rework minutes, touches, "
+        "handoffs, or authenticated effort, and not an input to the cost model."
+    )
+
+
+def _cash_savings_line(dollars):
+    if dollars is None:
+        return "cash savings were not reported."
+    unit = "dollar" if dollars == 1 else "dollars"
+    return (
+        f"{dollars} {unit} entered by a signed-in reviewer. "
+        "Not calculated from minutes or the modeled labor rate."
+    )
+
+
 def _decision_view(decision):
     if not decision:
         return None
@@ -146,6 +166,8 @@ def _decision_view(decision):
         "authenticated_effort_note": _authenticated_effort_note(
             decision.get("authenticated_effort_minutes"),
         ),
+        "cash_savings_dollars": decision.get("cash_savings_dollars"),
+        "cash_savings_note": _cash_savings_note(decision.get("cash_savings_dollars")),
     }
 
 
@@ -484,6 +506,9 @@ def render_markdown(package):
         lines.append(f"- Handoffs: {_handoffs_line(decision.get('handoffs'))}")
         lines.append(
             f"- Authenticated effort: {_authenticated_effort_line(decision.get('authenticated_effort_minutes'))}"
+        )
+        lines.append(
+            f"- Cash savings: {_cash_savings_line(decision.get('cash_savings_dollars'))}"
         )
     lines.extend(["", "End of package.", ""])
     return "\n".join(lines)

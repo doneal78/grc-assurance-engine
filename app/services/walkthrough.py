@@ -220,8 +220,10 @@ _STEPS = (
             "timestamps cover at least 30 days. A shorter history says Not "
             "measured. Authenticated effort is a separate card. It is the median "
             "of optional minutes a signed-in reviewer entered. With no reported "
-            "minutes it says Not measured. The cost panel is modeled labor "
-            "capacity, not cash savings."
+            "minutes it says Not measured. Cash savings is a separate card. It "
+            "is the median of optional whole dollars a signed-in reviewer "
+            "entered. With no reported dollars it says Not measured. The cost "
+            "panel is modeled labor capacity, not cash savings."
         ),
         "endpoint": "dashboard.index",
         "view_args": {},
@@ -232,11 +234,13 @@ _STEPS = (
         "summary": "The rules, the policy, and the formula are on one page.",
         "notice": (
             "The rule set, the org policy, the clause check, and the cost formula "
-            "are here. The monthly assessment rate and authenticated effort are "
-            "defined with the observed figures. Authenticated effort is optional "
-            "minutes a signed-in reviewer entered. Cash savings stay unmeasured. "
-            "Mappings stay draft. Nothing here certifies a vendor or turns "
-            "modeled hours into cash savings."
+            "are here. The monthly assessment rate, authenticated effort, and "
+            "cash savings are defined with the observed figures. Authenticated "
+            "effort is optional minutes a signed-in reviewer entered. Cash "
+            "savings are optional whole dollars a signed-in reviewer entered, "
+            "and the card says Not measured when none are stored. Mappings stay "
+            "draft. Nothing here certifies a vendor or turns modeled hours into "
+            "cash savings."
         ),
         "endpoint": "methodology.index",
         "view_args": {},

@@ -23,9 +23,10 @@ from app.services.intake_questionnaire import load_questionnaire
 from app.services.org_policy import load_org_policy
 from app.services.risk_engine import load_rules
 from app.services.workflow_service import (
-    AUTHENTICATED_EFFORT_GATE, DISPOSITION_RULE, DISPOSITIONS, WorkflowInputError,
-    decision_problems, get_risk, parse_authenticated_effort_minutes, parse_handling_minutes,
-    parse_handoffs, parse_manual_touches, parse_rework_minutes, register_intake,
+    AUTHENTICATED_EFFORT_GATE, CASH_SAVINGS_GATE, DISPOSITION_RULE, DISPOSITIONS,
+    WorkflowInputError, decision_problems, get_risk, parse_authenticated_effort_minutes,
+    parse_cash_savings_dollars, parse_handling_minutes, parse_handoffs, parse_manual_touches,
+    parse_rework_minutes, register_intake,
 )
 
 CONTRACT_VERSION = "1.0.0"
@@ -40,7 +41,7 @@ _REQUEST_KEYS = {"form", "as_of", "contract_version", "persist", "decision"}
 _DECISION_KEYS = {
     "disposition", "rationale", "decider", "conditions", "exception_rationale",
     "handling_minutes", "rework_minutes", "manual_touches", "handoffs",
-    "authenticated_effort_minutes",
+    "authenticated_effort_minutes", "cash_savings_dollars",
 }
 
 LIMITATIONS = (
@@ -52,7 +53,8 @@ LIMITATIONS = (
     "rework_minutes on a decision is optional and self-reported. It is time spent redoing work after a first pass. It is not handling minutes, not a timer, not authenticated effort, not elapsed cycle time, and not an input to the cost model.",
     "manual_touches on a decision is optional and self-reported. It is a count of human touchpoints on that assessment. It is not handling minutes, not rework minutes, not a timer, not authenticated effort, not elapsed cycle time, and not an input to the cost model.",
     "handoffs on a decision is optional and self-reported. It is a count of times the assessment was handed between people or queues before disposition. It is not handling minutes, not rework minutes, not manual touches, not a timer, not authenticated effort, not elapsed cycle time, and not an input to the cost model.",
-    "authenticated_effort_minutes on a decision is optional minutes a signed-in reviewer entered. The HTTP API stores a number only when the request passed the demo password gate. The CLI has no signed-in session and does not store it. Omit, null, or blank leaves it unmeasured. It is not a session timer, not handling minutes, not rework minutes, not manual touches, not handoffs, not elapsed cycle time, and not an input to the cost model.",
+    "authenticated_effort_minutes on a decision is optional minutes a signed-in reviewer entered. The HTTP API stores a number only when the request passed the demo password gate. The CLI has no signed-in session and does not store it. Omit, null, or blank leaves it unmeasured. It is not a session timer, not handling minutes, not rework minutes, not manual touches, not handoffs, not elapsed cycle time, not cash savings, and not an input to the cost model.",
+    "cash_savings_dollars on a decision is optional whole dollars a signed-in reviewer entered when a spending reduction was known. The HTTP API stores a number only when the request passed the demo password gate. The CLI has no signed-in session and does not store it. Omit, null, or blank leaves it unmeasured. Zero is a reported zero. The application does not multiply minutes or counts by a wage. It is not handling minutes, not rework minutes, not manual touches, not handoffs, not authenticated effort, not elapsed cycle time, and not an input to the cost model.",
     "A trust-center URL is stored as pasted text unless fetch_trust_center is yes. A fetch is one HTTP GET of vendor-published material for human review. It is not verified evidence and it does not approve the vendor. File import does not fetch.",
     "A ServiceNow-shaped file is simulated input. This contract does not call ServiceNow.",
     "No external AI model scores or approves the vendor.",
@@ -153,7 +155,11 @@ def contract_document():
                 "authenticated_effort_minutes is optional and separate. Omit it, null, or a "
                 "blank string to leave it unmeasured. A number is stored only when this HTTP "
                 "request passed the demo password gate. The CLI does not store it. It is not "
-                "handling time, rework time, a manual-touch count, or a handoff count."
+                "handling time, rework time, a manual-touch count, or a handoff count. "
+                "cash_savings_dollars is optional and separate. Omit it, null, or a blank "
+                "string to leave cash savings unmeasured. A number is stored only when this "
+                "HTTP request passed the demo password gate. The CLI does not store it. It is "
+                "whole dollars the person typed, not a wage times minutes or counts."
             ),
         },
         "dispositions": list(DISPOSITIONS),
@@ -201,16 +207,17 @@ def load_json_object(text):
 
 
 def assess_request_text(text, db=None, *, open_url=None, resolver=None,
-                        accept_authenticated_effort=False):
+                        accept_authenticated_effort=False, accept_cash_savings=False):
     """Parse a JSON request body and return one assessment document."""
     return assess_request(
         load_json_object(text), db=db, open_url=open_url, resolver=resolver,
         accept_authenticated_effort=accept_authenticated_effort,
+        accept_cash_savings=accept_cash_savings,
     )
 
 
 def assess_request(payload, db=None, *, open_url=None, resolver=None,
-                   accept_authenticated_effort=False):
+                   accept_authenticated_effort=False, accept_cash_savings=False):
     """Validate one assess request and run it through intake.
 
     persist defaults to false. A true value writes the synthetic vendor and
@@ -219,6 +226,7 @@ def assess_request(payload, db=None, *, open_url=None, resolver=None,
     """
     form, as_of, persist, decision = parse_assess_request(
         payload, accept_authenticated_effort=accept_authenticated_effort,
+        accept_cash_savings=accept_cash_savings,
     )
     try:
         intake = build_intake(form, as_of, open_url=open_url, resolver=resolver)
@@ -238,7 +246,8 @@ def assess_request(payload, db=None, *, open_url=None, resolver=None,
     return assessment_from_result(result, saved=get_risk(db, risk_id))
 
 
-def parse_assess_request(payload, *, accept_authenticated_effort=False):
+def parse_assess_request(payload, *, accept_authenticated_effort=False,
+                         accept_cash_savings=False):
     """Return (form, as_of, persist, decision). Structural problems are raised before scoring."""
     problems = []
     if not isinstance(payload, dict):
@@ -256,6 +265,7 @@ def parse_assess_request(payload, *, accept_authenticated_effort=False):
 
     persist, decision, persist_problems = _parse_persist(
         payload, accept_authenticated_effort=accept_authenticated_effort,
+        accept_cash_savings=accept_cash_savings,
     )
     problems.extend(persist_problems)
 
@@ -450,7 +460,7 @@ def parse_cli_date(value):
     return parsed
 
 
-def _parse_persist(payload, *, accept_authenticated_effort=False):
+def _parse_persist(payload, *, accept_authenticated_effort=False, accept_cash_savings=False):
     """Return (persist, decision, problems). Missing persist means assess only."""
     problems = []
     if "persist" not in payload:
@@ -509,6 +519,18 @@ def _parse_persist(payload, *, accept_authenticated_effort=False):
     else:
         cleaned["authenticated_effort_minutes"] = None
         cleaned["accept_authenticated_effort"] = False
+    if "cash_savings_dollars" in decision:
+        savings_problems, savings = parse_cash_savings_dollars(
+            decision["cash_savings_dollars"],
+        )
+        problems.extend(savings_problems)
+        if savings is not None and not accept_cash_savings:
+            problems.append(CASH_SAVINGS_GATE + ".")
+        cleaned["cash_savings_dollars"] = savings
+        cleaned["accept_cash_savings"] = bool(accept_cash_savings)
+    else:
+        cleaned["cash_savings_dollars"] = None
+        cleaned["accept_cash_savings"] = False
     for key in ("disposition", "rationale", "decider", "conditions", "exception_rationale"):
         if key not in decision:
             if key in {"disposition", "rationale", "decider"}:
@@ -542,7 +564,9 @@ def _require_decision(result, decision):
         decision.get("manual_touches"),
         decision.get("handoffs"),
         decision.get("authenticated_effort_minutes"),
+        decision.get("cash_savings_dollars"),
         accept_authenticated_effort=bool(decision.get("accept_authenticated_effort")),
+        accept_cash_savings=bool(decision.get("accept_cash_savings")),
     )
     if problems:
         raise BotRequestError(problems)
@@ -587,6 +611,7 @@ def _decision_document(decision):
         "manual_touches": decision.get("manual_touches"),
         "handoffs": decision.get("handoffs"),
         "authenticated_effort_minutes": decision.get("authenticated_effort_minutes"),
+        "cash_savings_dollars": decision.get("cash_savings_dollars"),
         "separate_from_score": True,
     }
 

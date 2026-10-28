@@ -212,7 +212,7 @@ def _import_result(imported, document, save_error=None, status=200):
 
 
 def _decision_from_form(form):
-    """Read the public import disposition. It does not collect authenticated effort.
+    """Read the public import disposition. It does not collect authenticated effort or cash savings.
 
     A crafted non-blank value is passed through so the decision rules reject
     it instead of storing it. A blank is omitted and stays unmeasured.
@@ -232,6 +232,10 @@ def _decision_from_form(form):
     if posted_effort not in (None, ""):
         decision["authenticated_effort_minutes"] = posted_effort
         decision["accept_authenticated_effort"] = False
+    posted_savings = form.get("cash_savings_dollars")
+    if posted_savings not in (None, ""):
+        decision["cash_savings_dollars"] = posted_savings
+        decision["accept_cash_savings"] = False
     return decision
 
 

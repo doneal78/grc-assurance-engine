@@ -101,7 +101,9 @@ def _decision(db, risk_id, **overrides):
                            payload.get("handling_minutes"), payload.get("rework_minutes"),
                            payload.get("manual_touches"), payload.get("handoffs"),
                            payload.get("authenticated_effort_minutes"),
-                           accept_authenticated_effort=payload.get("accept_authenticated_effort", False))
+                           payload.get("cash_savings_dollars"),
+                           accept_authenticated_effort=payload.get("accept_authenticated_effort", False),
+                           accept_cash_savings=payload.get("accept_cash_savings", False))
 
 
 def test_decision_copies_policy_and_rule_set_from_the_assessment(db):
@@ -883,3 +885,89 @@ def test_existing_decision_gains_a_null_authenticated_effort_column(tmp_path):
     connection.close()
     assert "authenticated_effort_minutes" in columns
     assert row == ("escalate", 12, 1, None)
+
+
+def test_cash_savings_are_stored_only_for_an_accepted_signed_in_value(db):
+    from app.services.workflow_service import WorkflowInputError
+
+    risk_id = register_scenario(db, run_scenario("evidence-supported"))
+    assert _decision(
+        db, risk_id, handling_minutes=60, cash_savings_dollars=40, accept_cash_savings=True,
+    ) == risk_id
+    decision = get_risk(db, risk_id)["decision"]
+    assert decision["cash_savings_dollars"] == 40
+    assert decision["handling_minutes"] == 60
+    assert decision["cash_savings_dollars"] != decision["handling_minutes"]
+    assert "Cash savings dollars: 40." in get_risk(db, risk_id)["events"][-1]["detail"]
+
+    assert _decision(db, risk_id, disposition="reject", rationale="Replaced without a login.") == risk_id
+    kept = get_risk(db, risk_id)["decision"]
+    assert kept["disposition"] == "reject"
+    assert kept["cash_savings_dollars"] == 40
+    assert kept["handling_minutes"] is None
+    assert "Cash savings dollars" not in get_risk(db, risk_id)["events"][-1]["detail"]
+
+    assert _decision(
+        db, risk_id, cash_savings_dollars="", accept_cash_savings=True,
+    ) == risk_id
+    assert get_risk(db, risk_id)["decision"]["cash_savings_dollars"] is None
+
+    with pytest.raises(WorkflowInputError, match="signed-in"):
+        _decision(db, risk_id, cash_savings_dollars=9)
+    assert get_risk(db, risk_id)["decision"]["cash_savings_dollars"] is None
+    assert get_risk(db, risk_id)["decision"]["disposition"] == "approve"
+
+    with pytest.raises(WorkflowInputError, match="cash_savings_dollars"):
+        _decision(db, risk_id, cash_savings_dollars="1.5", accept_cash_savings=True)
+    assert get_risk(db, risk_id)["decision"]["disposition"] == "approve"
+    assert get_risk(db, risk_id)["decision"]["cash_savings_dollars"] is None
+
+    assert _decision(
+        db, risk_id, cash_savings_dollars=0, accept_cash_savings=True,
+    ) == risk_id
+    assert get_risk(db, risk_id)["decision"]["cash_savings_dollars"] == 0
+
+    saved = _save_intake(db)
+    assert get_risk(db, saved)["decision"]["cash_savings_dollars"] is None
+    with pytest.raises(WorkflowInputError, match="signed-in"):
+        _save_intake(db, cash_savings_dollars=5)
+    assert len(list_risks(db)) == 2
+
+
+def test_existing_decision_gains_a_null_cash_savings_column(tmp_path):
+    from app import create_app
+    import sqlite3
+
+    path = tmp_path / "savings.sqlite3"
+    schema = Path("app/schema.sql").read_text(encoding="utf-8").replace(
+        ",\n    cash_savings_dollars INTEGER", "",
+    )
+    connection = sqlite3.connect(path)
+    connection.executescript(schema)
+    connection.execute(
+        """INSERT INTO risks
+        (risk_id, scenario_id, scenario_name, risk_statement, inherent_tier, residual_tier,
+         rationale_json, created_at, policy_id, policy_version, policy_outcome)
+        VALUES ('R-OLD', 'legacy-savings', 'Legacy', 'Synthetic statement', 'low', 'low', '{}',
+                '2026-10-01T00:00:00+00:00', 'ORG-AI-USE', '1.1.0', 'not_prohibited')"""
+    )
+    connection.execute(
+        """INSERT INTO decisions
+        (risk_id, disposition, rationale, decider, policy_id, policy_version, rule_set_version,
+         prohibited_at_decision, decided_at, handling_minutes, rework_minutes, manual_touches,
+         handoffs, authenticated_effort_minutes)
+        VALUES ('R-OLD', 'approve', 'Kept.', 'Reviewer', 'ORG-AI-USE', '1.1.0', '0.3.0',
+                'not_prohibited', '2026-10-01T00:00:00+00:00', 12, 4, 3, 1, 8)"""
+    )
+    connection.commit()
+    connection.close()
+    create_app({"TESTING": True, "DATABASE": str(path), "REQUIRE_AUTH": False})
+    connection = sqlite3.connect(path)
+    columns = [row[1] for row in connection.execute("PRAGMA table_info(decisions)")]
+    row = connection.execute(
+        """SELECT disposition, handling_minutes, authenticated_effort_minutes, cash_savings_dollars
+           FROM decisions WHERE risk_id = 'R-OLD'"""
+    ).fetchone()
+    connection.close()
+    assert "cash_savings_dollars" in columns
+    assert row == ("approve", 12, 8, None)
