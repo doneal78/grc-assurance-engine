@@ -22,6 +22,14 @@ def _db():
     return connection
 
 
+def _stamp_decision(db, risk_id, decided_at):
+    db.execute(
+        "UPDATE decisions SET decided_at = ? WHERE risk_id = ?",
+        (decided_at, risk_id),
+    )
+    db.commit()
+
+
 def _stamp(db, risk_id, event_type, occurred_at, index=0):
     rows = db.execute(
         """SELECT event_id FROM workflow_events
@@ -77,7 +85,7 @@ def test_empty_database_reports_zeros_and_leaves_cycle_time_unmeasured():
     db = _db()
     metrics = observed_metrics(db)
     assert metrics["kind"] == "observed"
-    assert metrics["definition_version"] == "5"
+    assert metrics["definition_version"] == "6"
     assert metrics["feeds_cost_model"] is False
     assert "cash_savings" not in metrics
     assert "net_capacity_value" not in metrics
@@ -138,10 +146,21 @@ def test_empty_database_reports_zeros_and_leaves_cycle_time_unmeasured():
     assert "not handling minutes" in handoffs["definition"]
     assert "not rework minutes" in handoffs["definition"]
     assert "not a manual-touch count" in handoffs["definition"]
+    rate = metrics["monthly_assessment_rate"]
+    assert rate["kind"] == "observed_rate"
+    assert rate["measured"] is False
+    assert rate["rate"] is None
+    assert rate["rate_label"] is None
+    assert rate["reason"] == "no_decisions"
+    assert rate["window_days"] == 30
+    assert rate["feeds_cost_model"] is False
+    assert "not scaled" in rate["definition"]
+    assert "not copied into the cost formula" in rate["definition"]
+    assert "No current decision is stored." in rate["detail"]
     assert "rework_time" not in {item["id"] for item in metrics["not_measured"]}
     assert "manual_touches" not in {item["id"] for item in metrics["not_measured"]}
     assert "handoffs" not in {item["id"] for item in metrics["not_measured"]}
-    assert "monthly_assessment_rate" in {item["id"] for item in metrics["not_measured"]}
+    assert "monthly_assessment_rate" not in {item["id"] for item in metrics["not_measured"]}
     assert "authenticated_effort" in {item["id"] for item in metrics["not_measured"]}
     assert "cash_savings" in {item["id"] for item in metrics["not_measured"]}
     assert _partition(metrics) == 0
@@ -417,6 +436,8 @@ def test_dashboard_and_methods_show_empty_observed_metrics(client):
         assert "Saved assessments: 0." in observed
         assert "Open remediation: 0." in observed
         assert "Persisted dispositions: 0." in observed
+        assert "MONTHLY ASSESSMENT RATE" in observed
+        assert "No current decision is stored." in observed
         assert "Not measured" in observed
         assert "$" not in observed
 
@@ -441,7 +462,11 @@ def test_methods_page_describes_self_reported_handling_time(client):
     assert "not elapsed cycle time" in body
     assert "SELF-REPORTED MANUAL TOUCHES" in body
     assert "SELF-REPORTED HANDOFFS" in body
-    assert "Monthly assessment rate." in body
+    assert "MONTHLY ASSESSMENT RATE" in body
+    assert "closed 30-day window" in body
+    assert "at least 30 days" in body
+    assert "<strong>Monthly assessment rate.</strong>" not in body
+    assert "The observed monthly assessment rate is not an input to this formula." in body
     assert "Self-reported handling minutes are not inputs to this formula." in body
     assert "Self-reported rework minutes are not inputs to this formula." in body
     assert "Self-reported manual touches are not inputs to this formula." in body
@@ -831,7 +856,10 @@ def test_dashboard_shows_handoffs_apart_from_touches_and_the_cost_panel(client, 
     methods_observed = _observed_section(methods)
     assert "4 handoffs" in methods_observed
     assert "3 touches" in methods_observed
-    assert "Monthly assessment rate." in methods
+    assert "MONTHLY ASSESSMENT RATE" in methods_observed
+    assert "Not measured" in methods_observed
+    assert "span less than 30 days" in methods_observed
+    assert "<strong>Monthly assessment rate.</strong>" not in methods
     assert "Authenticated effort." in methods
     assert "Cash savings." in methods
     assert "180.00" not in methods_observed
@@ -849,3 +877,247 @@ def test_dashboard_scenario_save_does_not_invent_cycle_time(client, app):
     assert "Open remediation: 1." in observed
     assert "Not measured" in observed
     assert "1 without an intake event" in observed
+    assert "MONTHLY ASSESSMENT RATE" in observed
+    assert "No current decision is stored." in observed
+
+
+def test_monthly_rate_stays_unmeasured_when_history_does_not_cover_30_days():
+    from app.services.cost_model import calculate_cost
+
+    before = calculate_cost()
+    empty = summarize_register([], [], [], [])["monthly_assessment_rate"]
+    assert empty["measured"] is False
+    assert empty["reason"] == "no_decisions"
+    assert empty["rate"] is None
+
+    unreadable = summarize_register([], [], [
+        {"risk_id": "R-1", "disposition": "approve", "decided_at": "yesterday", "handling_minutes": 10},
+        {"risk_id": "R-2", "disposition": "reject", "decided_at": "", "handoffs": 2},
+        {"risk_id": "R-3", "disposition": "escalate"},
+    ], [])["monthly_assessment_rate"]
+    assert unreadable["measured"] is False
+    assert unreadable["reason"] == "no_readable_timestamp"
+    assert unreadable["unreadable_count"] == 3
+    assert unreadable["rate"] is None
+    assert "no readable decided_at" in unreadable["detail"]
+
+    one = summarize_register([], [], [
+        {"risk_id": "R-1", "decided_at": "2026-10-01T00:00:00+00:00", "handling_minutes": 25},
+    ], [
+        {"risk_id": "R-1", "event_type": "decision_recorded", "occurred_at": "2026-01-01T00:00:00+00:00"},
+        {"risk_id": "R-1", "event_type": "decision_recorded", "occurred_at": "2026-10-01T00:00:00+00:00"},
+    ])
+    assert one["decision_event_count"] == 2
+    assert one["handling_time"]["median_minutes"] == 25
+    rate = one["monthly_assessment_rate"]
+    assert rate["measured"] is False
+    assert rate["reason"] == "insufficient_history"
+    assert rate["readable_count"] == 1
+    assert rate["rate"] is None
+    assert rate["rate_label"] is None
+    assert "not scaled up" in rate["detail"]
+    assert "per 30 days" not in rate["detail"]
+
+    short = summarize_register([], [], [
+        {"risk_id": "R-1", "decided_at": "2026-09-21T00:00:00+00:00", "rework_minutes": 4, "manual_touches": 1},
+        {"risk_id": "R-2", "decided_at": "2026-10-01T00:00:00+00:00", "rework_minutes": 8, "manual_touches": 3},
+    ], [])
+    assert short["rework_time"]["median_minutes"] == 6
+    assert short["manual_touches"]["median_touches"] == 2
+    assert short["monthly_assessment_rate"]["measured"] is False
+    assert short["monthly_assessment_rate"]["rate"] is None
+    assert "span less than 30 days" in short["monthly_assessment_rate"]["detail"]
+    assert "6 assessments" not in short["monthly_assessment_rate"]["detail"]
+
+    boundary = summarize_register([], [], [
+        {"risk_id": "R-1", "decided_at": "2026-09-01T00:00:01+00:00"},
+        {"risk_id": "R-2", "decided_at": "2026-10-01T00:00:00+00:00"},
+    ], [])["monthly_assessment_rate"]
+    assert boundary["measured"] is False
+    assert boundary["rate"] is None
+    assert calculate_cost() == before
+
+
+def test_monthly_rate_counts_current_decisions_in_a_covered_30_day_window():
+    from app.services.cost_model import calculate_cost
+
+    before = calculate_cost()
+    decisions = [
+        {"risk_id": "R-1", "disposition": "approve", "decided_at": "2026-08-01T00:00:00+00:00",
+         "handling_minutes": 10, "rework_minutes": 4, "manual_touches": 1, "handoffs": 1},
+        {"risk_id": "R-2", "disposition": "reject", "decided_at": "2026-09-15T00:00:00+00:00",
+         "handling_minutes": 30, "rework_minutes": 8, "manual_touches": 3, "handoffs": 3},
+        {"risk_id": "R-3", "disposition": "escalate", "decided_at": "2026-10-01T00:00:00+00:00",
+         "handling_minutes": None, "rework_minutes": None, "manual_touches": None, "handoffs": None},
+        {"risk_id": "R-4", "disposition": "approve", "decided_at": "not-a-timestamp",
+         "handling_minutes": "25", "handoffs": 9},
+    ]
+    events = [
+        {"risk_id": "R-1", "event_type": "decision_recorded", "occurred_at": "2026-01-01T00:00:00+00:00"},
+        {"risk_id": "R-1", "event_type": "decision_recorded", "occurred_at": "2026-08-01T00:00:00+00:00"},
+        {"risk_id": "R-2", "event_type": "decision_recorded", "occurred_at": "2026-09-15T00:00:00+00:00"},
+        {"risk_id": "R-3", "event_type": "decision_recorded", "occurred_at": "2026-10-01T00:00:00+00:00"},
+    ]
+    summary = summarize_register([], [], decisions, events)
+    rate = summary["monthly_assessment_rate"]
+    assert rate["measured"] is True
+    assert rate["rate"] == 2
+    assert rate["counted"] == 2
+    assert rate["rate_label"] == "2 assessments per 30 days"
+    assert rate["outside_window_count"] == 1
+    assert rate["unreadable_count"] == 1
+    assert rate["readable_count"] == 3
+    assert rate["earliest"] == "2026-08-01T00:00:00+00:00"
+    assert rate["latest"] == "2026-10-01T00:00:00+00:00"
+    assert rate["feeds_cost_model"] is False
+    assert rate["reason"] is None
+    assert "not the modeled assessments-per-month assumption" in rate["detail"]
+    assert "An older decision event is not counted." in rate["detail"]
+    assert summary["decision_event_count"] == 4
+    assert summary["handling_time"]["recorded_count"] == 2
+    assert summary["handling_time"]["median_minutes"] == 20
+    assert summary["rework_time"]["median_minutes"] == 6
+    assert summary["manual_touches"]["median_touches"] == 2
+    assert summary["handoffs"]["recorded_count"] == 3
+    assert summary["handoffs"]["unmeasured_decisions"] == 1
+    assert summary["handoffs"]["median_handoffs"] == 3
+    assert summary["feeds_cost_model"] is False
+    assert calculate_cost() == before
+    assert "monthly_assessment_rate" not in before["assumptions"]
+    assert before["assumptions"]["assessments_per_month"] == 20
+
+    exact = summarize_register([], [], [
+        {"risk_id": "R-1", "decided_at": "2026-09-01T00:00:00"},
+        {"risk_id": "R-2", "decided_at": "2026-10-01T00:00:00Z"},
+    ], [])["monthly_assessment_rate"]
+    assert exact["measured"] is True
+    assert exact["rate"] == 2
+    assert exact["outside_window_count"] == 0
+
+    lone = summarize_register([], [], [
+        {"risk_id": "R-1", "decided_at": "2026-08-22T00:00:00+00:00"},
+        {"risk_id": "R-2", "decided_at": "2026-10-01T00:00:00+00:00"},
+    ], [])["monthly_assessment_rate"]
+    assert lone["measured"] is True
+    assert lone["rate"] == 1
+    assert lone["rate_label"] == "1 assessment per 30 days"
+    assert lone["outside_window_count"] == 1
+
+
+def test_monthly_rate_from_saved_rows_ignores_a_replaced_decision_event():
+    from app.services.cost_model import calculate_cost
+
+    db = _db()
+    before = calculate_cost()
+    first = _save_intake(db, handling_minutes=10, rework_minutes=4, manual_touches=1, handoffs=1)
+    second = _save_intake(db, handling_minutes=30, rework_minutes=8, manual_touches=3, handoffs=3)
+    third = _save_intake(db)
+    _stamp_decision(db, first, "2026-08-01T00:00:00+00:00")
+    _stamp_decision(db, second, "2026-09-15T00:00:00+00:00")
+    _stamp_decision(db, third, "2026-10-01T00:00:00+00:00")
+    _stamp(db, first, "decision_recorded", "2026-01-01T00:00:00+00:00")
+    metrics = observed_metrics(db)
+    rate = metrics["monthly_assessment_rate"]
+    assert metrics["decision_event_count"] == 3
+    assert metrics["dispositions"]["recorded"] == 3
+    assert rate["measured"] is True
+    assert rate["rate"] == 2
+    assert rate["latest"] == "2026-10-01T00:00:00+00:00"
+    assert rate["outside_window_count"] == 1
+    assert metrics["handling_time"]["median_minutes"] == 20
+    assert metrics["rework_time"]["median_minutes"] == 6
+    assert metrics["manual_touches"]["median_touches"] == 2
+    assert metrics["handoffs"]["recorded_count"] == 2
+    assert metrics["handoffs"]["median_handoffs"] == 2
+    assert metrics["handoffs"]["unmeasured_decisions"] == 1
+    assert calculate_cost() == before
+    assert observed_metrics(db)["monthly_assessment_rate"] == rate
+    db.close()
+
+    db = _db()
+    replaced = _save_intake(db, handling_minutes=12, handoffs=4)
+    _stamp_decision(db, replaced, "2026-08-01T00:00:00+00:00")
+    _stamp(db, replaced, "decision_recorded", "2026-08-01T00:00:00+00:00")
+    record_decision(
+        db, replaced, "reject", "A later decision.", "GRC analyst",
+        handling_minutes=12, handoffs=4,
+    )
+    replaced_metrics = observed_metrics(db)
+    replaced_rate = replaced_metrics["monthly_assessment_rate"]
+    stored = get_risk(db, replaced)["decision"]
+    assert replaced_metrics["decision_event_count"] == 2
+    assert replaced_metrics["dispositions"]["recorded"] == 1
+    assert stored["decided_at"] != "2026-08-01T00:00:00+00:00"
+    assert stored["handling_minutes"] == 12
+    assert stored["handoffs"] == 4
+    assert replaced_rate["measured"] is False
+    assert replaced_rate["readable_count"] == 1
+    assert replaced_rate["reason"] == "insufficient_history"
+    assert replaced_rate["rate"] is None
+    assert replaced_rate["latest"] == stored["decided_at"]
+    assert "2026-08-01" not in replaced_rate["latest"]
+    assert replaced_metrics["handling_time"]["median_minutes"] == 12
+    assert replaced_metrics["handoffs"]["median_handoffs"] == 4
+    assert calculate_cost() == before
+    db.close()
+
+
+def test_dashboard_shows_the_monthly_rate_apart_from_self_reported_cards_and_cost(client, app):
+    from app.db import get_db
+    from app.services.cost_model import calculate_cost
+
+    before = calculate_cost()
+    with app.app_context():
+        db = get_db()
+        thin = _save_intake(db, handling_minutes=25, rework_minutes=12, manual_touches=4, handoffs=6)
+        _stamp_decision(db, thin, "2026-10-20T00:00:00+00:00")
+    thin_body = client.get("/").data.decode()
+    thin_observed = _observed_section(thin_body)
+    assert "MONTHLY ASSESSMENT RATE" in thin_observed
+    assert "SELF-REPORTED HANDLING TIME" in thin_observed
+    assert "SELF-REPORTED REWORK TIME" in thin_observed
+    assert "SELF-REPORTED MANUAL TOUCHES" in thin_observed
+    assert "SELF-REPORTED HANDOFFS" in thin_observed
+    assert "25 minutes" in thin_observed
+    assert "12 minutes" in thin_observed
+    assert "4 touches" in thin_observed
+    assert "6 handoffs" in thin_observed
+    assert "One timestamp does not cover 30 days" in thin_observed
+    assert "not scaled up" in thin_observed
+    assert "assessments per 30 days" not in thin_observed
+    assert "$" not in thin_observed
+    assert "180.00" in thin_body
+    assert "600.00" in thin_body
+    assert "not the observed monthly assessment rate" in thin_body.split("observed-metrics-end", 1)[1]
+
+    with app.app_context():
+        db = get_db()
+        earlier = _save_intake(db, handling_minutes=5, rework_minutes=4, manual_touches=2, handoffs=2)
+        middle = _save_intake(db)
+        _stamp_decision(db, earlier, "2026-08-01T00:00:00+00:00")
+        _stamp_decision(db, middle, "2026-09-20T00:00:00+00:00")
+    body = client.get("/").data.decode()
+    observed = _observed_section(body)
+    assert "2 assessments per 30 days" in observed
+    assert "1 earlier current decision falls outside that window" in observed
+    assert "15 minutes" in observed
+    assert "8 minutes" in observed
+    assert "3 touches" in observed
+    assert "4 handoffs" in observed
+    assert "1 saved decision has no handoffs." in observed
+    assert "not an input to the cost model" in observed
+    assert "$" not in observed
+    assert "180.00" in body
+    assert "600.00" in body
+    assert calculate_cost() == before
+    methods = client.get("/methodology").data.decode()
+    methods_observed = _observed_section(methods)
+    assert "definition 6" in methods
+    assert "2 assessments per 30 days" in methods_observed
+    assert "closed 30 days ending at the latest readable timestamp" in methods
+    assert "Otherwise the card says Not measured." in methods
+    assert "<strong>Authenticated effort.</strong>" in methods
+    assert "<strong>Cash savings.</strong>" in methods
+    assert "<strong>Monthly assessment rate.</strong>" not in methods
+    assert "The observed monthly assessment rate is not an input to this formula." in methods
+    assert "180.00" not in methods_observed

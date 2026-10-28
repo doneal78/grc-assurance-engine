@@ -38,11 +38,11 @@ The service uses decimal arithmetic and rounds output to two decimal places. If 
 
 The result is **modeled labor capacity**, not actual cash savings. No payroll reduction, reduced contractor spend, or other cash outflow reduction has been measured. The model reports no cash savings. One-time development costs are unknown and excluded; they must not be combined with recurring maintenance as though they were the same cost.
 
-The modeled values above are a labeled example. They are separate from the observed register figures below. Workflow events are local trace records. A timestamp records when a row was written. Self-reported handling minutes, when a person entered them on a decision, are a separate observed figure. Self-reported rework minutes are another observed figure on that decision. Self-reported manual touches are another observed figure on that decision. Self-reported handoffs are another observed figure on that decision. None of them is copied into this formula. Do not present the modeled values as measured results, as cash savings, or as evidence of risk reduction.
+The modeled values above are a labeled example. They are separate from the observed register figures below. Workflow events are local trace records. A timestamp records when a row was written. Self-reported handling minutes, when a person entered them on a decision, are a separate observed figure. Self-reported rework minutes are another observed figure on that decision. Self-reported manual touches are another observed figure on that decision. Self-reported handoffs are another observed figure on that decision. The monthly assessment rate is a count of current decision timestamps when those timestamps cover 30 days. None of them is copied into this formula. Do not present the modeled values as measured results, as cash savings, or as evidence of risk reduction.
 
 ## Observed measurements
 
-Definition version 5 lives in `app/services/workflow_metrics.py`. The dashboard and the methods page render its result. An empty register shows zeros.
+Definition version 6 lives in `app/services/workflow_metrics.py`. The dashboard and the methods page render its result. An empty register shows zeros for the counts that are counts. The monthly assessment rate says Not measured when no current decision covers a 30-day window.
 
 | Figure | Source | Reading |
 | --- | --- | --- |
@@ -58,6 +58,7 @@ Definition version 5 lives in `app/services/workflow_metrics.py`. The dashboard 
 | Self-reported rework time | `decisions.rework_minutes` on the current row | Optional whole minutes a person entered for time spent redoing work after a first pass. The median rules match handling minutes, and null stays out. Zero is a reported zero. When no row has a number, the panel says the figure is not measured. This is not handling time, not elapsed cycle time, and not an input to the formula. |
 | Self-reported manual touches | `decisions.manual_touches` on the current row | Optional whole-number count of human touchpoints a person entered with the disposition. The median rules match handling minutes, and null stays out. Zero is a reported zero. When no row has a number, the panel says the figure is not measured. This is not handling time, not rework time, not elapsed cycle time, and not an input to the formula. |
 | Self-reported handoffs | `decisions.handoffs` on the current row | Optional whole-number count of times the assessment was handed between people or queues before disposition. The median rules match handling minutes, and null stays out. Zero is a reported zero. When no row has a number, the panel says the figure is not measured. This is not handling time, not rework time, not manual touches, not elapsed cycle time, and not an input to the formula. |
+| Monthly assessment rate | `decisions.decided_at` on the current row | Count of current decision rows whose timestamp falls in the closed 30-day window ending at the latest readable `decided_at`. Both ends are included. A number is shown only when the earliest readable timestamp is at least 30 days earlier, so the register covers that window. An empty register, an unreadable timestamp, a single timestamp, and any shorter span say Not measured. The count is not scaled up. An older `decision_recorded` event is not counted. A timestamp with no offset is read as UTC. The window uses the stored timestamps, not the clock when the page is opened. This is not handling time, not rework time, not manual touches, not handoffs, not elapsed cycle time, and not an input to the formula. |
 
 The mean of the measured spans is rounded half up to two decimal places. The minimum, maximum, and total stay exact. For an even count, the median is the mean of the two middle spans.
 
@@ -67,7 +68,8 @@ A same-transaction save can write `intake_received` and `decision_recorded` with
 
 | Observed series | What would have to be true before it could feed the formula | What this version does |
 | --- | --- | --- |
-| Assessment volume | The count would have to be one reporting month, with scenario fixtures and repeat saves removed. The register does not store a reporting month. | The count stays on the observed panel. `assessments_per_month` remains 20 in `cost_assumptions.json`. |
+| Assessment volume | The count would have to be one reporting month, with scenario fixtures and repeat saves removed. The register does not store a reporting month on the risk row. | The count stays on the observed panel. `assessments_per_month` remains 20 in `cost_assumptions.json`. |
+| Monthly assessment rate | The count would have to replace the versioned assessments-per-month assumption, and it would have to be labor rather than a count of decisions. | The count stays on its own observed card when the 30-day window is covered. `assessments_per_month` remains 20. |
 | Elapsed cycle time | The span would have to be labor hours, split into a baseline and an assisted handling time. The events store two write times. They do not store either handling time. | The span stays on the observed panel. Baseline hours remain 2.0 and assisted hours remain 1.5. |
 | Self-reported handling minutes | The minutes would have to be authenticated labor hours, split into a baseline and an assisted handling time, and tied to one reporting month. They are an optional number on a decision. | The median stays on the observed panel. Baseline hours remain 2.0 and assisted hours remain 1.5. |
 | Self-reported rework minutes | The minutes would have to be authenticated rework hours, separate from handling time, and tied to one reporting month. They are an optional number on a decision. | The median stays on its own observed card. It is not copied into baseline hours, assisted hours, review hours, or maintenance hours. |
@@ -79,9 +81,8 @@ No second dollar figure is calculated from the register. Cash savings stay unmea
 
 ## Still unmeasured
 
-- Authenticated effort tracking. The optional minutes, the optional touch count, and the optional handoff count are whatever the person typed. There is no identity check and no timesheet.
-- A monthly assessment rate
-- Cash savings
+- Authenticated effort tracking. The optional minutes, the optional touch count, and the optional handoff count are whatever the person typed. There is no identity check and no timesheet. The monthly assessment rate is a count of stored timestamps. It is not authenticated effort.
+- Cash savings. The monthly assessment rate is not converted into money.
 - Avoided-incident value
 
 The local event log can be edited. It is not a tamper-proof measurement store.

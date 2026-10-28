@@ -1,6 +1,7 @@
 <!-- observed-metrics-start -->
 <p>{{ observed.cycle_time.definition }}</p>
-<p class="muted">Assessment volume counts saved assessments. Persisted dispositions count saved human decisions on those assessments. A public <code>/try/</code> run that is not saved is in neither count.</p>
+<p>{{ observed.monthly_assessment_rate.definition }}</p>
+<p class="muted">Assessment volume counts saved assessments. Persisted dispositions count saved human decisions on those assessments. A public <code>/try/</code> run that is not saved is in neither count. The monthly assessment rate counts current decisions in a covered 30-day window. It is not that volume, and a public <code>/try/</code> run that is not saved is not in it.</p>
 <div class="result-grid">
   <article class="result-card">
     <p class="eyebrow">SAVED ASSESSMENT VOLUME</p>
@@ -26,6 +27,15 @@
     <strong>Not measured</strong>
     <p>No saved row has both an intake event and a usable disposition event. A public <code>/try/</code> run that is not saved is not in this count.</p>
     {% endif %}
+  </article>
+  <article class="result-card">
+    <p class="eyebrow">MONTHLY ASSESSMENT RATE</p>
+    {% if observed.monthly_assessment_rate.measured %}
+    <strong>{{ observed.monthly_assessment_rate.rate_label }}</strong>
+    {% else %}
+    <strong>Not measured</strong>
+    {% endif %}
+    <p>{{ observed.monthly_assessment_rate.detail }}</p>
   </article>
   <article class="result-card">
     <p class="eyebrow">SELF-REPORTED HANDLING TIME</p>

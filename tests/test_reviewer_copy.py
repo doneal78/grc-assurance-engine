@@ -221,10 +221,10 @@ def test_dashboard_distinguishes_volume_from_saved_decisions(client):
     assert "Persisted dispositions: 0." in body
     assert "not the assessment volume" in body
     assert "A public <code>/try/</code> run that is not saved is in neither number" in body
-    assert "modeled assessments/month (an assumption, not the saved assessment volume" in body
+    assert "modeled assessments/month (an assumption, not the saved assessment volume above and not the observed monthly assessment rate)" in body
     methods = client.get("/methodology").get_data(as_text=True)
     assert "A public <code>/try/</code> run that is not saved is in neither count" in methods
-    assert "modeled assessments per month (an assumption, not the saved assessment volume)" in methods
+    assert "modeled assessments per month (an assumption, not the saved assessment volume and not the observed monthly assessment rate)" in methods
 
 
 def test_prefill_escapes_a_vendor_name_and_ignores_a_bogus_choice(client):

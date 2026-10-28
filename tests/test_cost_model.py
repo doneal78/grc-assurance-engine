@@ -33,6 +33,8 @@ def test_cost_formula_does_not_read_handling_minutes():
     assert "rework_minutes" not in REQUIRED_NUMERIC
     assert "manual_touches" not in REQUIRED_NUMERIC
     assert "handoffs" not in REQUIRED_NUMERIC
+    assert "monthly_assessment_rate" not in REQUIRED_NUMERIC
+    assert "decided_at" not in REQUIRED_NUMERIC
     result = calculate_cost()
     assert result["net_capacity_value"] == 180
     assert result["gross_capacity_value"] == 600
@@ -41,11 +43,15 @@ def test_cost_formula_does_not_read_handling_minutes():
     assert "rework_minutes" not in result
     assert "manual_touches" not in result
     assert "handoffs" not in result
+    assert "monthly_assessment_rate" not in result
     assumptions = load_assumptions()
+    assert assumptions["assessments_per_month"] == 20
     assert "rework_minutes" not in assumptions
     assert "handling_minutes" not in assumptions
     assert "manual_touches" not in assumptions
     assert "handoffs" not in assumptions
+    assert "monthly_assessment_rate" not in assumptions
+    assert "decided_at" not in assumptions
 
 
 def test_negative_net_capacity_is_reported_when_assisted_effort_is_higher():

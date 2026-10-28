@@ -215,8 +215,10 @@ _STEPS = (
             "figure and appear only when a decision includes them. Self-reported "
             "manual touches are a separate count and appear only when a decision "
             "includes them. Self-reported handoffs are a separate count and appear "
-            "only when a decision includes them. The cost panel is modeled labor "
-            "capacity, not cash savings."
+            "only when a decision includes them. The monthly assessment rate "
+            "counts current decisions in a 30-day window only when those "
+            "timestamps cover at least 30 days. A shorter history says Not "
+            "measured. The cost panel is modeled labor capacity, not cash savings."
         ),
         "endpoint": "dashboard.index",
         "view_args": {},
@@ -227,8 +229,10 @@ _STEPS = (
         "summary": "The rules, the policy, and the formula are on one page.",
         "notice": (
             "The rule set, the org policy, the clause check, and the cost formula "
-            "are here. Mappings stay draft. Nothing here certifies a vendor or "
-            "turns modeled hours into cash savings."
+            "are here. The monthly assessment rate is defined with the observed "
+            "figures. Authenticated effort and cash savings stay unmeasured. "
+            "Mappings stay draft. Nothing here certifies a vendor or turns "
+            "modeled hours into cash savings."
         ),
         "endpoint": "methodology.index",
         "view_args": {},

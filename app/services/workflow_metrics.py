@@ -8,25 +8,31 @@ event to the earliest ``decision_recorded`` event on the same risk. A shared
 timestamp is a measured span of zero seconds. That span is the time between
 writes.
 
+The monthly assessment rate counts current decision rows by ``decided_at``.
+It is a number only when those timestamps cover a full 30-day window. A
+shorter history stays unmeasured. The count is not scaled up, and it is not
+passed to the cost formula.
+
 Self-reported human handling time is the optional ``handling_minutes`` value
 on the current decision row. Self-reported rework time is the optional
 ``rework_minutes`` value on that same row. Self-reported manual touches are
 the optional ``manual_touches`` count on that same row. Self-reported
 handoffs are the optional ``handoffs`` count on that same row. Null stays
 out of each average. The four figures are not each other, they are not
-elapsed cycle time, and this module does not pass any of them to the cost
-formula.
+elapsed cycle time, they are not the monthly rate, and this module does not
+pass any of them to the cost formula.
 """
 
 import json
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from app.services.workflow_service import DISPOSITIONS
 
 
-DEFINITION_VERSION = "5"
+DEFINITION_VERSION = "6"
+MONTH_WINDOW_DAYS = 30
 
 RESIDUAL_TIERS = ("low", "moderate", "high", "critical", "undetermined")
 EVIDENCE_STATUSES = (
@@ -38,17 +44,20 @@ DISPOSITION_EVENT = "decision_recorded"
 
 COST_MAPPING = (
     "Observed assessment volume is a count of saved rows. It stays out of the "
-    "assessments-per-month assumption. Elapsed cycle time is a clock span between "
-    "workflow events. It stays out of the baseline and assisted handling-hour "
-    "assumptions. Self-reported handling minutes, self-reported rework "
-    "minutes, self-reported manual touches, and self-reported handoffs stay "
-    "out of that formula. The illustrative formula is unchanged."
+    "assessments-per-month assumption. The observed monthly assessment rate "
+    "counts current decisions in a covered 30-day window. It stays out of that "
+    "assumption too. Elapsed cycle time is a clock span between workflow events. "
+    "It stays out of the baseline and assisted handling-hour assumptions. "
+    "Self-reported handling minutes, self-reported rework minutes, "
+    "self-reported manual touches, and self-reported handoffs stay out of that "
+    "formula. The illustrative formula is unchanged."
 )
 UNMEASURED_SUMMARY = (
-    "A monthly assessment rate, authenticated effort, cash savings, and "
-    "avoided-incident value stay unmeasured. Self-reported handling minutes, "
-    "self-reported rework minutes, self-reported manual touches, and "
-    "self-reported handoffs are optional and are not cash savings."
+    "Authenticated effort, cash savings, and avoided-incident value stay "
+    "unmeasured. Self-reported handling minutes, self-reported rework minutes, "
+    "self-reported manual touches, and self-reported handoffs are optional and "
+    "are not cash savings. The monthly assessment rate is a separate count of "
+    "current decisions. It is not those fields."
 )
 CYCLE_DEFINITION = (
     "Elapsed seconds from the earliest intake_received event to the earliest "
@@ -65,7 +74,8 @@ HANDLING_DEFINITION = (
     "median is the mean of the two middle values. The mean is rounded half up to "
     "two decimal places. These minutes are not elapsed cycle time, they are not "
     "rework minutes, they are not a manual-touch count, they are not a handoff "
-    "count, they are not authenticated, and they are not copied into the cost formula."
+    "count, they are not the monthly assessment rate, they are not authenticated, "
+    "and they are not copied into the cost formula."
 )
 REWORK_DEFINITION = (
     "Self-reported whole minutes of rework on the current decision row. Rework is "
@@ -74,7 +84,8 @@ REWORK_DEFINITION = (
     "the mean of the two middle values. The mean is rounded half up to two decimal "
     "places. These minutes are not elapsed cycle time, they are not handling minutes, "
     "they are not a manual-touch count, they are not a handoff count, they are not "
-    "authenticated, and they are not copied into the cost formula."
+    "the monthly assessment rate, they are not authenticated, and they are not "
+    "copied into the cost formula."
 )
 MANUAL_TOUCHES_DEFINITION = (
     "Self-reported whole-number count of human touchpoints on the current decision "
@@ -83,7 +94,8 @@ MANUAL_TOUCHES_DEFINITION = (
     "median. For an even count, the median is the mean of the two middle values. The "
     "mean is rounded half up to two decimal places. This count is not elapsed cycle "
     "time, it is not handling minutes, it is not rework minutes, it is not a "
-    "handoff count, it is not authenticated, and it is not copied into the cost formula."
+    "handoff count, it is not the monthly assessment rate, it is not authenticated, "
+    "and it is not copied into the cost formula."
 )
 HANDOFFS_DEFINITION = (
     "Self-reported whole-number count of times the assessment was handed between "
@@ -92,23 +104,42 @@ HANDOFFS_DEFINITION = (
     "count, the median is the mean of the two middle values. The mean is rounded "
     "half up to two decimal places. This count is not elapsed cycle time, it is "
     "not handling minutes, it is not rework minutes, it is not a manual-touch "
-    "count, it is not authenticated, and it is not copied into the cost formula."
+    "count, it is not the monthly assessment rate, it is not authenticated, and "
+    "it is not copied into the cost formula."
+)
+RATE_DEFINITION = (
+    "Monthly assessment rate is the count of current decision rows whose decided_at "
+    "timestamp falls in the closed 30-day window ending at the latest readable "
+    "decided_at. The register shows a number only when the earliest readable "
+    "decided_at is at least 30 days before that latest timestamp, so the window is "
+    "covered. An empty register, a decision with no readable timestamp, a single "
+    "timestamp, and any shorter span stay Not measured. The count is not divided "
+    "into a partial month and is not scaled up. One current row per saved risk is "
+    "counted. An older decision_recorded event is not counted. An unsaved public "
+    "try is not counted. Saved assessments with no decision row are not counted. "
+    "A timestamp with no offset is read as UTC. The window is anchored to the "
+    "stored timestamps, not to the clock when the page is opened. This rate is not "
+    "handling minutes, not rework minutes, not a manual-touch count, not a handoff "
+    "count, not elapsed cycle time, and it is not copied into the cost formula."
 )
 NOT_MEASURED = (
     {
-        "id": "monthly_assessment_rate",
-        "label": "Monthly assessment rate",
-        "detail": "Saved rows are a count. The register does not assign them to a reporting month.",
-    },
-    {
         "id": "authenticated_effort",
         "label": "Authenticated effort",
-        "detail": "Self-reported minutes, self-reported manual touches, and self-reported handoffs are not checked against an identity system or a timesheet.",
+        "detail": (
+            "Self-reported minutes, self-reported manual touches, and self-reported "
+            "handoffs are not checked against an identity system or a timesheet. "
+            "The monthly assessment rate is a count of stored decision timestamps. "
+            "It is not authenticated effort."
+        ),
     },
     {
         "id": "cash_savings",
         "label": "Cash savings",
-        "detail": "The register stores no spending reduction. Elapsed time is not converted into money.",
+        "detail": (
+            "The register stores no spending reduction. Elapsed time and the monthly "
+            "assessment rate are not converted into money."
+        ),
     },
     {
         "id": "avoided_incident_value",
@@ -127,7 +158,9 @@ def observed_metrics(db):
         "SELECT status FROM remediation_actions"
     ).fetchall()]
     decisions = [dict(row) for row in db.execute(
-        "SELECT risk_id, disposition, handling_minutes, rework_minutes, manual_touches, handoffs FROM decisions"
+        """SELECT risk_id, disposition, decided_at, handling_minutes, rework_minutes,
+                  manual_touches, handoffs
+           FROM decisions"""
     ).fetchall()]
     events = [dict(row) for row in db.execute(
         """SELECT risk_id, event_type, occurred_at
@@ -144,7 +177,9 @@ def summarize_register(risks, actions, decisions, events):
 
     ``events`` may include every workflow event. Only ``intake_received`` and
     ``decision_recorded`` affect cycle time. The earliest timestamp wins when
-    a risk has more than one event of the same type.
+    a risk has more than one event of the same type. The monthly assessment
+    rate uses ``decided_at`` on the current decision rows. It does not read
+    the event log.
     """
     rationale_by_risk = {}
     general_intake = 0
@@ -288,6 +323,7 @@ def summarize_register(risks, actions, decisions, events):
             "Self-reported handoffs", HANDOFFS_DEFINITION,
             singular="handoff", plural="handoffs",
         ),
+        "monthly_assessment_rate": _monthly_assessment_rate(decisions),
     }
 
 
@@ -313,6 +349,16 @@ def format_whole_count(value, singular, plural):
 def format_handling_minutes(minutes):
     """Render a minute count with its unit. ``None`` stays ``None``."""
     return format_whole_count(minutes, "minute", "minutes")
+
+
+def format_monthly_rate(count):
+    """Render a covered-window count. ``None`` stays ``None``."""
+    if count is None:
+        return None
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        return None
+    unit = "assessment per 30 days" if count == 1 else "assessments per 30 days"
+    return f"{count} {unit}"
 
 
 def format_elapsed_seconds(seconds):
@@ -404,6 +450,15 @@ def _earliest(timestamps):
             return False, None
         moments.append(moment)
     return True, min(moments)
+
+
+def _as_utc(moment):
+    """Return ``moment`` in UTC. A naive value is read as UTC. ``None`` stays ``None``."""
+    if moment is None:
+        return None
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=timezone.utc)
+    return moment.astimezone(timezone.utc)
 
 
 def _parse_timestamp(value):
@@ -521,6 +576,156 @@ def _self_reported_block(decisions, field, label, definition, singular="minute",
         "authenticated": False,
         **labeled,
     }
+
+
+def _monthly_assessment_rate(decisions):
+    """Count current decisions in a covered 30-day window.
+
+    The window ends at the latest readable ``decided_at`` and includes that
+    instant and the instant 30 days earlier. The rate is that count only when
+    the earliest readable timestamp is at least 30 days earlier. A shorter
+    span stays unmeasured. The count is not scaled up. Workflow events are
+    not an input.
+    """
+    readable = []
+    unreadable = 0
+    for decision in decisions:
+        raw = decision.get("decided_at") if isinstance(decision, dict) else None
+        moment = _as_utc(_parse_timestamp(raw))
+        if moment is None:
+            unreadable += 1
+            continue
+        readable.append((moment, raw.strip()))
+    base = {
+        "kind": "observed_rate",
+        "label": "Monthly assessment rate",
+        "definition": RATE_DEFINITION,
+        "feeds_cost_model": False,
+        "window_days": MONTH_WINDOW_DAYS,
+        "measured": False,
+        "rate": None,
+        "rate_label": None,
+        "counted": None,
+        "readable_count": len(readable),
+        "unreadable_count": unreadable,
+        "outside_window_count": None,
+        "earliest": None,
+        "latest": None,
+        "reason": None,
+        "detail": "",
+    }
+    if not decisions:
+        base["reason"] = "no_decisions"
+        base["detail"] = _rate_unmeasured_detail(base)
+        return base
+    if not readable:
+        base["reason"] = "no_readable_timestamp"
+        base["detail"] = _rate_unmeasured_detail(base)
+        return base
+    readable.sort(key=lambda item: item[0])
+    earliest_moment, earliest = readable[0]
+    latest_moment, latest = readable[-1]
+    base["earliest"] = earliest
+    base["latest"] = latest
+    window = timedelta(days=MONTH_WINDOW_DAYS)
+    start = latest_moment - window
+    if earliest_moment > start:
+        base["reason"] = "insufficient_history"
+        base["detail"] = _rate_unmeasured_detail(base)
+        return base
+    counted = sum(1 for moment, _stored in readable if start <= moment <= latest_moment)
+    outside = sum(1 for moment, _stored in readable if moment < start)
+    if counted < 1:
+        base["reason"] = "insufficient_history"
+        base["detail"] = _rate_unmeasured_detail(base)
+        return base
+    base.update({
+        "measured": True,
+        "rate": counted,
+        "rate_label": format_monthly_rate(counted),
+        "counted": counted,
+        "outside_window_count": outside,
+        "reason": None,
+    })
+    base["detail"] = _rate_measured_detail(base)
+    return base
+
+
+def _rate_closer():
+    return (
+        "This is not handling minutes, not rework minutes, not manual touches, "
+        "not handoffs, not elapsed cycle time, and not an input to the cost model."
+    )
+
+
+def _rate_unmeasured_detail(rate):
+    reason = rate["reason"]
+    if reason == "no_decisions":
+        lead = (
+            "No current decision is stored. Saved assessments without a decision "
+            "are not a monthly rate."
+        )
+    elif reason == "no_readable_timestamp":
+        count = rate["unreadable_count"]
+        noun = "current decision has" if count == 1 else "current decisions have"
+        lead = (
+            f"{count} {noun} no readable decided_at timestamp. "
+            "The monthly rate is not measured."
+        )
+    else:
+        count = rate["readable_count"]
+        if count == 1:
+            lead = (
+                f"1 current decision has a readable timestamp ({rate['latest']}). "
+                "One timestamp does not cover 30 days, so the monthly rate is not measured. "
+                "The count is not scaled up to a month."
+            )
+        else:
+            lead = (
+                f"{count} current decisions have a readable timestamp. "
+                f"The earliest is {rate['earliest']} and the latest is {rate['latest']}. "
+                "Those timestamps span less than 30 days, so the monthly rate is not measured. "
+                "The count is not scaled up to a month."
+            )
+    return f"{lead} {_rate_closer()}"
+
+
+def _rate_measured_detail(rate):
+    count = rate["rate"]
+    noun = "current decision" if count == 1 else "current decisions"
+    parts = [
+        (
+            f"{rate['rate_label']} from {count} {noun} whose decided_at falls in the "
+            f"30 days ending at {rate['latest']}."
+        ),
+        (
+            f"The earliest readable timestamp is {rate['earliest']}, so this register "
+            "covers that window."
+        ),
+    ]
+    outside = rate["outside_window_count"]
+    if outside == 1:
+        parts.append("1 earlier current decision falls outside that window and is not in this rate.")
+    elif outside:
+        parts.append(
+            f"{outside} earlier current decisions fall outside that window and are not in this rate."
+        )
+    else:
+        parts.append("No readable current decision falls outside that window.")
+    unreadable = rate["unreadable_count"]
+    if unreadable == 1:
+        parts.append("1 current decision has no readable timestamp and is not in this rate.")
+    elif unreadable:
+        parts.append(
+            f"{unreadable} current decisions have no readable timestamp and are not in this rate."
+        )
+    parts.append(
+        "This count uses the current decision row. An older decision event is not counted. "
+        "It is not handling minutes, not rework minutes, not manual touches, not handoffs, "
+        "not elapsed cycle time, and not an input to the cost model. "
+        "It is not the modeled assessments-per-month assumption."
+    )
+    return " ".join(parts)
 
 
 def _count_statistics(values):
