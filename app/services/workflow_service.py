@@ -33,6 +33,10 @@ HANDLING_MINUTES_RULE = _minutes_rule("handling_minutes")
 REWORK_MINUTES_RULE = _minutes_rule("rework_minutes")
 MANUAL_TOUCHES_RULE = _whole_number_rule("manual_touches", "touches")
 HANDOFFS_RULE = _whole_number_rule("handoffs", "handoffs")
+AUTHENTICATED_EFFORT_RULE = _minutes_rule("authenticated_effort_minutes")
+AUTHENTICATED_EFFORT_GATE = (
+    "authenticated_effort_minutes is recorded only for a signed-in reviewer"
+)
 
 
 def _now():
@@ -162,6 +166,8 @@ def register_intake(db, result, decision, *, commit=True):
         decision.get("rework_minutes"),
         decision.get("manual_touches"),
         decision.get("handoffs"),
+        decision.get("authenticated_effort_minutes"),
+        accept_authenticated_effort=bool(decision.get("accept_authenticated_effort")),
     )
     if problems:
         raise WorkflowInputError("; ".join(problems))
@@ -353,6 +359,18 @@ def parse_handoffs(value):
     return parse_optional_whole_number(value, "handoffs", "handoffs")
 
 
+def parse_authenticated_effort_minutes(value):
+    """Return ``(problems, minutes)`` for optional signed-in effort minutes.
+
+    The number is what a signed-in reviewer entered for time spent on this
+    disposition. Blank and null mean it was not reported. It is not a session
+    timer, not self-reported handling time, not elapsed cycle time, and not
+    an input to the cost formula. This parser does not check the password
+    gate. The caller does.
+    """
+    return parse_optional_minutes(value, "authenticated_effort_minutes")
+
+
 def _required_text(value, label, limit):
     if not isinstance(value, str):
         return None, f"{label} must contain 1 to {limit} characters"
@@ -364,7 +382,8 @@ def _required_text(value, label, limit):
 
 def decision_problems(evaluation, disposition, rationale, decider, conditions="",
                       exception_rationale="", handling_minutes=None, rework_minutes=None,
-                      manual_touches=None, handoffs=None):
+                      manual_touches=None, handoffs=None, authenticated_effort_minutes=None,
+                      *, accept_authenticated_effort=False):
     """Validate a human disposition against one engine result.
 
     Returns (problems, normalized). An empty problem list means normalized is
@@ -394,6 +413,17 @@ def decision_problems(evaluation, disposition, rationale, decider, conditions=""
     disposition. It is not handling minutes, not rework minutes, not a
     manual-touch count, not elapsed cycle time, and not an input to the cost
     formula.
+
+    ``authenticated_effort_minutes`` is optional and separate. It is stored
+    only when ``accept_authenticated_effort`` is true, which the signed-in
+    disposition route sets after the demo password gate. Omitted, null, and
+    blank then mean the reviewer did not report minutes. A reported value is
+    a non-negative whole number. A public try, an import save, and any other
+    caller that leaves the flag false cannot store a number. A blank from
+    those callers does not clear a number already stored. The minutes are not
+    a session timer, not handling minutes, not rework minutes, not a touch
+    count, not a handoff count, not elapsed cycle time, and not an input to
+    the cost formula.
     """
     problems = []
     if disposition not in DISPOSITIONS:
@@ -427,6 +457,17 @@ def decision_problems(evaluation, disposition, rationale, decider, conditions=""
     problems.extend(touch_problems)
     handoff_problems, handoff_count = parse_handoffs(handoffs)
     problems.extend(handoff_problems)
+    effort_problems, effort = parse_authenticated_effort_minutes(authenticated_effort_minutes)
+    problems.extend(effort_problems)
+    if accept_authenticated_effort:
+        keep_effort = False
+    elif effort is not None:
+        problems.append(AUTHENTICATED_EFFORT_GATE + ".")
+        keep_effort = True
+        effort = None
+    else:
+        keep_effort = True
+        effort = None
 
     evaluation = evaluation or {}
     policy = evaluation.get("policy") or {}
@@ -462,12 +503,15 @@ def decision_problems(evaluation, disposition, rationale, decider, conditions=""
         "rework_minutes": rework,
         "manual_touches": touches,
         "handoffs": handoff_count,
+        "authenticated_effort_minutes": effort,
+        "keep_authenticated_effort": keep_effort,
     }
 
 
 def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
                     exception_rationale="", handling_minutes=None, rework_minutes=None,
-                    manual_touches=None, handoffs=None):
+                    manual_touches=None, handoffs=None, authenticated_effort_minutes=None,
+                    *, accept_authenticated_effort=False):
     """Record the human disposition for one saved risk.
 
     A prohibited result can still be approved. The check cites the policy and
@@ -499,6 +543,12 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
     leave the handoff count unmeasured. A later save with a blank handoffs
     field clears a number that was stored before. An invalid value rejects
     the save and leaves the current row unchanged.
+
+    ``authenticated_effort_minutes`` is stored only when
+    ``accept_authenticated_effort`` is true. A signed-in save with a blank
+    field clears a number stored earlier. A save that is not signed in leaves
+    the column as it was. A number sent without that flag rejects the save
+    and leaves the current row unchanged.
     """
     risk = get_risk(db, risk_id)
     if risk is None:
@@ -507,6 +557,8 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
     problems, normalized = decision_problems(
         stored, disposition, rationale, decider, conditions, exception_rationale,
         handling_minutes, rework_minutes, manual_touches, handoffs,
+        authenticated_effort_minutes,
+        accept_authenticated_effort=accept_authenticated_effort,
     )
     if problems:
         raise WorkflowInputError("; ".join(problems))
@@ -518,13 +570,17 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
 def _save_decision_row(db, risk_id, normalized, existing):
     """Write one decision row and its workflow event. Does not commit."""
     now = _now()
+    if normalized["keep_authenticated_effort"] and existing:
+        effort = existing.get("authenticated_effort_minutes")
+    else:
+        effort = normalized["authenticated_effort_minutes"]
     values = (
         normalized["disposition"], normalized["conditions"], normalized["rationale"],
         normalized["exception_rationale"], normalized["decider"], normalized["policy_id"],
         normalized["policy_version"], normalized["rule_set_version"],
         normalized["prohibited_at_decision"], now, normalized["handling_minutes"],
         normalized["rework_minutes"], normalized["manual_touches"],
-        normalized["handoffs"], risk_id,
+        normalized["handoffs"], effort, risk_id,
     )
     if existing:
         db.execute(
@@ -532,7 +588,7 @@ def _save_decision_row(db, risk_id, normalized, existing):
                exception_rationale = ?, decider = ?, policy_id = ?, policy_version = ?,
                rule_set_version = ?, prohibited_at_decision = ?, decided_at = ?,
                handling_minutes = ?, rework_minutes = ?, manual_touches = ?,
-               handoffs = ?
+               handoffs = ?, authenticated_effort_minutes = ?
                WHERE risk_id = ?""",
             values,
         )
@@ -541,8 +597,9 @@ def _save_decision_row(db, risk_id, normalized, existing):
             """INSERT INTO decisions
             (disposition, conditions, rationale, exception_rationale, decider, policy_id,
              policy_version, rule_set_version, prohibited_at_decision, decided_at,
-             handling_minutes, rework_minutes, manual_touches, handoffs, risk_id)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+             handling_minutes, rework_minutes, manual_touches, handoffs,
+             authenticated_effort_minutes, risk_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             values,
         )
     detail = (f"{normalized['disposition']} by {normalized['decider']}. "
@@ -557,6 +614,8 @@ def _save_decision_row(db, risk_id, normalized, existing):
         detail += f" Self-reported manual touches: {normalized['manual_touches']}."
     if normalized["handoffs"] is not None:
         detail += f" Self-reported handoffs: {normalized['handoffs']}."
+    if not normalized["keep_authenticated_effort"] and effort is not None:
+        detail += f" Authenticated effort minutes: {effort}."
     if normalized["exception_rationale"]:
         detail += " Exception rationale recorded."
     if existing:

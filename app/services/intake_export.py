@@ -100,6 +100,26 @@ def _handoffs_line(count):
     )
 
 
+def _authenticated_effort_note(minutes):
+    if minutes is None:
+        return "Authenticated effort was not reported."
+    return (
+        "Minutes a signed-in reviewer entered for this disposition. Optional. "
+        "Not a session timer, not self-reported handling time, not elapsed cycle "
+        "time, and not an input to the cost model."
+    )
+
+
+def _authenticated_effort_line(minutes):
+    if minutes is None:
+        return "authenticated effort was not reported."
+    unit = "minute" if minutes == 1 else "minutes"
+    return (
+        f"{minutes} {unit} entered by a signed-in reviewer. "
+        "Not a session timer. Not self-reported handling time."
+    )
+
+
 def _decision_view(decision):
     if not decision:
         return None
@@ -122,6 +142,10 @@ def _decision_view(decision):
         "manual_touches_note": _manual_touches_note(decision.get("manual_touches")),
         "handoffs": decision.get("handoffs"),
         "handoffs_note": _handoffs_note(decision.get("handoffs")),
+        "authenticated_effort_minutes": decision.get("authenticated_effort_minutes"),
+        "authenticated_effort_note": _authenticated_effort_note(
+            decision.get("authenticated_effort_minutes"),
+        ),
     }
 
 
@@ -458,6 +482,9 @@ def render_markdown(package):
         lines.append(f"- Rework time: {_rework_time_line(decision.get('rework_minutes'))}")
         lines.append(f"- Manual touches: {_manual_touches_line(decision.get('manual_touches'))}")
         lines.append(f"- Handoffs: {_handoffs_line(decision.get('handoffs'))}")
+        lines.append(
+            f"- Authenticated effort: {_authenticated_effort_line(decision.get('authenticated_effort_minutes'))}"
+        )
     lines.extend(["", "End of package.", ""])
     return "\n".join(lines)
 

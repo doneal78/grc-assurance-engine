@@ -3,6 +3,7 @@
 from flask import Blueprint, Response, abort, redirect, render_template, request, url_for
 
 from app.db import get_db
+from app.services.demo_auth import request_is_signed_in
 from app.services.intake_export import package_from_saved_risk, render_export
 from app.services.walkthrough import carried_walk_step
 from app.services.workflow_service import (
@@ -62,6 +63,8 @@ def record_risk_decision(risk_id):
             request.form.get("conditions", ""), request.form.get("exception_rationale", ""),
             request.form.get("handling_minutes", ""), request.form.get("rework_minutes", ""),
             request.form.get("manual_touches", ""), request.form.get("handoffs", ""),
+            request.form.get("authenticated_effort_minutes"),
+            accept_authenticated_effort=request_is_signed_in(),
         )
     except WorkflowInputError as exc:
         risk = get_risk(get_db(), risk_id)
