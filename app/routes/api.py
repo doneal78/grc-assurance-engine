@@ -12,6 +12,7 @@ from app.db import get_db
 from app.services.bot_intake import (
     BotRequestError, assess_request_text, contract_document, error_document,
 )
+from app.services.demo_auth import request_is_signed_in
 
 bp = Blueprint("api", __name__, url_prefix="/api/v1")
 
@@ -34,7 +35,9 @@ def intake_assess():
     except UnicodeDecodeError:
         return _error("validation", ["The request body is not UTF-8 text."], 400)
     try:
-        document = assess_request_text(raw, db=get_db())
+        document = assess_request_text(
+            raw, db=get_db(), accept_authenticated_effort=request_is_signed_in(),
+        )
     except BotRequestError as exc:
         return _error("validation", exc.problems, 400)
     except Exception as exc:

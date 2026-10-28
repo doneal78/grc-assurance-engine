@@ -17,10 +17,12 @@ Self-reported human handling time is the optional ``handling_minutes`` value
 on the current decision row. Self-reported rework time is the optional
 ``rework_minutes`` value on that same row. Self-reported manual touches are
 the optional ``manual_touches`` count on that same row. Self-reported
-handoffs are the optional ``handoffs`` count on that same row. Null stays
-out of each average. The four figures are not each other, they are not
-elapsed cycle time, they are not the monthly rate, and this module does not
-pass any of them to the cost formula.
+handoffs are the optional ``handoffs`` count on that same row. Authenticated
+effort is the optional ``authenticated_effort_minutes`` value on that same
+row, stored only when a signed-in reviewer entered it. Null stays out of
+each average. These figures are not each other, they are not elapsed cycle
+time, they are not the monthly rate, and this module does not pass any of
+them to the cost formula.
 """
 
 import json
@@ -31,7 +33,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from app.services.workflow_service import DISPOSITIONS
 
 
-DEFINITION_VERSION = "6"
+DEFINITION_VERSION = "7"
 MONTH_WINDOW_DAYS = 30
 
 RESIDUAL_TIERS = ("low", "moderate", "high", "critical", "undetermined")
@@ -49,15 +51,16 @@ COST_MAPPING = (
     "assumption too. Elapsed cycle time is a clock span between workflow events. "
     "It stays out of the baseline and assisted handling-hour assumptions. "
     "Self-reported handling minutes, self-reported rework minutes, "
-    "self-reported manual touches, and self-reported handoffs stay out of that "
-    "formula. The illustrative formula is unchanged."
+    "self-reported manual touches, self-reported handoffs, and authenticated "
+    "effort minutes stay out of that formula. The illustrative formula is unchanged."
 )
 UNMEASURED_SUMMARY = (
-    "Authenticated effort, cash savings, and avoided-incident value stay "
-    "unmeasured. Self-reported handling minutes, self-reported rework minutes, "
-    "self-reported manual touches, and self-reported handoffs are optional and "
-    "are not cash savings. The monthly assessment rate is a separate count of "
-    "current decisions. It is not those fields."
+    "Cash savings and avoided-incident value stay unmeasured. Self-reported "
+    "handling minutes, self-reported rework minutes, self-reported manual "
+    "touches, and self-reported handoffs are optional and are not cash savings. "
+    "Authenticated effort is a separate optional minute count from a signed-in "
+    "reviewer. It is not those fields and it is not cash savings. The monthly "
+    "assessment rate is a separate count of current decisions. It is not those fields."
 )
 CYCLE_DEFINITION = (
     "Elapsed seconds from the earliest intake_received event to the earliest "
@@ -66,7 +69,8 @@ CYCLE_DEFINITION = (
     "Scenario rows without intake_received, rows without a disposition event, and "
     "rows with reversed or unreadable timestamps stay outside the average. "
     "Self-reported handling minutes, self-reported rework minutes, "
-    "self-reported manual touches, and self-reported handoffs are separate figures."
+    "self-reported manual touches, self-reported handoffs, and authenticated "
+    "effort minutes are separate figures."
 )
 HANDLING_DEFINITION = (
     "Self-reported whole minutes on the current decision row. Blank and null stay "
@@ -74,8 +78,8 @@ HANDLING_DEFINITION = (
     "median is the mean of the two middle values. The mean is rounded half up to "
     "two decimal places. These minutes are not elapsed cycle time, they are not "
     "rework minutes, they are not a manual-touch count, they are not a handoff "
-    "count, they are not the monthly assessment rate, they are not authenticated, "
-    "and they are not copied into the cost formula."
+    "count, they are not the monthly assessment rate, they are not authenticated "
+    "effort, and they are not copied into the cost formula."
 )
 REWORK_DEFINITION = (
     "Self-reported whole minutes of rework on the current decision row. Rework is "
@@ -84,8 +88,8 @@ REWORK_DEFINITION = (
     "the mean of the two middle values. The mean is rounded half up to two decimal "
     "places. These minutes are not elapsed cycle time, they are not handling minutes, "
     "they are not a manual-touch count, they are not a handoff count, they are not "
-    "the monthly assessment rate, they are not authenticated, and they are not "
-    "copied into the cost formula."
+    "the monthly assessment rate, they are not authenticated effort, and they are "
+    "not copied into the cost formula."
 )
 MANUAL_TOUCHES_DEFINITION = (
     "Self-reported whole-number count of human touchpoints on the current decision "
@@ -94,8 +98,8 @@ MANUAL_TOUCHES_DEFINITION = (
     "median. For an even count, the median is the mean of the two middle values. The "
     "mean is rounded half up to two decimal places. This count is not elapsed cycle "
     "time, it is not handling minutes, it is not rework minutes, it is not a "
-    "handoff count, it is not the monthly assessment rate, it is not authenticated, "
-    "and it is not copied into the cost formula."
+    "handoff count, it is not the monthly assessment rate, it is not authenticated "
+    "effort, and it is not copied into the cost formula."
 )
 HANDOFFS_DEFINITION = (
     "Self-reported whole-number count of times the assessment was handed between "
@@ -104,8 +108,20 @@ HANDOFFS_DEFINITION = (
     "count, the median is the mean of the two middle values. The mean is rounded "
     "half up to two decimal places. This count is not elapsed cycle time, it is "
     "not handling minutes, it is not rework minutes, it is not a manual-touch "
-    "count, it is not the monthly assessment rate, it is not authenticated, and "
-    "it is not copied into the cost formula."
+    "count, it is not the monthly assessment rate, it is not authenticated effort, "
+    "and it is not copied into the cost formula."
+)
+AUTHENTICATED_EFFORT_DEFINITION = (
+    "Optional whole minutes a signed-in reviewer entered on the current decision "
+    "row. Signed-in means the request passed the demo password gate. The "
+    "application does not time the session and does not read a timesheet. Blank "
+    "and null stay out of the average. The headline figure is the median. For an "
+    "even count, the median is the mean of the two middle values. The mean is "
+    "rounded half up to two decimal places. A public try or import save cannot "
+    "store this number. These minutes are not self-reported handling minutes, "
+    "they are not rework minutes, they are not a manual-touch count, they are "
+    "not a handoff count, they are not the monthly assessment rate, they are "
+    "not elapsed cycle time, and they are not copied into the cost formula."
 )
 RATE_DEFINITION = (
     "Monthly assessment rate is the count of current decision rows whose decided_at "
@@ -120,25 +136,17 @@ RATE_DEFINITION = (
     "A timestamp with no offset is read as UTC. The window is anchored to the "
     "stored timestamps, not to the clock when the page is opened. This rate is not "
     "handling minutes, not rework minutes, not a manual-touch count, not a handoff "
-    "count, not elapsed cycle time, and it is not copied into the cost formula."
+    "count, not elapsed cycle time, not authenticated effort, and it is not "
+    "copied into the cost formula."
 )
 NOT_MEASURED = (
-    {
-        "id": "authenticated_effort",
-        "label": "Authenticated effort",
-        "detail": (
-            "Self-reported minutes, self-reported manual touches, and self-reported "
-            "handoffs are not checked against an identity system or a timesheet. "
-            "The monthly assessment rate is a count of stored decision timestamps. "
-            "It is not authenticated effort."
-        ),
-    },
     {
         "id": "cash_savings",
         "label": "Cash savings",
         "detail": (
-            "The register stores no spending reduction. Elapsed time and the monthly "
-            "assessment rate are not converted into money."
+            "The register stores no spending reduction. Elapsed time, the monthly "
+            "assessment rate, and authenticated effort minutes are not converted "
+            "into money."
         ),
     },
     {
@@ -159,7 +167,7 @@ def observed_metrics(db):
     ).fetchall()]
     decisions = [dict(row) for row in db.execute(
         """SELECT risk_id, disposition, decided_at, handling_minutes, rework_minutes,
-                  manual_touches, handoffs
+                  manual_touches, handoffs, authenticated_effort_minutes
            FROM decisions"""
     ).fetchall()]
     events = [dict(row) for row in db.execute(
@@ -322,6 +330,12 @@ def summarize_register(risks, actions, decisions, events):
             decisions, "handoffs",
             "Self-reported handoffs", HANDOFFS_DEFINITION,
             singular="handoff", plural="handoffs",
+        ),
+        "authenticated_effort": _self_reported_block(
+            decisions, "authenticated_effort_minutes",
+            "Authenticated effort", AUTHENTICATED_EFFORT_DEFINITION,
+            kind="authenticated_effort",
+            authenticated=True,
         ),
         "monthly_assessment_rate": _monthly_assessment_rate(decisions),
     }
@@ -535,14 +549,17 @@ def _cycle_statistics(spans):
     }
 
 
-def _self_reported_block(decisions, field, label, definition, singular="minute", plural="minutes"):
+def _self_reported_block(decisions, field, label, definition, singular="minute", plural="minutes",
+                         kind="self_reported", authenticated=False):
     """Median of current decision rows that store a non-negative whole number.
 
     Null, a missing key, and any value that is not a non-negative int stay
     out of the average. A stored zero is a reported zero and is included.
-    Handling minutes, rework minutes, manual touches, and handoffs each use
-    this rule on their own field. ``plural`` names the statistic keys, such
-    as minutes, touches, or handoffs.
+    Handling minutes, rework minutes, manual touches, handoffs, and
+    authenticated effort each use this rule on their own field. ``plural``
+    names the statistic keys, such as minutes, touches, or handoffs. Nothing
+    here scales a partial set up to a full set or fills a blank with another
+    field's number.
     """
     values = []
     unmeasured = 0
@@ -568,12 +585,12 @@ def _self_reported_block(decisions, field, label, definition, singular="minute",
         "total_label": format_whole_count(stats["total"], singular, plural) or f"0 {plural}",
     }
     return {
-        "kind": "self_reported",
+        "kind": kind,
         "label": label,
         "unit": plural,
         "definition": definition,
         "feeds_cost_model": False,
-        "authenticated": False,
+        "authenticated": authenticated,
         **labeled,
     }
 
@@ -654,7 +671,8 @@ def _monthly_assessment_rate(decisions):
 def _rate_closer():
     return (
         "This is not handling minutes, not rework minutes, not manual touches, "
-        "not handoffs, not elapsed cycle time, and not an input to the cost model."
+        "not handoffs, not authenticated effort, not elapsed cycle time, and not "
+        "an input to the cost model."
     )
 
 
@@ -722,7 +740,7 @@ def _rate_measured_detail(rate):
     parts.append(
         "This count uses the current decision row. An older decision event is not counted. "
         "It is not handling minutes, not rework minutes, not manual touches, not handoffs, "
-        "not elapsed cycle time, and not an input to the cost model. "
+        "not authenticated effort, not elapsed cycle time, and not an input to the cost model. "
         "It is not the modeled assessments-per-month assumption."
     )
     return " ".join(parts)

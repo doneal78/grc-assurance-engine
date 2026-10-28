@@ -34,6 +34,7 @@ def test_cost_formula_does_not_read_handling_minutes():
     assert "manual_touches" not in REQUIRED_NUMERIC
     assert "handoffs" not in REQUIRED_NUMERIC
     assert "monthly_assessment_rate" not in REQUIRED_NUMERIC
+    assert "authenticated_effort_minutes" not in REQUIRED_NUMERIC
     assert "decided_at" not in REQUIRED_NUMERIC
     result = calculate_cost()
     assert result["net_capacity_value"] == 180
@@ -44,6 +45,7 @@ def test_cost_formula_does_not_read_handling_minutes():
     assert "manual_touches" not in result
     assert "handoffs" not in result
     assert "monthly_assessment_rate" not in result
+    assert "authenticated_effort_minutes" not in result
     assumptions = load_assumptions()
     assert assumptions["assessments_per_month"] == 20
     assert "rework_minutes" not in assumptions
@@ -51,6 +53,7 @@ def test_cost_formula_does_not_read_handling_minutes():
     assert "manual_touches" not in assumptions
     assert "handoffs" not in assumptions
     assert "monthly_assessment_rate" not in assumptions
+    assert "authenticated_effort_minutes" not in assumptions
     assert "decided_at" not in assumptions
 
 

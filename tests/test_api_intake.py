@@ -594,6 +594,63 @@ def test_optional_handoffs_persist_or_reject_without_saving(client):
     assert "Reported Handoffs" in _risk_names(client)
 
 
+def test_authenticated_effort_requires_a_signed_in_request(client, gated_app):
+    import base64
+
+    refused = client.post("/api/v1/intake/assess", json=payload(persist=True, decision={
+        "disposition": "escalate",
+        "rationale": "An unsigned request must not store this.",
+        "decider": "GRC analyst",
+        "handling_minutes": 8,
+        "authenticated_effort_minutes": 15,
+    }))
+    assert refused.status_code == 400
+    assert refused.get_json()["persisted"] is False
+    assert any("signed-in" in problem for problem in refused.get_json()["problems"])
+    assert _risk_names(client) == []
+
+    omitted = client.post("/api/v1/intake/assess", json=payload(persist=True, decision={
+        "disposition": "escalate",
+        "rationale": "Low residual tier is not an approval.",
+        "decider": "GRC analyst",
+        "handling_minutes": 8,
+    }))
+    assert omitted.status_code == 200
+    assert omitted.get_json()["decision"]["handling_minutes"] == 8
+    assert omitted.get_json()["decision"]["authenticated_effort_minutes"] is None
+
+    login = {"Authorization": "Basic " + base64.b64encode(b"demo:correct horse battery staple").decode()}
+    gated = gated_app.test_client()
+    stored = gated.post("/api/v1/intake/assess", json=payload(
+        form=form(vendor_name="Signed In Effort"),
+        persist=True,
+        decision={
+            "disposition": "escalate",
+            "rationale": "Minutes entered after the password gate.",
+            "decider": "GRC analyst",
+            "handling_minutes": 8,
+            "authenticated_effort_minutes": 15,
+        },
+    ), headers=login)
+    assert stored.status_code == 200
+    body = stored.get_json()
+    assert body["decision"]["handling_minutes"] == 8
+    assert body["decision"]["authenticated_effort_minutes"] == 15
+    assert body["decision"]["authenticated_effort_minutes"] != body["decision"]["handling_minutes"]
+    blank = gated.post("/api/v1/intake/assess", json=payload(
+        form=form(vendor_name="Signed In Blank Effort"),
+        persist=True,
+        decision={
+            "disposition": "reject",
+            "rationale": "Blank stays unmeasured.",
+            "decider": "GRC analyst",
+            "authenticated_effort_minutes": None,
+        },
+    ), headers=login)
+    assert blank.status_code == 200
+    assert blank.get_json()["decision"]["authenticated_effort_minutes"] is None
+
+
 def test_cross_site_persist_is_rejected(client):
     response = client.post(
         "/api/v1/intake/assess",

@@ -99,7 +99,9 @@ def _decision(db, risk_id, **overrides):
     return record_decision(db, risk_id, payload["disposition"], payload["rationale"],
                            payload["decider"], payload["conditions"], payload["exception_rationale"],
                            payload.get("handling_minutes"), payload.get("rework_minutes"),
-                           payload.get("manual_touches"), payload.get("handoffs"))
+                           payload.get("manual_touches"), payload.get("handoffs"),
+                           payload.get("authenticated_effort_minutes"),
+                           accept_authenticated_effort=payload.get("accept_authenticated_effort", False))
 
 
 def test_decision_copies_policy_and_rule_set_from_the_assessment(db):
@@ -799,3 +801,85 @@ def test_existing_decision_gains_a_null_handoffs_column(tmp_path):
     connection.close()
     assert "handoffs" in columns
     assert row == ("reject", 12, 4, 3, None)
+
+
+def test_authenticated_effort_is_stored_only_for_an_accepted_signed_in_value(db):
+    from app.services.workflow_service import WorkflowInputError
+
+    risk_id = register_scenario(db, run_scenario("evidence-supported"))
+    assert _decision(
+        db, risk_id, authenticated_effort_minutes=40, accept_authenticated_effort=True,
+    ) == risk_id
+    decision = get_risk(db, risk_id)["decision"]
+    assert decision["authenticated_effort_minutes"] == 40
+    assert decision["handling_minutes"] is None
+    assert "Authenticated effort minutes: 40." in get_risk(db, risk_id)["events"][-1]["detail"]
+
+    assert _decision(db, risk_id, disposition="reject", rationale="Replaced without a login.") == risk_id
+    kept = get_risk(db, risk_id)["decision"]
+    assert kept["disposition"] == "reject"
+    assert kept["authenticated_effort_minutes"] == 40
+    assert "Authenticated effort minutes" not in get_risk(db, risk_id)["events"][-1]["detail"]
+
+    assert _decision(
+        db, risk_id, authenticated_effort_minutes="", accept_authenticated_effort=True,
+    ) == risk_id
+    assert get_risk(db, risk_id)["decision"]["authenticated_effort_minutes"] is None
+
+    with pytest.raises(WorkflowInputError, match="signed-in"):
+        _decision(db, risk_id, authenticated_effort_minutes=9)
+    assert get_risk(db, risk_id)["decision"]["authenticated_effort_minutes"] is None
+    assert get_risk(db, risk_id)["decision"]["disposition"] == "approve"
+
+    with pytest.raises(WorkflowInputError, match="authenticated_effort_minutes"):
+        _decision(db, risk_id, authenticated_effort_minutes="1.5", accept_authenticated_effort=True)
+    assert get_risk(db, risk_id)["decision"]["disposition"] == "approve"
+
+    assert _decision(
+        db, risk_id, authenticated_effort_minutes=0, accept_authenticated_effort=True,
+    ) == risk_id
+    assert get_risk(db, risk_id)["decision"]["authenticated_effort_minutes"] == 0
+
+    saved = _save_intake(db)
+    assert get_risk(db, saved)["decision"]["authenticated_effort_minutes"] is None
+    with pytest.raises(WorkflowInputError, match="signed-in"):
+        _save_intake(db, authenticated_effort_minutes=5)
+    assert len(list_risks(db)) == 2
+
+
+def test_existing_decision_gains_a_null_authenticated_effort_column(tmp_path):
+    from app import create_app
+    import sqlite3
+
+    path = tmp_path / "effort.sqlite3"
+    schema = Path("app/schema.sql").read_text(encoding="utf-8").replace(
+        ",\n    authenticated_effort_minutes INTEGER", "",
+    )
+    connection = sqlite3.connect(path)
+    connection.executescript(schema)
+    connection.execute(
+        """INSERT INTO risks
+        (risk_id, scenario_id, scenario_name, risk_statement, inherent_tier, residual_tier,
+         rationale_json, created_at, policy_id, policy_version, policy_outcome)
+        VALUES ('R-OLD', 'legacy-effort', 'Legacy', 'Synthetic statement', 'low', 'low', '{}',
+                '2026-10-01T00:00:00+00:00', 'ORG-AI-USE', '1.1.0', 'not_prohibited')"""
+    )
+    connection.execute(
+        """INSERT INTO decisions
+        (risk_id, disposition, rationale, decider, policy_id, policy_version, rule_set_version,
+         prohibited_at_decision, decided_at, handling_minutes, rework_minutes, manual_touches, handoffs)
+        VALUES ('R-OLD', 'escalate', 'Kept.', 'Reviewer', 'ORG-AI-USE', '1.1.0', '0.3.0',
+                'not_prohibited', '2026-10-01T00:00:00+00:00', 12, 4, 3, 1)"""
+    )
+    connection.commit()
+    connection.close()
+    create_app({"TESTING": True, "DATABASE": str(path), "REQUIRE_AUTH": False})
+    connection = sqlite3.connect(path)
+    columns = [row[1] for row in connection.execute("PRAGMA table_info(decisions)")]
+    row = connection.execute(
+        """SELECT disposition, handling_minutes, handoffs, authenticated_effort_minutes
+           FROM decisions WHERE risk_id = 'R-OLD'"""
+    ).fetchone()
+    connection.close()
+    assert "authenticated_effort_minutes" in columns
+    assert row == ("escalate", 12, 1, None)

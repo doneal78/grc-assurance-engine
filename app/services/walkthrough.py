@@ -15,7 +15,7 @@ The decision stop succeeds when that saved risk has a recorded decision.
 
 from copy import deepcopy
 
-WALKTHROUGH_VERSION = "1.2.2"
+WALKTHROUGH_VERSION = "1.2.3"
 WALK_COOKIE = "walk_step"
 WALK_QUERY = "walk"
 COOKIE_MAX_AGE = 12 * 60 * 60
@@ -218,7 +218,10 @@ _STEPS = (
             "only when a decision includes them. The monthly assessment rate "
             "counts current decisions in a 30-day window only when those "
             "timestamps cover at least 30 days. A shorter history says Not "
-            "measured. The cost panel is modeled labor capacity, not cash savings."
+            "measured. Authenticated effort is a separate card. It is the median "
+            "of optional minutes a signed-in reviewer entered. With no reported "
+            "minutes it says Not measured. The cost panel is modeled labor "
+            "capacity, not cash savings."
         ),
         "endpoint": "dashboard.index",
         "view_args": {},
@@ -229,8 +232,9 @@ _STEPS = (
         "summary": "The rules, the policy, and the formula are on one page.",
         "notice": (
             "The rule set, the org policy, the clause check, and the cost formula "
-            "are here. The monthly assessment rate is defined with the observed "
-            "figures. Authenticated effort and cash savings stay unmeasured. "
+            "are here. The monthly assessment rate and authenticated effort are "
+            "defined with the observed figures. Authenticated effort is optional "
+            "minutes a signed-in reviewer entered. Cash savings stay unmeasured. "
             "Mappings stay draft. Nothing here certifies a vendor or turns "
             "modeled hours into cash savings."
         ),

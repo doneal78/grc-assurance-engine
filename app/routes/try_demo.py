@@ -212,7 +212,12 @@ def _import_result(imported, document, save_error=None, status=200):
 
 
 def _decision_from_form(form):
-    return {
+    """Read the public import disposition. It does not collect authenticated effort.
+
+    A crafted non-blank value is passed through so the decision rules reject
+    it instead of storing it. A blank is omitted and stays unmeasured.
+    """
+    decision = {
         "disposition": form.get("disposition", ""),
         "rationale": form.get("rationale", ""),
         "decider": form.get("decider", ""),
@@ -223,6 +228,11 @@ def _decision_from_form(form):
         "manual_touches": form.get("manual_touches", ""),
         "handoffs": form.get("handoffs", ""),
     }
+    posted_effort = form.get("authenticated_effort_minutes")
+    if posted_effort not in (None, ""):
+        decision["authenticated_effort_minutes"] = posted_effort
+        decision["accept_authenticated_effort"] = False
+    return decision
 
 
 @bp.post("/import/save")

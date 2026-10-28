@@ -23,8 +23,9 @@ from app.services.intake_questionnaire import load_questionnaire
 from app.services.org_policy import load_org_policy
 from app.services.risk_engine import load_rules
 from app.services.workflow_service import (
-    DISPOSITION_RULE, DISPOSITIONS, WorkflowInputError, decision_problems, get_risk,
-    parse_handling_minutes, parse_handoffs, parse_manual_touches, parse_rework_minutes, register_intake,
+    AUTHENTICATED_EFFORT_GATE, DISPOSITION_RULE, DISPOSITIONS, WorkflowInputError,
+    decision_problems, get_risk, parse_authenticated_effort_minutes, parse_handling_minutes,
+    parse_handoffs, parse_manual_touches, parse_rework_minutes, register_intake,
 )
 
 CONTRACT_VERSION = "1.0.0"
@@ -39,6 +40,7 @@ _REQUEST_KEYS = {"form", "as_of", "contract_version", "persist", "decision"}
 _DECISION_KEYS = {
     "disposition", "rationale", "decider", "conditions", "exception_rationale",
     "handling_minutes", "rework_minutes", "manual_touches", "handoffs",
+    "authenticated_effort_minutes",
 }
 
 LIMITATIONS = (
@@ -50,6 +52,7 @@ LIMITATIONS = (
     "rework_minutes on a decision is optional and self-reported. It is time spent redoing work after a first pass. It is not handling minutes, not a timer, not authenticated effort, not elapsed cycle time, and not an input to the cost model.",
     "manual_touches on a decision is optional and self-reported. It is a count of human touchpoints on that assessment. It is not handling minutes, not rework minutes, not a timer, not authenticated effort, not elapsed cycle time, and not an input to the cost model.",
     "handoffs on a decision is optional and self-reported. It is a count of times the assessment was handed between people or queues before disposition. It is not handling minutes, not rework minutes, not manual touches, not a timer, not authenticated effort, not elapsed cycle time, and not an input to the cost model.",
+    "authenticated_effort_minutes on a decision is optional minutes a signed-in reviewer entered. The HTTP API stores a number only when the request passed the demo password gate. The CLI has no signed-in session and does not store it. Omit, null, or blank leaves it unmeasured. It is not a session timer, not handling minutes, not rework minutes, not manual touches, not handoffs, not elapsed cycle time, and not an input to the cost model.",
     "A trust-center URL is stored as pasted text unless fetch_trust_center is yes. A fetch is one HTTP GET of vendor-published material for human review. It is not verified evidence and it does not approve the vendor. File import does not fetch.",
     "A ServiceNow-shaped file is simulated input. This contract does not call ServiceNow.",
     "No external AI model scores or approves the vendor.",
@@ -146,7 +149,11 @@ def contract_document():
                 "handling time and it is not rework time. "
                 "handoffs is optional and separate. Omit it, null, or a blank string to leave "
                 "the handoff count unmeasured. The same whole-number rules apply. It is not "
-                "handling time, rework time, or a manual-touch count."
+                "handling time, rework time, or a manual-touch count. "
+                "authenticated_effort_minutes is optional and separate. Omit it, null, or a "
+                "blank string to leave it unmeasured. A number is stored only when this HTTP "
+                "request passed the demo password gate. The CLI does not store it. It is not "
+                "handling time, rework time, a manual-touch count, or a handoff count."
             ),
         },
         "dispositions": list(DISPOSITIONS),
@@ -193,19 +200,26 @@ def load_json_object(text):
     return payload
 
 
-def assess_request_text(text, db=None, *, open_url=None, resolver=None):
+def assess_request_text(text, db=None, *, open_url=None, resolver=None,
+                        accept_authenticated_effort=False):
     """Parse a JSON request body and return one assessment document."""
-    return assess_request(load_json_object(text), db=db, open_url=open_url, resolver=resolver)
+    return assess_request(
+        load_json_object(text), db=db, open_url=open_url, resolver=resolver,
+        accept_authenticated_effort=accept_authenticated_effort,
+    )
 
 
-def assess_request(payload, db=None, *, open_url=None, resolver=None):
+def assess_request(payload, db=None, *, open_url=None, resolver=None,
+                   accept_authenticated_effort=False):
     """Validate one assess request and run it through intake.
 
     persist defaults to false. A true value writes the synthetic vendor and
     the human decision. A false value never writes, even if a decision object
     was sent by mistake: that combination is rejected so it cannot look saved.
     """
-    form, as_of, persist, decision = parse_assess_request(payload)
+    form, as_of, persist, decision = parse_assess_request(
+        payload, accept_authenticated_effort=accept_authenticated_effort,
+    )
     try:
         intake = build_intake(form, as_of, open_url=open_url, resolver=resolver)
     except IntakeError as exc:
@@ -224,7 +238,7 @@ def assess_request(payload, db=None, *, open_url=None, resolver=None):
     return assessment_from_result(result, saved=get_risk(db, risk_id))
 
 
-def parse_assess_request(payload):
+def parse_assess_request(payload, *, accept_authenticated_effort=False):
     """Return (form, as_of, persist, decision). Structural problems are raised before scoring."""
     problems = []
     if not isinstance(payload, dict):
@@ -240,7 +254,9 @@ def parse_assess_request(payload):
     if "contract_version" in payload and payload["contract_version"] != CONTRACT_VERSION:
         problems.append(f"contract_version must be {CONTRACT_VERSION}.")
 
-    persist, decision, persist_problems = _parse_persist(payload)
+    persist, decision, persist_problems = _parse_persist(
+        payload, accept_authenticated_effort=accept_authenticated_effort,
+    )
     problems.extend(persist_problems)
 
     form = payload.get("form")
@@ -434,7 +450,7 @@ def parse_cli_date(value):
     return parsed
 
 
-def _parse_persist(payload):
+def _parse_persist(payload, *, accept_authenticated_effort=False):
     """Return (persist, decision, problems). Missing persist means assess only."""
     problems = []
     if "persist" not in payload:
@@ -481,6 +497,18 @@ def _parse_persist(payload):
         cleaned["handoffs"] = handoff_count
     else:
         cleaned["handoffs"] = None
+    if "authenticated_effort_minutes" in decision:
+        effort_problems, effort = parse_authenticated_effort_minutes(
+            decision["authenticated_effort_minutes"],
+        )
+        problems.extend(effort_problems)
+        if effort is not None and not accept_authenticated_effort:
+            problems.append(AUTHENTICATED_EFFORT_GATE + ".")
+        cleaned["authenticated_effort_minutes"] = effort
+        cleaned["accept_authenticated_effort"] = bool(accept_authenticated_effort)
+    else:
+        cleaned["authenticated_effort_minutes"] = None
+        cleaned["accept_authenticated_effort"] = False
     for key in ("disposition", "rationale", "decider", "conditions", "exception_rationale"):
         if key not in decision:
             if key in {"disposition", "rationale", "decider"}:
@@ -513,6 +541,8 @@ def _require_decision(result, decision):
         decision.get("rework_minutes"),
         decision.get("manual_touches"),
         decision.get("handoffs"),
+        decision.get("authenticated_effort_minutes"),
+        accept_authenticated_effort=bool(decision.get("accept_authenticated_effort")),
     )
     if problems:
         raise BotRequestError(problems)
@@ -556,6 +586,7 @@ def _decision_document(decision):
         "rework_minutes": decision.get("rework_minutes"),
         "manual_touches": decision.get("manual_touches"),
         "handoffs": decision.get("handoffs"),
+        "authenticated_effort_minutes": decision.get("authenticated_effort_minutes"),
         "separate_from_score": True,
     }
 

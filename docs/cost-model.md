@@ -75,14 +75,15 @@ A same-transaction save can write `intake_received` and `decision_recorded` with
 | Self-reported rework minutes | The minutes would have to be authenticated rework hours, separate from handling time, and tied to one reporting month. They are an optional number on a decision. | The median stays on its own observed card. It is not copied into baseline hours, assisted hours, review hours, or maintenance hours. |
 | Self-reported manual touches | The count would have to be authenticated labor, separate from handling time and rework time, and tied to one reporting month. It is an optional number on a decision. | The median stays on its own observed card. It is not copied into baseline hours, assisted hours, review hours, or maintenance hours. |
 | Self-reported handoffs | The count would have to be authenticated labor, separate from handling time, rework time, and manual touches, and tied to one reporting month. It is an optional number on a decision. | The median stays on its own observed card. It is not copied into baseline hours, assisted hours, review hours, or maintenance hours. |
+| Authenticated effort minutes | The minutes would have to be labor hours in the formula, split into a baseline and an assisted handling time. They are an optional number a signed-in reviewer entered. | The median stays on its own observed card. It is not copied into baseline hours, assisted hours, review hours, or maintenance hours. |
 | Open remediation, evidence status, residual tier, dispositions | These are inventory counts. The formula takes hours and a labor rate. | They stay on the observed panel. |
 
 No second dollar figure is calculated from the register. Cash savings stay unmeasured. Hypothetical avoided incidents stay unmonetized. One-time development cost stays excluded.
 
 ## Still unmeasured
 
-- Authenticated effort tracking. The optional minutes, the optional touch count, and the optional handoff count are whatever the person typed. There is no identity check and no timesheet. The monthly assessment rate is a count of stored timestamps. It is not authenticated effort.
-- Cash savings. The monthly assessment rate is not converted into money.
+- Cash savings. The monthly assessment rate and authenticated effort minutes are not converted into money. Authenticated effort is an optional minute count on its own observed card. It is not this formula.
+- The four self-reported figures are still whatever a person typed. There is no timesheet for them. Authenticated effort is separate: a signed-in reviewer entered it, and the application still does not time the session.
 - Avoided-incident value
 
 The local event log can be edited. It is not a tamper-proof measurement store.

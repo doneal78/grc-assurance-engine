@@ -554,6 +554,8 @@ def test_import_save_stores_optional_handoffs_and_rejects_a_fraction(gated_clien
                                   headers=SAME_ORIGIN)
     assert b'name="handoffs"' in confirmed.data
     assert b'name="handoffs" required' not in confirmed.data
+    assert b'name="authenticated_effort_minutes"' not in confirmed.data
+    assert b"does not ask for authenticated effort" in confirmed.data
     row = document["rows"][0]
     fields = {
         "confirmation": json.dumps(document),

@@ -51,7 +51,8 @@ CREATE TABLE IF NOT EXISTS decisions (
     handling_minutes INTEGER,
     rework_minutes INTEGER,
     manual_touches INTEGER,
-    handoffs INTEGER
+    handoffs INTEGER,
+    authenticated_effort_minutes INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_actions_risk ON remediation_actions(risk_id);

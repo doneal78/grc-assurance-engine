@@ -85,7 +85,7 @@ def test_empty_database_reports_zeros_and_leaves_cycle_time_unmeasured():
     db = _db()
     metrics = observed_metrics(db)
     assert metrics["kind"] == "observed"
-    assert metrics["definition_version"] == "6"
+    assert metrics["definition_version"] == "7"
     assert metrics["feeds_cost_model"] is False
     assert "cash_savings" not in metrics
     assert "net_capacity_value" not in metrics
@@ -161,8 +161,18 @@ def test_empty_database_reports_zeros_and_leaves_cycle_time_unmeasured():
     assert "manual_touches" not in {item["id"] for item in metrics["not_measured"]}
     assert "handoffs" not in {item["id"] for item in metrics["not_measured"]}
     assert "monthly_assessment_rate" not in {item["id"] for item in metrics["not_measured"]}
-    assert "authenticated_effort" in {item["id"] for item in metrics["not_measured"]}
+    assert "authenticated_effort" not in {item["id"] for item in metrics["not_measured"]}
     assert "cash_savings" in {item["id"] for item in metrics["not_measured"]}
+    effort = metrics["authenticated_effort"]
+    assert effort["kind"] == "authenticated_effort"
+    assert effort["label"] == "Authenticated effort"
+    assert effort["recorded_count"] == 0
+    assert effort["unmeasured_decisions"] == 0
+    assert effort["median_minutes"] is None
+    assert effort["feeds_cost_model"] is False
+    assert effort["authenticated"] is True
+    assert "signed-in" in effort["definition"]
+    assert "not copied into the cost formula" in effort["definition"]
     assert _partition(metrics) == 0
     assert observed_metrics(db) == metrics
     db.close()
@@ -473,7 +483,8 @@ def test_methods_page_describes_self_reported_handling_time(client):
     assert "Self-reported handoffs are not inputs to this formula." in body
     assert "Rework minutes are not handling minutes." in body
     assert "Rework duration." not in body
-    assert "Authenticated effort." in body
+    assert "Authenticated effort is a separate optional number" in body
+    assert "<strong>Authenticated effort.</strong>" not in body
     assert "labor capacity, not cash savings" in body
     assert "stay out of these inputs" in body
     assert "Counted from the local register" in body
@@ -860,7 +871,9 @@ def test_dashboard_shows_handoffs_apart_from_touches_and_the_cost_panel(client, 
     assert "Not measured" in methods_observed
     assert "span less than 30 days" in methods_observed
     assert "<strong>Monthly assessment rate.</strong>" not in methods
-    assert "Authenticated effort." in methods
+    assert "AUTHENTICATED EFFORT" in methods_observed
+    assert "No saved decision includes authenticated effort." in methods_observed
+    assert "<strong>Authenticated effort.</strong>" not in methods
     assert "Cash savings." in methods
     assert "180.00" not in methods_observed
 
@@ -1112,12 +1125,130 @@ def test_dashboard_shows_the_monthly_rate_apart_from_self_reported_cards_and_cos
     assert calculate_cost() == before
     methods = client.get("/methodology").data.decode()
     methods_observed = _observed_section(methods)
-    assert "definition 6" in methods
+    assert "definition 7" in methods
     assert "2 assessments per 30 days" in methods_observed
     assert "closed 30 days ending at the latest readable timestamp" in methods
     assert "Otherwise the card says Not measured." in methods
-    assert "<strong>Authenticated effort.</strong>" in methods
+    assert "AUTHENTICATED EFFORT" in methods_observed
+    assert "<strong>Authenticated effort.</strong>" not in methods
     assert "<strong>Cash savings.</strong>" in methods
     assert "<strong>Monthly assessment rate.</strong>" not in methods
     assert "The observed monthly assessment rate is not an input to this formula." in methods
+    assert "Authenticated effort minutes are not inputs to this formula." in methods
     assert "180.00" not in methods_observed
+
+
+def test_authenticated_effort_median_uses_reported_rows_only():
+    from app.services.cost_model import calculate_cost
+
+    before = calculate_cost()
+    summary = summarize_register([], [], [
+        {"risk_id": "R-1", "disposition": "approve", "handling_minutes": 10,
+         "authenticated_effort_minutes": 10},
+        {"risk_id": "R-2", "disposition": "reject", "handling_minutes": None,
+         "authenticated_effort_minutes": None},
+        {"risk_id": "R-3", "disposition": "escalate", "handling_minutes": 30,
+         "authenticated_effort_minutes": 30},
+        {"risk_id": "R-4", "disposition": "approve", "authenticated_effort_minutes": "25"},
+    ], [])
+    effort = summary["authenticated_effort"]
+    assert effort["kind"] == "authenticated_effort"
+    assert effort["authenticated"] is True
+    assert effort["recorded_count"] == 2
+    assert effort["unmeasured_decisions"] == 2
+    assert effort["median_minutes"] == 20
+    assert effort["mean_minutes"] == 20
+    assert effort["median_label"] == "20 minutes"
+    assert effort["feeds_cost_model"] is False
+    assert summary["handling_time"]["median_minutes"] == 20
+    assert summary["handling_time"]["authenticated"] is False
+    rounded = summarize_register([], [], [
+        {"authenticated_effort_minutes": 10},
+        {"authenticated_effort_minutes": 20},
+        {"authenticated_effort_minutes": 40},
+    ], [])["authenticated_effort"]
+    assert rounded["median_minutes"] == 20
+    assert rounded["mean_minutes"] == 23.33
+    assert rounded["mean_label"] == "23.33 minutes"
+    even = summarize_register([], [], [
+        {"authenticated_effort_minutes": 10},
+        {"authenticated_effort_minutes": 20},
+    ], [])["authenticated_effort"]
+    assert even["median_minutes"] == 15
+    assert "authenticated_effort_minutes" not in before["assumptions"]
+    assert calculate_cost() == before
+
+
+def test_authenticated_effort_from_saved_rows_stays_out_of_the_cost_formula():
+    from app.services.cost_model import calculate_cost
+
+    db = _db()
+    before = calculate_cost()
+    _save_intake(
+        db, handling_minutes=25, authenticated_effort_minutes=10,
+        accept_authenticated_effort=True,
+    )
+    _save_intake(db, authenticated_effort_minutes=30, accept_authenticated_effort=True)
+    _save_intake(db, handling_minutes=5)
+    metrics = observed_metrics(db)
+    assert metrics["authenticated_effort"]["recorded_count"] == 2
+    assert metrics["authenticated_effort"]["unmeasured_decisions"] == 1
+    assert metrics["authenticated_effort"]["median_minutes"] == 20
+    assert metrics["handling_time"]["recorded_count"] == 2
+    assert metrics["handling_time"]["median_minutes"] == 15
+    assert metrics["definition_version"] == "7"
+    assert calculate_cost() == before
+    assert "authenticated_effort_minutes" not in before["assumptions"]
+    db.close()
+
+
+def test_dashboard_shows_authenticated_effort_apart_from_the_other_cards(client, app):
+    from app.db import get_db
+    from app.services.cost_model import calculate_cost
+
+    before = calculate_cost()
+    empty = client.get("/").data.decode()
+    empty_observed = _observed_section(empty)
+    assert "DEFINITION 7" in empty
+    assert "AUTHENTICATED EFFORT" in empty_observed
+    assert "No saved decision includes authenticated effort." in empty_observed
+    assert "180.00" in empty
+    assert "600.00" in empty
+    assert "$" not in empty_observed
+
+    with app.app_context():
+        _save_intake(
+            get_db(), handling_minutes=25, rework_minutes=12, manual_touches=4, handoffs=6,
+            authenticated_effort_minutes=10, accept_authenticated_effort=True,
+        )
+        _save_intake(
+            get_db(), handling_minutes=5, manual_touches=2, handoffs=2,
+            authenticated_effort_minutes=30, accept_authenticated_effort=True,
+        )
+        _save_intake(get_db())
+    body = client.get("/").data.decode()
+    observed = _observed_section(body)
+    assert "SELF-REPORTED HANDLING TIME" in observed
+    assert "SELF-REPORTED REWORK TIME" in observed
+    assert "SELF-REPORTED MANUAL TOUCHES" in observed
+    assert "SELF-REPORTED HANDOFFS" in observed
+    assert "MONTHLY ASSESSMENT RATE" in observed
+    assert "AUTHENTICATED EFFORT" in observed
+    assert "15 minutes" in observed
+    assert "12 minutes" in observed
+    assert "3 touches" in observed
+    assert "4 handoffs" in observed
+    assert "20 minutes" in observed
+    assert "Median 20 minutes across 2 decisions with authenticated effort recorded." in observed
+    assert "1 saved decision has no authenticated effort." in observed
+    assert "Not a session timer." in observed
+    assert "Not self-reported handling time." in observed
+    assert "Not used by the cost model." in observed
+    assert "$" not in observed
+    assert "180.00" in body
+    assert "600.00" in body
+    assert calculate_cost() == before
+    public = client.get("/try/").data
+    assert b'name="authenticated_effort_minutes"' not in public
+    upload = client.get("/try/import").data
+    assert b'name="authenticated_effort_minutes"' not in upload
