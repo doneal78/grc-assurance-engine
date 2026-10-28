@@ -47,8 +47,18 @@
     <p>No saved decision includes self-reported rework minutes. The field is optional. Blank means unmeasured. Saved decisions without rework minutes: {{ observed.rework_time.unmeasured_decisions }}. This is not elapsed cycle time, not handling minutes, and not an input to the cost model.</p>
     {% endif %}
   </article>
+  <article class="result-card">
+    <p class="eyebrow">SELF-REPORTED MANUAL TOUCHES</p>
+    {% if observed.manual_touches.recorded_count %}
+    <strong>{{ observed.manual_touches.median_label }}</strong>
+    <p>Median {{ observed.manual_touches.median_label }} across {{ observed.manual_touches.recorded_count }} decision{% if observed.manual_touches.recorded_count != 1 %}s{% endif %} with manual touches recorded.{% if observed.manual_touches.unmeasured_decisions == 1 %} 1 saved decision has no manual touches.{% elif observed.manual_touches.unmeasured_decisions %} {{ observed.manual_touches.unmeasured_decisions }} saved decisions have no manual touches.{% endif %} Mean {{ observed.manual_touches.mean_label }}. Lowest {{ observed.manual_touches.minimum_label }}. Highest {{ observed.manual_touches.maximum_label }}. Total {{ observed.manual_touches.total_label }}. Self-reported manual touches. Not authenticated. Not elapsed cycle time. Not handling minutes. Not rework minutes. Not used by the cost model.</p>
+    {% else %}
+    <strong>Not measured</strong>
+    <p>No saved decision includes self-reported manual touches. The field is optional. Blank means unmeasured. Saved decisions without a manual-touch count: {{ observed.manual_touches.unmeasured_decisions }}. This is not elapsed cycle time, not handling minutes, not rework minutes, and not an input to the cost model.</p>
+    {% endif %}
+  </article>
 </div>
-<p class="muted">Self-reported handling minutes are the numbers a person typed for review time. Self-reported rework minutes are the numbers a person typed for time spent redoing work after a first pass. Elapsed cycle time is the clock span between two workflow events. None of these numbers is an input to the modeled cost panel.</p>
+<p class="muted">Self-reported handling minutes are the numbers a person typed for review time. Self-reported rework minutes are the numbers a person typed for time spent redoing work after a first pass. Self-reported manual touches are the whole-number count a person typed for human touchpoints on that assessment. Elapsed cycle time is the clock span between two workflow events. None of these numbers is an input to the modeled cost panel. There is no timer, identity check, or timesheet.</p>
 <p class="muted">Excluded from the cycle-time series: {{ observed.cycle_time.excluded.no_intake_event }} without an intake event, {{ observed.cycle_time.excluded.no_disposition_event }} without a disposition event, {{ observed.cycle_time.excluded.unusable_timestamps }} with an unusable timestamp.</p>
 {% if observed.cycle_time.zero_span_count %}
 <p class="muted">{{ observed.cycle_time.zero_span_count }} measured span{% if observed.cycle_time.zero_span_count != 1 %}s{% endif %} share a timestamp, so the elapsed time is 0 seconds. That clock record is a 0-second elapsed span. It is not self-reported handling time.</p>

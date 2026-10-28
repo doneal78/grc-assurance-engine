@@ -64,6 +64,7 @@ def migrate(connection):
     _allow_escalate_disposition(connection)
     _add_handling_minutes(connection)
     _add_rework_minutes(connection)
+    _add_manual_touches(connection)
     connection.commit()
 
 
@@ -127,6 +128,16 @@ def _add_rework_minutes(connection):
     stay, with the new column empty. Rework is not handling time.
     """
     _add_decision_minutes(connection, "rework_minutes")
+
+
+def _add_manual_touches(connection):
+    """Add optional self-reported manual touches to an existing decisions table.
+
+    Null means the person did not report a touchpoint count. Rows already
+    stored stay, with the new column empty. The count is not handling time,
+    not rework time, and not elapsed cycle time.
+    """
+    _add_decision_minutes(connection, "manual_touches")
 
 
 def _add_decision_minutes(connection, column):

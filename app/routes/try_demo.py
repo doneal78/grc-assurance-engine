@@ -220,6 +220,7 @@ def _decision_from_form(form):
         "exception_rationale": form.get("exception_rationale", ""),
         "handling_minutes": form.get("handling_minutes", ""),
         "rework_minutes": form.get("rework_minutes", ""),
+        "manual_touches": form.get("manual_touches", ""),
     }
 
 

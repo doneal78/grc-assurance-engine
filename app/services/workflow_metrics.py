@@ -1,4 +1,4 @@
-"""Observed counts, elapsed cycle time, and self-reported minute fields.
+"""Observed counts, elapsed cycle time, and self-reported decision fields.
 
 The figures come from persisted rows and workflow-event timestamps. They are
 separate from the illustrative cost assumptions in ``cost_model.py``.
@@ -10,9 +10,10 @@ writes.
 
 Self-reported human handling time is the optional ``handling_minutes`` value
 on the current decision row. Self-reported rework time is the optional
-``rework_minutes`` value on that same row. Null stays out of each average.
-The two figures are not each other, they are not elapsed cycle time, and
-this module does not pass either one to the cost formula.
+``rework_minutes`` value on that same row. Self-reported manual touches are
+the optional ``manual_touches`` count on that same row. Null stays out of
+each average. The three figures are not each other, they are not elapsed
+cycle time, and this module does not pass any of them to the cost formula.
 """
 
 import json
@@ -23,7 +24,7 @@ from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from app.services.workflow_service import DISPOSITIONS
 
 
-DEFINITION_VERSION = "3"
+DEFINITION_VERSION = "4"
 
 RESIDUAL_TIERS = ("low", "moderate", "high", "critical", "undetermined")
 EVIDENCE_STATUSES = (
@@ -37,13 +38,15 @@ COST_MAPPING = (
     "Observed assessment volume is a count of saved rows. It stays out of the "
     "assessments-per-month assumption. Elapsed cycle time is a clock span between "
     "workflow events. It stays out of the baseline and assisted handling-hour "
-    "assumptions. Self-reported handling minutes and self-reported rework "
-    "minutes stay out of that formula. The illustrative formula is unchanged."
+    "assumptions. Self-reported handling minutes, self-reported rework "
+    "minutes, and self-reported manual touches stay out of that formula. "
+    "The illustrative formula is unchanged."
 )
 UNMEASURED_SUMMARY = (
-    "Manual touches, handoffs, a monthly assessment rate, authenticated effort, "
+    "Handoffs, a monthly assessment rate, authenticated effort, "
     "cash savings, and avoided-incident value stay unmeasured. Self-reported "
-    "handling minutes and self-reported rework minutes are optional and are not cash savings."
+    "handling minutes, self-reported rework minutes, and self-reported manual "
+    "touches are optional and are not cash savings."
 )
 CYCLE_DEFINITION = (
     "Elapsed seconds from the earliest intake_received event to the earliest "
@@ -51,14 +54,16 @@ CYCLE_DEFINITION = (
     "to two decimal places. A shared timestamp counts as zero elapsed seconds. "
     "Scenario rows without intake_received, rows without a disposition event, and "
     "rows with reversed or unreadable timestamps stay outside the average. "
-    "Self-reported handling minutes and self-reported rework minutes are separate figures."
+    "Self-reported handling minutes, self-reported rework minutes, and "
+    "self-reported manual touches are separate figures."
 )
 HANDLING_DEFINITION = (
     "Self-reported whole minutes on the current decision row. Blank and null stay "
     "out of the average. The headline figure is the median. For an even count, the "
     "median is the mean of the two middle values. The mean is rounded half up to "
     "two decimal places. These minutes are not elapsed cycle time, they are not "
-    "rework minutes, they are not authenticated, and they are not copied into the cost formula."
+    "rework minutes, they are not a manual-touch count, they are not authenticated, "
+    "and they are not copied into the cost formula."
 )
 REWORK_DEFINITION = (
     "Self-reported whole minutes of rework on the current decision row. Rework is "
@@ -66,14 +71,19 @@ REWORK_DEFINITION = (
     "average. The headline figure is the median. For an even count, the median is "
     "the mean of the two middle values. The mean is rounded half up to two decimal "
     "places. These minutes are not elapsed cycle time, they are not handling minutes, "
-    "they are not authenticated, and they are not copied into the cost formula."
+    "they are not a manual-touch count, they are not authenticated, and they are not "
+    "copied into the cost formula."
+)
+MANUAL_TOUCHES_DEFINITION = (
+    "Self-reported whole-number count of human touchpoints on the current decision "
+    "row. A touchpoint is a person's contact with that assessment, as the person "
+    "reports it. Blank and null stay out of the average. The headline figure is the "
+    "median. For an even count, the median is the mean of the two middle values. The "
+    "mean is rounded half up to two decimal places. This count is not elapsed cycle "
+    "time, it is not handling minutes, it is not rework minutes, it is not "
+    "authenticated, and it is not copied into the cost formula."
 )
 NOT_MEASURED = (
-    {
-        "id": "manual_touches",
-        "label": "Manual touches",
-        "detail": "The event log does not count distinct manual touches.",
-    },
     {
         "id": "handoffs",
         "label": "Handoffs",
@@ -87,7 +97,7 @@ NOT_MEASURED = (
     {
         "id": "authenticated_effort",
         "label": "Authenticated effort",
-        "detail": "Self-reported minutes are not checked against an identity system or a timesheet.",
+        "detail": "Self-reported minutes and self-reported manual touches are not checked against an identity system or a timesheet.",
     },
     {
         "id": "cash_savings",
@@ -111,7 +121,7 @@ def observed_metrics(db):
         "SELECT status FROM remediation_actions"
     ).fetchall()]
     decisions = [dict(row) for row in db.execute(
-        "SELECT risk_id, disposition, handling_minutes, rework_minutes FROM decisions"
+        "SELECT risk_id, disposition, handling_minutes, rework_minutes, manual_touches FROM decisions"
     ).fetchall()]
     events = [dict(row) for row in db.execute(
         """SELECT risk_id, event_type, occurred_at
@@ -262,26 +272,36 @@ def summarize_register(risks, actions, decisions, events):
             decisions, "rework_minutes",
             "Self-reported rework time", REWORK_DEFINITION,
         ),
+        "manual_touches": _self_reported_block(
+            decisions, "manual_touches",
+            "Self-reported manual touches", MANUAL_TOUCHES_DEFINITION,
+            singular="touch", plural="touches",
+        ),
     }
+
+
+def format_whole_count(value, singular, plural):
+    """Render a count with its unit. ``None`` stays ``None``."""
+    if value is None:
+        return None
+    try:
+        number = Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return None
+    if not number.is_finite():
+        return None
+    if number == number.to_integral_value():
+        rendered = str(int(number))
+        unit = singular if number == 1 else plural
+    else:
+        rendered = format(number.normalize(), "f")
+        unit = plural
+    return f"{rendered} {unit}"
 
 
 def format_handling_minutes(minutes):
     """Render a minute count with its unit. ``None`` stays ``None``."""
-    if minutes is None:
-        return None
-    try:
-        value = Decimal(str(minutes))
-    except (InvalidOperation, ValueError):
-        return None
-    if not value.is_finite():
-        return None
-    if value == value.to_integral_value():
-        rendered = str(int(value))
-        unit = "minute" if value == 1 else "minutes"
-    else:
-        rendered = format(value.normalize(), "f")
-        unit = "minutes"
-    return f"{rendered} {unit}"
+    return format_whole_count(minutes, "minute", "minutes")
 
 
 def format_elapsed_seconds(seconds):
@@ -449,12 +469,14 @@ def _cycle_statistics(spans):
     }
 
 
-def _self_reported_block(decisions, field, label, definition):
-    """Median of current decision rows that store a whole number of minutes.
+def _self_reported_block(decisions, field, label, definition, singular="minute", plural="minutes"):
+    """Median of current decision rows that store a non-negative whole number.
 
     Null, a missing key, and any value that is not a non-negative int stay
     out of the average. A stored zero is a reported zero and is included.
-    Handling minutes and rework minutes each use this rule on their own field.
+    Handling minutes, rework minutes, and manual touches each use this rule
+    on their own field. ``plural`` names the statistic keys, such as minutes
+    or touches.
     """
     values = []
     unmeasured = 0
@@ -464,25 +486,25 @@ def _self_reported_block(decisions, field, label, definition):
             unmeasured += 1
             continue
         values.append(raw)
-    stats = _minute_statistics(values)
+    stats = _count_statistics(values)
     labeled = {
         "recorded_count": stats["recorded_count"],
         "unmeasured_decisions": unmeasured,
-        "minimum_minutes": _number(stats["minimum_minutes"]),
-        "maximum_minutes": _number(stats["maximum_minutes"]),
-        "median_minutes": _number(stats["median_minutes"]),
-        "mean_minutes": _number(stats["mean_minutes"]),
-        "total_minutes": _number(stats["total_minutes"]),
-        "minimum_label": format_handling_minutes(stats["minimum_minutes"]),
-        "maximum_label": format_handling_minutes(stats["maximum_minutes"]),
-        "median_label": format_handling_minutes(stats["median_minutes"]),
-        "mean_label": format_handling_minutes(stats["mean_minutes"]),
-        "total_label": format_handling_minutes(stats["total_minutes"]) or "0 minutes",
+        f"minimum_{plural}": _number(stats["minimum"]),
+        f"maximum_{plural}": _number(stats["maximum"]),
+        f"median_{plural}": _number(stats["median"]),
+        f"mean_{plural}": _number(stats["mean"]),
+        f"total_{plural}": _number(stats["total"]),
+        "minimum_label": format_whole_count(stats["minimum"], singular, plural),
+        "maximum_label": format_whole_count(stats["maximum"], singular, plural),
+        "median_label": format_whole_count(stats["median"], singular, plural),
+        "mean_label": format_whole_count(stats["mean"], singular, plural),
+        "total_label": format_whole_count(stats["total"], singular, plural) or f"0 {plural}",
     }
     return {
         "kind": "self_reported",
         "label": label,
-        "unit": "minutes",
+        "unit": plural,
         "definition": definition,
         "feeds_cost_model": False,
         "authenticated": False,
@@ -490,15 +512,15 @@ def _self_reported_block(decisions, field, label, definition):
     }
 
 
-def _minute_statistics(values):
+def _count_statistics(values):
     if not values:
         return {
             "recorded_count": 0,
-            "minimum_minutes": None,
-            "maximum_minutes": None,
-            "median_minutes": None,
-            "mean_minutes": None,
-            "total_minutes": Decimal(0),
+            "minimum": None,
+            "maximum": None,
+            "median": None,
+            "mean": None,
+            "total": Decimal(0),
         }
     ordered = sorted(Decimal(value) for value in values)
     count = len(ordered)
@@ -511,10 +533,10 @@ def _minute_statistics(values):
     mean = (total / Decimal(count)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
     return {
         "recorded_count": count,
-        "minimum_minutes": ordered[0],
-        "maximum_minutes": ordered[-1],
-        "median_minutes": median,
-        "mean_minutes": mean,
-        "total_minutes": total,
+        "minimum": ordered[0],
+        "maximum": ordered[-1],
+        "median": median,
+        "mean": mean,
+        "total": total,
     }
 

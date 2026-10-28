@@ -59,6 +59,26 @@ def _rework_time_line(minutes):
     )
 
 
+def _manual_touches_note(count):
+    if count is None:
+        return "Manual touches were not reported."
+    return (
+        "Self-reported count of human touchpoints on this assessment. Optional. "
+        "Not authenticated, not elapsed cycle time, not handling minutes, "
+        "not rework minutes, and not an input to the cost model."
+    )
+
+
+def _manual_touches_line(count):
+    if count is None:
+        return "manual touches were not reported."
+    unit = "touch" if count == 1 else "touches"
+    return (
+        f"{count} self-reported {unit}. Not authenticated. "
+        "Not handling minutes. Not rework minutes."
+    )
+
+
 def _decision_view(decision):
     if not decision:
         return None
@@ -77,6 +97,8 @@ def _decision_view(decision):
         "handling_time_note": _handling_time_note(decision.get("handling_minutes")),
         "rework_minutes": decision.get("rework_minutes"),
         "rework_time_note": _rework_time_note(decision.get("rework_minutes")),
+        "manual_touches": decision.get("manual_touches"),
+        "manual_touches_note": _manual_touches_note(decision.get("manual_touches")),
     }
 
 
@@ -411,6 +433,7 @@ def render_markdown(package):
         lines.append(f"- Policy outcome at decision: {decision['prohibited_at_decision'].replace('_', ' ')}")
         lines.append(f"- Human handling time: {_handling_time_line(decision.get('handling_minutes'))}")
         lines.append(f"- Rework time: {_rework_time_line(decision.get('rework_minutes'))}")
+        lines.append(f"- Manual touches: {_manual_touches_line(decision.get('manual_touches'))}")
     lines.extend(["", "End of package.", ""])
     return "\n".join(lines)
 

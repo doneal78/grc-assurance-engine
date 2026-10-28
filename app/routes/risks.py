@@ -61,6 +61,7 @@ def record_risk_decision(risk_id):
             request.form.get("rationale", ""), request.form.get("decider", ""),
             request.form.get("conditions", ""), request.form.get("exception_rationale", ""),
             request.form.get("handling_minutes", ""), request.form.get("rework_minutes", ""),
+            request.form.get("manual_touches", ""),
         )
     except WorkflowInputError as exc:
         risk = get_risk(get_db(), risk_id)

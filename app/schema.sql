@@ -49,7 +49,8 @@ CREATE TABLE IF NOT EXISTS decisions (
     prohibited_at_decision TEXT NOT NULL CHECK (prohibited_at_decision IN ('prohibited', 'not_prohibited')),
     decided_at TEXT NOT NULL,
     handling_minutes INTEGER,
-    rework_minutes INTEGER
+    rework_minutes INTEGER,
+    manual_touches INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_actions_risk ON remediation_actions(risk_id);

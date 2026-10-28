@@ -77,7 +77,7 @@ def test_empty_database_reports_zeros_and_leaves_cycle_time_unmeasured():
     db = _db()
     metrics = observed_metrics(db)
     assert metrics["kind"] == "observed"
-    assert metrics["definition_version"] == "3"
+    assert metrics["definition_version"] == "4"
     assert metrics["feeds_cost_model"] is False
     assert "cash_savings" not in metrics
     assert "net_capacity_value" not in metrics
@@ -115,7 +115,20 @@ def test_empty_database_reports_zeros_and_leaves_cycle_time_unmeasured():
     assert rework["median_minutes"] is None
     assert rework["feeds_cost_model"] is False
     assert rework["authenticated"] is False
+    touches = metrics["manual_touches"]
+    assert touches["kind"] == "self_reported"
+    assert touches["label"] == "Self-reported manual touches"
+    assert touches["unit"] == "touches"
+    assert touches["recorded_count"] == 0
+    assert touches["unmeasured_decisions"] == 0
+    assert touches["median_touches"] is None
+    assert touches["feeds_cost_model"] is False
+    assert touches["authenticated"] is False
+    assert "not handling minutes" in touches["definition"]
+    assert "not rework minutes" in touches["definition"]
     assert "rework_time" not in {item["id"] for item in metrics["not_measured"]}
+    assert "manual_touches" not in {item["id"] for item in metrics["not_measured"]}
+    assert "handoffs" in {item["id"] for item in metrics["not_measured"]}
     assert "authenticated_effort" in {item["id"] for item in metrics["not_measured"]}
     assert _partition(metrics) == 0
     assert observed_metrics(db) == metrics
@@ -412,9 +425,11 @@ def test_methods_page_describes_self_reported_handling_time(client):
     assert "Self-reported human handling time" in body
     assert "not checked against an identity system" in body
     assert "not elapsed cycle time" in body
-    assert "Manual touches." in body
+    assert "SELF-REPORTED MANUAL TOUCHES" in body
+    assert "Handoffs." in body
     assert "Self-reported handling minutes are not inputs to this formula." in body
     assert "Self-reported rework minutes are not inputs to this formula." in body
+    assert "Self-reported manual touches are not inputs to this formula." in body
     assert "Rework minutes are not handling minutes." in body
     assert "Rework duration." not in body
     assert "Authenticated effort." in body
@@ -600,6 +615,100 @@ def test_dashboard_shows_rework_apart_from_handling_and_the_cost_panel(client, a
     methods_observed = _observed_section(methods)
     assert "12 minutes" in methods_observed
     assert "15 minutes" in methods_observed
+    assert "180.00" not in methods_observed
+
+
+def test_manual_touches_ignore_nulls_and_leave_the_cost_formula_unchanged():
+    from app.services.cost_model import calculate_cost
+
+    db = _db()
+    before = calculate_cost()
+    _save_intake(db, handling_minutes=10, rework_minutes=40, manual_touches=2)
+    _save_intake(db, handling_minutes=30, rework_minutes=8)
+    _save_intake(db, manual_touches=0)
+    metrics = observed_metrics(db)
+    handling = metrics["handling_time"]
+    rework = metrics["rework_time"]
+    touches = metrics["manual_touches"]
+    assert handling["recorded_count"] == 2
+    assert handling["median_minutes"] == 20
+    assert rework["recorded_count"] == 2
+    assert rework["median_minutes"] == 24
+    assert touches["recorded_count"] == 2
+    assert touches["unmeasured_decisions"] == 1
+    assert touches["median_touches"] == 1
+    assert touches["mean_touches"] == 1
+    assert touches["minimum_touches"] == 0
+    assert touches["maximum_touches"] == 2
+    assert touches["total_touches"] == 2
+    assert touches["median_label"] == "1 touch"
+    assert touches["feeds_cost_model"] is False
+    assert "not handling minutes" in touches["definition"]
+    assert "not rework minutes" in touches["definition"]
+    assert calculate_cost() == before
+    assert "manual_touches" not in before["assumptions"]
+    assert "rework_minutes" not in before["assumptions"]
+    assert "handling_minutes" not in before["assumptions"]
+    db.close()
+
+
+def test_manual_touches_summary_uses_the_median_of_reported_rows_only():
+    decisions = [
+        {"risk_id": "R-1", "disposition": "approve", "handling_minutes": 10, "manual_touches": 1},
+        {"risk_id": "R-2", "disposition": "reject", "handling_minutes": None, "manual_touches": None},
+        {"risk_id": "R-3", "disposition": "escalate", "handling_minutes": 20, "manual_touches": 3},
+        {"risk_id": "R-4", "disposition": "approve", "handling_minutes": "25", "manual_touches": "9"},
+    ]
+    summary = summarize_register([], [], decisions, [])
+    touches = summary["manual_touches"]
+    handling = summary["handling_time"]
+    assert handling["recorded_count"] == 2
+    assert handling["median_minutes"] == 15
+    assert touches["recorded_count"] == 2
+    assert touches["unmeasured_decisions"] == 2
+    assert touches["median_touches"] == 2
+    assert touches["mean_touches"] == 2
+    assert touches["median_label"] == "2 touches"
+    rounded = summarize_register([], [], [
+        {"manual_touches": 1},
+        {"manual_touches": 1},
+        {"manual_touches": 2},
+    ], [])["manual_touches"]
+    assert rounded["recorded_count"] == 3
+    assert rounded["median_touches"] == 1
+    assert rounded["mean_touches"] == 1.33
+    assert rounded["mean_label"] == "1.33 touches"
+    assert rounded["median_label"] == "1 touch"
+
+
+def test_dashboard_shows_manual_touches_apart_from_minutes_and_the_cost_panel(client, app):
+    from app.db import get_db
+    from app.services.cost_model import calculate_cost
+
+    before = calculate_cost()
+    with app.app_context():
+        _save_intake(get_db(), handling_minutes=25, rework_minutes=12, manual_touches=4)
+        _save_intake(get_db(), handling_minutes=5, manual_touches=2)
+    body = client.get("/").data.decode()
+    observed = _observed_section(body)
+    assert "SELF-REPORTED HANDLING TIME" in observed
+    assert "SELF-REPORTED REWORK TIME" in observed
+    assert "SELF-REPORTED MANUAL TOUCHES" in observed
+    assert "15 minutes" in observed
+    assert "12 minutes" in observed
+    assert "3 touches" in observed
+    assert "Self-reported manual touches." in observed
+    assert "Not handling minutes." in observed
+    assert "Not rework minutes." in observed
+    assert "Not used by the cost model." in observed
+    assert "$" not in observed
+    assert "180.00" in body
+    assert "600.00" in body
+    assert calculate_cost() == before
+    methods = client.get("/methodology").data.decode()
+    methods_observed = _observed_section(methods)
+    assert "3 touches" in methods_observed
+    assert "12 minutes" in methods_observed
     assert "180.00" not in methods_observed
 
 
