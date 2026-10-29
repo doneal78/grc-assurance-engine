@@ -5,6 +5,10 @@ import re
 from datetime import date, datetime, timezone
 from uuid import uuid4
 
+from app.services.event_chain import (
+    CHAIN_ORIGIN_APPENDED, GENESIS_PREV_HASH, event_digest, write_chain_tip,
+)
+
 
 class WorkflowInputError(ValueError):
     """Raised when a workflow update contains invalid values."""
@@ -45,6 +49,42 @@ CASH_SAVINGS_GATE = (
 
 def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _append_event(db, risk_id, event_type, detail, occurred_at):
+    """Insert one workflow event and link it to the previous hash.
+
+    The hash covers the canonical event fields plus ``prev_hash``. The row
+    is marked appended, which means it was hashed when it was written.
+    Does not commit.
+    """
+    previous = db.execute(
+        "SELECT hash FROM workflow_events ORDER BY event_id DESC LIMIT 1"
+    ).fetchone()
+    prev_hash = GENESIS_PREV_HASH if previous is None else previous["hash"]
+    cursor = db.execute(
+        """INSERT INTO workflow_events
+           (risk_id, event_type, detail, occurred_at, prev_hash, hash, chain_origin)
+           VALUES (?, ?, ?, ?, ?, NULL, ?)""",
+        (risk_id, event_type, detail, occurred_at, prev_hash, CHAIN_ORIGIN_APPENDED),
+    )
+    event_id = cursor.lastrowid
+    payload = {
+        "event_id": event_id,
+        "risk_id": risk_id,
+        "event_type": event_type,
+        "detail": detail,
+        "occurred_at": occurred_at,
+        "prev_hash": prev_hash,
+        "chain_origin": CHAIN_ORIGIN_APPENDED,
+    }
+    digest = event_digest(payload)
+    db.execute(
+        "UPDATE workflow_events SET hash = ? WHERE event_id = ?",
+        (digest, event_id),
+    )
+    write_chain_tip(db, event_id, digest)
+    return event_id
 
 
 def _dict(row):
@@ -209,14 +249,8 @@ def _persist_assessment(db, result, scenario_id, statement, created_detail, open
          policy.get("policy_id"), policy.get("policy_version"), policy_outcome),
     )
     if opening_event:
-        db.execute(
-            "INSERT INTO workflow_events (risk_id, event_type, detail, occurred_at) VALUES (?, ?, ?, ?)",
-            (risk_id, opening_event[0], opening_event[1], now),
-        )
-    db.execute(
-        "INSERT INTO workflow_events (risk_id, event_type, detail, occurred_at) VALUES (?, ?, ?, ?)",
-        (risk_id, "risk_created", created_detail, now),
-    )
+        _append_event(db, risk_id, opening_event[0], opening_event[1], now)
+    _append_event(db, risk_id, "risk_created", created_detail, now)
 
     statuses = {claim["evidence_status"] for claim in result["claims"]}
     prohibited = policy_outcome == "prohibited"
@@ -245,10 +279,7 @@ def _persist_assessment(db, result, scenario_id, statement, created_detail, open
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (risk_id, description, priority, "Unassigned", None, "open", now, now),
         )
-        db.execute(
-            "INSERT INTO workflow_events (risk_id, event_type, detail, occurred_at) VALUES (?, ?, ?, ?)",
-            (risk_id, "remediation_created", description, now),
-        )
+        _append_event(db, risk_id, "remediation_created", description, now)
     return risk_id
 
 
@@ -280,9 +311,8 @@ def update_action(db, action_id, status, owner, due_date, completion_notes):
            completion_notes = ?, updated_at = ? WHERE action_id = ?""",
         (status, owner.strip(), due_date or None, completion_notes.strip(), now, action_id),
     )
-    db.execute(
-        "INSERT INTO workflow_events (risk_id, event_type, detail, occurred_at) VALUES (?, ?, ?, ?)",
-        (risk_id, "remediation_updated", f"Action {action_id} status changed to {status}.", now),
+    _append_event(
+        db, risk_id, "remediation_updated", f"Action {action_id} status changed to {status}.", now,
     )
     db.commit()
     return risk_id
@@ -680,7 +710,4 @@ def _save_decision_row(db, risk_id, normalized, existing):
         detail += " Exception rationale recorded."
     if existing:
         detail += f" Replaces {existing['disposition']}."
-    db.execute(
-        "INSERT INTO workflow_events (risk_id, event_type, detail, occurred_at) VALUES (?, ?, ?, ?)",
-        (risk_id, "decision_recorded", detail, now),
-    )
+    _append_event(db, risk_id, "decision_recorded", detail, now)

@@ -54,8 +54,10 @@ def migrate(connection):
     """Add columns introduced after the first risk-register schema.
 
     CREATE TABLE IF NOT EXISTS does not alter a table that already exists.
-    Existing local and hosted databases keep their rows; new columns stay
-    empty until a scenario is saved again.
+    Existing local and hosted databases keep their rows. Decision columns
+    added here stay empty until a decision is saved again. Workflow events
+    that already exist are hashed once and marked chained after the fact.
+    A later startup does not rehash them.
     """
     columns = {row[1] for row in connection.execute("PRAGMA table_info(risks)")}
     for name in ("policy_id", "policy_version", "policy_outcome"):
@@ -68,6 +70,8 @@ def migrate(connection):
     _add_handoffs(connection)
     _add_authenticated_effort_minutes(connection)
     _add_cash_savings_dollars(connection)
+    from app.services.event_chain import ensure_event_chain
+    ensure_event_chain(connection)
     connection.commit()
 
 
