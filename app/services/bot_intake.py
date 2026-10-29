@@ -55,6 +55,7 @@ LIMITATIONS = (
     "handoffs on a decision is optional and self-reported. It is a count of times the assessment was handed between people or queues before disposition. It is not handling minutes, not rework minutes, not manual touches, not a timer, not authenticated effort, not elapsed cycle time, and not an input to the cost model.",
     "authenticated_effort_minutes on a decision is optional minutes a signed-in reviewer entered. The HTTP API stores a number only when the request passed the demo password gate. The CLI has no signed-in session and does not store it. Omit, null, or blank leaves it unmeasured. It is not a session timer, not handling minutes, not rework minutes, not manual touches, not handoffs, not elapsed cycle time, not cash savings, and not an input to the cost model.",
     "cash_savings_dollars on a decision is optional whole dollars a signed-in reviewer entered when a spending reduction was known. The HTTP API stores a number only when the request passed the demo password gate. The CLI has no signed-in session and does not store it. Omit, null, or blank leaves it unmeasured. Zero is a reported zero. The application does not multiply minutes or counts by a wage. It is not handling minutes, not rework minutes, not manual touches, not handoffs, not authenticated effort, not elapsed cycle time, and not an input to the cost model.",
+    "incident_cost, avoided_incident_count, and avoided_incident_value are not decision fields. A request that includes them is rejected and nothing is saved. Avoided-incident value is a modeled assumption in the versioned cost file. The shipped file leaves both inputs null, so the figure is Not measured. It is not cash savings and it is not an input to the cost formula.",
     "A trust-center URL is stored as pasted text unless fetch_trust_center is yes. A fetch is one HTTP GET of vendor-published material for human review. It is not verified evidence and it does not approve the vendor. File import does not fetch.",
     "A ServiceNow-shaped file is simulated input. This contract does not call ServiceNow.",
     "No external AI model scores or approves the vendor.",
@@ -159,7 +160,11 @@ def contract_document():
                 "cash_savings_dollars is optional and separate. Omit it, null, or a blank "
                 "string to leave cash savings unmeasured. A number is stored only when this "
                 "HTTP request passed the demo password gate. The CLI does not store it. It is "
-                "whole dollars the person typed, not a wage times minutes or counts."
+                "whole dollars the person typed, not a wage times minutes or counts. "
+                "incident_cost, avoided_incident_count, and avoided_incident_value "
+                "are not decision fields. A request that includes them is rejected. "
+                "Avoided-incident value is a modeled assumption. It is not an "
+                "observed register figure."
             ),
         },
         "dispositions": list(DISPOSITIONS),

@@ -85,7 +85,7 @@ def test_empty_database_reports_zeros_and_leaves_cycle_time_unmeasured():
     db = _db()
     metrics = observed_metrics(db)
     assert metrics["kind"] == "observed"
-    assert metrics["definition_version"] == "8"
+    assert metrics["definition_version"] == "9"
     assert metrics["feeds_cost_model"] is False
     assert "net_capacity_hours" not in metrics
     assert "net_capacity_value" not in metrics
@@ -1146,7 +1146,7 @@ def test_dashboard_shows_the_monthly_rate_apart_from_self_reported_cards_and_cos
     assert calculate_cost() == before
     methods = client.get("/methodology").data.decode()
     methods_observed = _observed_section(methods)
-    assert "definition 8" in methods
+    assert "definition 9" in methods
     assert "2 assessments per 30 days" in methods_observed
     assert "closed 30 days ending at the latest readable timestamp" in methods
     assert "Otherwise the card says Not measured." in methods
@@ -1220,7 +1220,7 @@ def test_authenticated_effort_from_saved_rows_stays_out_of_the_cost_formula():
     assert metrics["authenticated_effort"]["median_minutes"] == 20
     assert metrics["handling_time"]["recorded_count"] == 2
     assert metrics["handling_time"]["median_minutes"] == 15
-    assert metrics["definition_version"] == "8"
+    assert metrics["definition_version"] == "9"
     assert calculate_cost() == before
     assert "authenticated_effort_minutes" not in before["assumptions"]
     db.close()
@@ -1233,7 +1233,7 @@ def test_dashboard_shows_authenticated_effort_apart_from_the_other_cards(client,
     before = calculate_cost()
     empty = client.get("/").data.decode()
     empty_observed = _observed_section(empty)
-    assert "DEFINITION 8" in empty
+    assert "DEFINITION 9" in empty
     assert "AUTHENTICATED EFFORT" in empty_observed
     assert "No saved decision includes authenticated effort." in empty_observed
     assert "180.00" in empty
@@ -1350,7 +1350,7 @@ def test_cash_savings_from_saved_rows_stays_out_of_the_cost_formula():
     assert metrics["handling_time"]["median_minutes"] == 32.5
     assert metrics["authenticated_effort"]["median_minutes"] == 60
     assert metrics["cash_savings"]["median_dollars"] != 60 * assumptions["loaded_hourly_labor_rate"]
-    assert metrics["definition_version"] == "8"
+    assert metrics["definition_version"] == "9"
     assert calculate_cost() == before
     assert before["cash_savings"] is None
     assert assumptions["cash_savings"] is None
@@ -1369,7 +1369,7 @@ def test_dashboard_shows_cash_savings_apart_from_the_other_cards(client, app):
     assert '"cash_savings": null' in assumptions_text
     empty = client.get("/").data.decode()
     empty_observed = _observed_section(empty)
-    assert "DEFINITION 8" in empty
+    assert "DEFINITION 9" in empty
     assert "CASH SAVINGS" in empty_observed
     assert "No saved decision includes cash savings." in empty_observed
     assert "AUTHENTICATED EFFORT" in empty_observed
@@ -1419,7 +1419,7 @@ def test_dashboard_shows_cash_savings_apart_from_the_other_cards(client, app):
     assert calculate_cost() == before
     assert Path("app/data/cost_assumptions.json").read_text(encoding="utf-8") == assumptions_text
     methods = client.get("/methodology").data.decode()
-    assert "definition 8" in methods
+    assert "definition 9" in methods
     assert "Cash savings are a separate optional number" in methods
     assert "<strong>Cash savings.</strong>" not in methods
     assert "<strong>Avoided-incident value.</strong>" in methods
@@ -1428,3 +1428,111 @@ def test_dashboard_shows_cash_savings_apart_from_the_other_cards(client, app):
     assert b'name="cash_savings_dollars"' not in public
     upload = client.get("/try/import").data
     assert b'name="cash_savings_dollars"' not in upload
+
+
+def _avoided_section(body):
+    text = body.decode() if isinstance(body, bytes) else body
+    return text.split("avoided-incident-start", 1)[1].split("avoided-incident-end", 1)[0]
+
+
+def test_default_avoided_incident_card_stays_not_measured_and_apart(client):
+    from app.services.cost_model import avoided_incident_value, calculate_cost, load_assumptions
+
+    assumptions = load_assumptions()
+    avoided = avoided_incident_value()
+    cost = calculate_cost()
+    assert assumptions["incident_cost"] is None
+    assert assumptions["avoided_incident_count"] is None
+    assert avoided["measured"] is False
+    assert avoided["value"] is None
+    assert cost["cash_savings"] is None
+    assert avoided["value"] != cost["net_capacity_value"]
+    for path in ("/", "/methodology"):
+        body = client.get(path).data.decode()
+        observed = _observed_section(body)
+        card = _avoided_section(body)
+        assert "DEFINITION 9" in body or "definition 9" in body
+        assert "AVOIDED-INCIDENT VALUE" in card
+        assert "<strong>Not measured</strong>" in card
+        assert "Modeled assumption" in card
+        assert "not an observed register figure" in card
+        assert "not cash savings" in card
+        assert "calculate_cost()" in card
+        assert "180.00" not in card
+        assert "600.00" not in card
+        assert "AVOIDED-INCIDENT VALUE" not in observed
+        assert "$" not in observed
+    methods = client.get("/methodology").data.decode()
+    assert "<strong>Avoided-incident value.</strong>" in methods
+    assert "Avoided-incident value is not an input to this formula." in methods
+    metrics = summarize_register([], [], [], [])
+    assert metrics["definition_version"] == "9"
+    assert "avoided_incident_value" in {item["id"] for item in metrics["not_measured"]}
+    assert "incident_cost" not in metrics
+    assert "avoided_incident_count" not in metrics
+    assert metrics["cash_savings"]["median_dollars"] is None
+    measured = avoided_incident_value({
+        **assumptions,
+        "incident_cost": 25000,
+        "avoided_incident_count": 2,
+    })
+    summary = summarize_register([], [], [
+        {"cash_savings_dollars": 40, "handling_minutes": 60},
+    ], [], avoided_incident=measured)
+    assert "avoided_incident_value" not in {item["id"] for item in summary["not_measured"]}
+    assert summary["cash_savings"]["median_dollars"] == 40
+    assert summary["cash_savings"]["median_dollars"] != measured["value"]
+    assert summary["handling_time"]["median_minutes"] == 60
+    assert measured["value"] == 50000
+    assert measured["value"] != summary["handling_time"]["median_minutes"] * assumptions["loaded_hourly_labor_rate"]
+    assert "50000" not in str(summary["cash_savings"])
+    assert calculate_cost()["cash_savings"] is None
+
+
+def test_public_posts_cannot_supply_avoided_incident_value(client, app):
+    from app.db import get_db
+    from app.services.intake_importer import column_guide, direction_column_guide, parse_upload
+    from app.services.workflow_service import get_risk
+
+    same_origin = {"Origin": "http://localhost"}
+    columns = {item["column"] for item in column_guide()}
+    columns.update(item["column"] for item in direction_column_guide())
+    assert "incident_cost" not in columns
+    assert "avoided_incident_count" not in columns
+    assert "avoided_incident_value" not in columns
+    from datetime import date
+
+    preview = parse_upload(
+        "vendor.csv",
+        b"vendor_name,incident_cost\nSynthetic Co,25000\n",
+        date(2026, 10, 28),
+    )
+    assert any("Unrecognized columns" in problem and "incident_cost" in problem
+               for problem in preview["problems"])
+
+    with app.app_context():
+        risk_id = register_scenario(get_db(), run_scenario("conflicting-claims"))
+    refused = client.post(f"/risks/{risk_id}/decision", data={
+        "disposition": "escalate",
+        "rationale": "A crafted incident value must not be stored.",
+        "decider": "GRC analyst",
+        "incident_cost": "25000",
+        "avoided_incident_count": "2",
+    }, headers=same_origin)
+    assert refused.status_code == 400
+    assert b"incident_cost" in refused.data
+    assert b"not an observed register figure" in refused.data
+    with app.app_context():
+        assert get_risk(get_db(), risk_id)["decision"] is None
+
+    assessed = client.post("/try/assess", data={
+        "vendor_name": "Synthetic Notes",
+        "incident_cost": "1000",
+    }, headers=same_origin)
+    assert assessed.status_code == 400
+    assert b"cannot be saved" in assessed.data
+    public = client.get("/try/").data
+    upload = client.get("/try/import").data
+    for name in (b'name="incident_cost"', b'name="avoided_incident_count"', b'name="avoided_incident_value"'):
+        assert name not in public
+        assert name not in upload

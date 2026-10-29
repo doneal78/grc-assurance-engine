@@ -1,0 +1,18 @@
+<!-- avoided-incident-start -->
+<section class="content-section avoided-incident-panel" aria-labelledby="avoided-incident-heading">
+  <p class="eyebrow">MODELED ASSUMPTION · NOT AN OBSERVED REGISTER FIGURE</p>
+  <h2 id="avoided-incident-heading">Avoided-incident value</h2>
+  <div class="result-grid">
+    <article class="result-card">
+      <p class="eyebrow">AVOIDED-INCIDENT VALUE</p>
+      {% if avoided_incident.measured %}
+      <strong>{{ avoided_incident.value_label }}</strong>
+      {% else %}
+      <strong>Not measured</strong>
+      {% endif %}
+      <p>{{ avoided_incident.detail }}</p>
+    </article>
+  </div>
+  <p class="muted">Source: <code>{{ avoided_incident.source }}</code>, cost assumption version {{ avoided_incident.model_version }}. <code>incident_cost</code> and <code>avoided_incident_count</code> are both null unless a person sets them in that file. The product is shown only when both are set. It is not cash savings, and <code>calculate_cost()</code> does not return it as labor-capacity dollars.</p>
+</section>
+<!-- avoided-incident-end -->

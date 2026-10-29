@@ -1,7 +1,7 @@
 {
   "model_version": "0.1.0",
   "status": "illustrative",
-  "source_note": "Illustrative assumptions from the project build plan. These are not observed measurements.",
+  "source_note": "Illustrative assumptions from the project build plan. These are not observed measurements. incident_cost and avoided_incident_count stay null until both are explicitly set. They are not inputs to the labor-capacity formula.",
   "assessments_per_month": 20,
   "baseline_handling_hours_per_assessment": 2.0,
   "assisted_handling_hours_per_assessment": 1.5,
@@ -9,5 +9,7 @@
   "monthly_maintenance_hours": 2.0,
   "loaded_hourly_labor_rate": 60.0,
   "one_time_development_cost": null,
-  "cash_savings": null
+  "cash_savings": null,
+  "incident_cost": null,
+  "avoided_incident_count": null
 }

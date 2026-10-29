@@ -25,6 +25,9 @@ signed-in reviewer entered whole dollars. Null stays out of each average.
 These figures are not each other, they are not elapsed cycle time, they are
 not the monthly rate, and this module does not pass any of them to the cost
 formula. Cash savings are not a wage times any of the other figures.
+Avoided-incident value is not calculated from these rows. The unmeasured list
+keeps that item until ``avoided_incident_value()`` reports that both versioned
+assumptions are set.
 """
 
 import json
@@ -32,10 +35,11 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
+from app.services.cost_model import avoided_incident_value
 from app.services.workflow_service import DISPOSITIONS
 
 
-DEFINITION_VERSION = "8"
+DEFINITION_VERSION = "9"
 MONTH_WINDOW_DAYS = 30
 
 RESIDUAL_TIERS = ("low", "moderate", "high", "critical", "undetermined")
@@ -55,10 +59,14 @@ COST_MAPPING = (
     "Self-reported handling minutes, self-reported rework minutes, "
     "self-reported manual touches, self-reported handoffs, authenticated "
     "effort minutes, and cash savings dollars stay out of that formula. "
-    "The illustrative formula is unchanged."
+    "Avoided-incident value is a modeled assumption. It stays out of that "
+    "formula too. The illustrative formula is unchanged."
 )
 UNMEASURED_SUMMARY = (
-    "Avoided-incident value stays unmeasured. Cash savings are optional whole "
+    "Avoided-incident value is a modeled assumption on its own card. It stays "
+    "Not measured while incident_cost and avoided_incident_count are null. It "
+    "is not cash savings and it is not labor-capacity dollars from "
+    "calculate_cost(). Cash savings are optional whole "
     "dollars a signed-in reviewer entered on a disposition. They are not "
     "calculated from handling minutes, rework minutes, manual touches, handoffs, "
     "authenticated effort, the monthly assessment rate, or the illustrative labor "
@@ -128,8 +136,8 @@ AUTHENTICATED_EFFORT_DEFINITION = (
     "store this number. These minutes are not self-reported handling minutes, "
     "they are not rework minutes, they are not a manual-touch count, they are "
     "not a handoff count, they are not the monthly assessment rate, they are "
-    "not elapsed cycle time, they are not cash savings, and they are not "
-    "copied into the cost formula."
+    "not elapsed cycle time, they are not cash savings, they are not "
+    "avoided-incident value, and they are not copied into the cost formula."
 )
 CASH_SAVINGS_DEFINITION = (
     "Optional whole dollars a signed-in reviewer entered on the current decision "
@@ -144,8 +152,8 @@ CASH_SAVINGS_DEFINITION = (
     "cannot store this number. These dollars are not self-reported handling "
     "minutes, they are not rework minutes, they are not a manual-touch count, "
     "they are not a handoff count, they are not authenticated effort, they are "
-    "not the monthly assessment rate, they are not elapsed cycle time, and they "
-    "are not copied into the cost formula."
+    "not the monthly assessment rate, they are not elapsed cycle time, they "
+    "are not avoided-incident value, and they are not copied into the cost formula."
 )
 RATE_DEFINITION = (
     "Monthly assessment rate is the count of current decision rows whose decided_at "
@@ -163,16 +171,24 @@ RATE_DEFINITION = (
     "count, not elapsed cycle time, not authenticated effort, not cash savings, "
     "and it is not copied into the cost formula."
 )
-NOT_MEASURED = (
-    {
+
+
+def _not_measured_items(avoided):
+    """Keep avoided-incident value on the unmeasured list until a source exists.
+
+    The source is both versioned assumptions set together. A measured modeled
+    value leaves the list. The dollar figure stays on its own card.
+    """
+    if avoided.get("measured"):
+        return []
+    return [{
         "id": "avoided_incident_value",
         "label": "Avoided-incident value",
-        "detail": "Hypothetical avoided incidents are left unmonetized.",
-    },
-)
+        "detail": avoided.get("list_detail") or avoided.get("detail") or "",
+    }]
 
 
-def observed_metrics(db):
+def observed_metrics(db, *, avoided_incident=None):
     """Read the register and return observed metrics. Performs no writes."""
     risks = [dict(row) for row in db.execute(
         "SELECT risk_id, scenario_id, residual_tier, rationale_json FROM risks"
@@ -193,18 +209,25 @@ def observed_metrics(db):
            ORDER BY event_id""",
         (INTAKE_EVENT, DISPOSITION_EVENT),
     ).fetchall()]
-    return summarize_register(risks, actions, decisions, events)
+    return summarize_register(
+        risks, actions, decisions, events, avoided_incident=avoided_incident,
+    )
 
 
-def summarize_register(risks, actions, decisions, events):
+def summarize_register(risks, actions, decisions, events, *, avoided_incident=None):
     """Calculate metrics from already loaded rows.
 
     ``events`` may include every workflow event. Only ``intake_received`` and
     ``decision_recorded`` affect cycle time. The earliest timestamp wins when
     a risk has more than one event of the same type. The monthly assessment
     rate uses ``decided_at`` on the current decision rows. It does not read
-    the event log.
+    the event log. ``avoided_incident`` decides only whether that modeled
+    figure stays on the unmeasured list. Omitted, it is loaded from the
+    versioned assumptions. Register rows are not inputs to that figure, and
+    this function does not call ``calculate_cost()``.
     """
+    if avoided_incident is None:
+        avoided_incident = avoided_incident_value()
     rationale_by_risk = {}
     general_intake = 0
     residual = Counter()
@@ -300,7 +323,7 @@ def summarize_register(risks, actions, decisions, events):
         "feeds_cost_model": False,
         "cost_mapping": COST_MAPPING,
         "unmeasured_summary": UNMEASURED_SUMMARY,
-        "not_measured": [dict(item) for item in NOT_MEASURED],
+        "not_measured": _not_measured_items(avoided_incident),
         "assessment_volume": {
             "total": total,
             "general_intake": general_intake,

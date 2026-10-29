@@ -12,6 +12,7 @@ from datetime import date
 from flask import Blueprint, Response, abort, g, redirect, render_template, request, url_for
 
 from app.db import get_db
+from app.services.cost_model import disposition_avoided_incident_problem
 from app.services.intake_builder import (
     CLAUSE_EVIDENCE_OPTIONS, EVIDENCE_OPTIONS, IntakeError, build_intake,
     clause_evidence_field, field_choices, remediation_payload, run_intake, workflow_events,
@@ -117,6 +118,9 @@ def export_scenario(scenario_id, export_format):
 
 @bp.post("/assess")
 def assess():
+    crafted = disposition_avoided_incident_problem(request.form)
+    if crafted:
+        return render_template("try_index.html", **_form_context(request.form, [crafted])), 400
     as_of = date.today()
     export_format = (request.form.get("export_format") or "").strip()
     try:
@@ -272,6 +276,9 @@ def import_save():
             save_error="That row is not in this confirmation. Nothing was saved.",
             status=400,
         )
+    crafted = disposition_avoided_incident_problem(request.form)
+    if crafted:
+        return _import_result(imported, document, save_error=crafted, status=400)
     decision = _decision_from_form(request.form)
     try:
         risk_id = register_intake(get_db(), match, decision)
