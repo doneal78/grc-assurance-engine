@@ -265,7 +265,40 @@ def _clauses(risk):
     ]
 
 
-def build_package(result, decision=None, saved_risk_id=None):
+def _finding_view(finding):
+    """Copy one reviewer-authored finding. Mapping text comes from the caller."""
+    closing_note = finding.get("closing_note") or None
+    return {
+        "finding_id": finding.get("finding_id"),
+        "origin": finding.get("origin"),
+        "origin_label": finding.get("origin_label"),
+        "title": finding.get("title"),
+        "description": finding.get("description"),
+        "severity": finding.get("severity"),
+        "status": finding.get("status"),
+        "owner": finding.get("owner"),
+        "linked_vendor": finding.get("linked_vendor"),
+        "linked_risk_id": finding.get("linked_risk_id"),
+        "closing_note": closing_note,
+        "mappings": [
+            {
+                "mapping_id": mapping.get("mapping_id"),
+                "framework": mapping.get("framework"),
+                "framework_version": mapping.get("framework_version"),
+                "control_id": mapping.get("control_id"),
+                "title": mapping.get("title"),
+                "review_status": mapping.get("review_status"),
+                "mapping_set_version": mapping.get("mapping_set_version"),
+                "missing_from_library": bool(mapping.get("missing_from_library")),
+            }
+            for mapping in finding.get("mappings") or []
+        ],
+        "score_effect": finding.get("score_effect"),
+        "score_effect_note": finding.get("score_effect_note"),
+    }
+
+
+def build_package(result, decision=None, saved_risk_id=None, findings=None):
     """Copy one assessment into a stable handoff document."""
     risk = result["risk"]
     policy = risk.get("policy") or {}
@@ -328,6 +361,18 @@ def build_package(result, decision=None, saved_risk_id=None):
         "required_clauses": _clauses(risk),
         "evidence_summary": _evidence_summary(result.get("claims")),
         "decision": _decision_view(decision),
+        "engine_escalations_note": (
+            "Escalations in evaluation.escalations are engine-generated from the risk rules. "
+            "Reviewer-authored findings are a separate list. A reviewer-authored finding does "
+            "not change the inherent score, the residual tier, evidence confidence, or the "
+            "policy outcome."
+        ),
+        "reviewer_findings_note": (
+            "Reviewer-authored findings are written on a saved assessment. They are not engine "
+            "escalations. A linked mapping keeps the review status from the mapping set. Draft "
+            "stays draft. The list is empty when no finding has been saved on this assessment."
+        ),
+        "reviewer_findings": [_finding_view(finding) for finding in (findings or [])],
     }
 
 
@@ -351,7 +396,10 @@ def package_from_saved_risk(risk):
         "claims": rationale.get("claims") or [],
         "risk": stored,
     }
-    return build_package(result, decision=risk.get("decision"), saved_risk_id=risk["risk_id"])
+    return build_package(
+        result, decision=risk.get("decision"), saved_risk_id=risk["risk_id"],
+        findings=risk.get("findings") or [],
+    )
 
 
 def export_basename(package):
@@ -510,7 +558,38 @@ def render_markdown(package):
         lines.append(
             f"- Cash savings: {_cash_savings_line(decision.get('cash_savings_dollars'))}"
         )
-    lines.extend(["", "End of package.", ""])
+    lines.extend(["", "## Reviewer-authored findings", "", package["reviewer_findings_note"], ""])
+    if package["reviewer_findings"]:
+        for finding in package["reviewer_findings"]:
+            lines.append(f"### {finding['title']}")
+            lines.append("")
+            lines.append(f"- Origin: {finding['origin_label']}. {finding['score_effect_note']}")
+            lines.append(f"- Severity: {finding['severity']}")
+            lines.append(f"- Status: {finding['status']}")
+            lines.append(f"- Owner: {finding['owner']}")
+            lines.append(f"- Linked assessment: {finding['linked_risk_id']}")
+            vendor = finding["linked_vendor"] or "not linked"
+            lines.append(f"- Linked vendor: {vendor}")
+            lines.append(f"- Description: {finding['description']}")
+            if finding["status"] == "closed":
+                lines.append(f"- Closing note: {finding['closing_note']}")
+            lines.append("- Linked mappings:")
+            for mapping in finding["mappings"]:
+                if mapping["missing_from_library"]:
+                    lines.append(
+                        f"  - {mapping['mapping_id']}: unverified. Not in the current mapping set."
+                    )
+                else:
+                    lines.append(
+                        f"  - {mapping['framework']} {mapping['control_id']} {mapping['title']}. "
+                        f"Review status: {mapping['review_status']}. "
+                        f"Mapping set {mapping['mapping_set_version']}."
+                    )
+            lines.append("")
+    else:
+        lines.append("No reviewer-authored findings on this assessment.")
+        lines.append("")
+    lines.extend(["End of package.", ""])
     return "\n".join(lines)
 
 

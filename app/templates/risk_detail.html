@@ -16,9 +16,9 @@
 {% else %}
 <section class="content-section"><h2>Organization policy</h2><p class="inline-warning">This saved result has no policy reference. Delete the local database and add the scenario again before recording a decision.</p></section>
 {% endif %}
-<section class="content-section" id="why-this-result"><h2>Why this result</h2><p>{{ residual_plain(risk.rationale.risk) }}</p><p>{{ confidence_plain(risk.rationale.risk.evidence_confidence) }}</p><p><strong>Review route:</strong> {{ risk.rationale.risk.review_path|replace('_', ' ')|title }}. {{ review_path_plain(risk.rationale.risk) }}</p>{% if risk.rationale.risk.inherent.factors %}<h3>Inherent score</h3><ul class="factor-list">{% for factor in factor_lines(risk.rationale.risk, risk.rationale.assessment_inputs) %}<li><div><span><code>{{ factor.rule_id }}</code> · {{ factor.label }} = {{ factor.value|replace('_', ' ') }}</span><p class="so-what">{{ factor.rationale }}</p></div><strong>+{{ factor.points }}</strong></li>{% endfor %}</ul>{% endif %}{% if risk.rationale.risk.missing_information %}<p class="inline-warning">{{ missing_plain(risk.rationale.risk) }}</p>{% endif %}{% if risk.rationale.risk.escalations %}{% with escalations=risk.rationale.risk.escalations, assessment=risk.rationale.assessment_inputs, claims=risk.rationale.claims %}{% include "_escalation_list.html" %}{% endwith %}{% endif %}<h3 id="claims-and-evidence">Evidence and claim statuses</h3>{% for claim in risk.rationale.claims %}<article class="claim-card"><div class="claim-heading"><h3>{{ claim.statement or claim.claim_id }}</h3><span class="status status-{{ claim.evidence_status|replace('_', '-') }}">{{ claim.evidence_status|replace('_', ' ')|title }}</span></div><p class="muted">{{ claim.claim_id }} — {{ claim.status_reason }}</p><p class="so-what">{{ claim_so_what(claim) }}</p></article>{% endfor %}<h3 id="control-mappings">Related control mapping prompts</h3><p class="muted">Stored with this assessment. Review status is copied from the mapping set. <a href="{{ url_for('mappings.index') }}">Browse the mapping library</a></p>{% if risk.rationale.mappings %}{% for mapping in risk.rationale.mappings %}{% include "_mapping_card.html" %}{% endfor %}{% else %}<p>No mapping matched these claim topics.</p>{% endif %}</section>
+<section class="content-section" id="why-this-result"><h2>Why this result</h2><p>{{ residual_plain(risk.rationale.risk) }}</p><p>{{ confidence_plain(risk.rationale.risk.evidence_confidence) }}</p><p><strong>Review route:</strong> {{ risk.rationale.risk.review_path|replace('_', ' ')|title }}. {{ review_path_plain(risk.rationale.risk) }}</p>{% if risk.rationale.risk.inherent.factors %}<h3>Inherent score</h3><ul class="factor-list">{% for factor in factor_lines(risk.rationale.risk, risk.rationale.assessment_inputs) %}<li><div><span><code>{{ factor.rule_id }}</code> · {{ factor.label }} = {{ factor.value|replace('_', ' ') }}</span><p class="so-what">{{ factor.rationale }}</p></div><strong>+{{ factor.points }}</strong></li>{% endfor %}</ul>{% endif %}{% if risk.rationale.risk.missing_information %}<p class="inline-warning">{{ missing_plain(risk.rationale.risk) }}</p>{% endif %}{% if risk.rationale.risk.escalations %}<p class="muted">Engine-generated escalations from the risk rules. They are not reviewer-authored findings, and a reviewer-authored finding does not change them.</p>{% with escalations=risk.rationale.risk.escalations, assessment=risk.rationale.assessment_inputs, claims=risk.rationale.claims %}{% include "_escalation_list.html" %}{% endwith %}{% endif %}<h3 id="claims-and-evidence">Evidence and claim statuses</h3>{% for claim in risk.rationale.claims %}<article class="claim-card"><div class="claim-heading"><h3>{{ claim.statement or claim.claim_id }}</h3><span class="status status-{{ claim.evidence_status|replace('_', '-') }}">{{ claim.evidence_status|replace('_', ' ')|title }}</span></div><p class="muted">{{ claim.claim_id }} — {{ claim.status_reason }}</p><p class="so-what">{{ claim_so_what(claim) }}</p></article>{% endfor %}<h3 id="control-mappings">Related control mapping prompts</h3><p class="muted">Stored with this assessment. Review status is copied from the mapping set. <a href="{{ url_for('mappings.index') }}">Browse the mapping library</a></p>{% if risk.rationale.mappings %}{% for mapping in risk.rationale.mappings %}{% include "_mapping_card.html" %}{% endfor %}{% else %}<p>No mapping matched these claim topics.</p>{% endif %}</section>
 <section class="content-section"><h2>Reviewer package</h2>
-<p>Download this saved assessment: intake answers when they were stored, the evaluation, the policy outcome, required-clause statuses, the evidence summary, and the decision on this record, including self-reported handling minutes, self-reported rework minutes, self-reported manual touches, self-reported handoffs, authenticated effort, and cash savings when that decision has them. When rework minutes were left blank, the package says rework time was not reported. When manual touches were left blank, the package says manual touches were not reported. When handoffs were left blank, the package says handoffs were not reported. When authenticated effort was left blank, the package says it was not reported. When cash savings were left blank, the package says cash savings were not reported. The file is a handoff. It is not an approval.</p>
+<p>Download this saved assessment: intake answers when they were stored, the evaluation, the policy outcome, required-clause statuses, the evidence summary, reviewer-authored findings on this record, and the decision on this record, including self-reported handling minutes, self-reported rework minutes, self-reported manual touches, self-reported handoffs, authenticated effort, and cash savings when that decision has them. Reviewer-authored findings are included when any have been saved. They do not change the residual tier. When rework minutes were left blank, the package says rework time was not reported. When manual touches were left blank, the package says manual touches were not reported. When handoffs were left blank, the package says handoffs were not reported. When authenticated effort was left blank, the package says it was not reported. When cash savings were left blank, the package says cash savings were not reported. The file is a handoff. It is not an approval.</p>
 {% if risk.rationale.trust_center %}<p class="trust-url">Trust center URL: {% if risk.rationale.trust_center.url %}{{ risk.rationale.trust_center.url }}{% else %}none{% endif %}. Fetched: {% if risk.rationale.trust_center.fetched %}yes{% else %}no{% endif %}.</p>{% if risk.rationale.trust_center.fetch and risk.rationale.trust_center.fetch.summary %}<p>{{ risk.rationale.trust_center.fetch.summary }}</p>{% endif %}{% if risk.rationale.trust_center.fetch and risk.rationale.trust_center.fetch.error %}<p class="inline-warning">{{ risk.rationale.trust_center.fetch.error }}</p>{% endif %}{% else %}<p class="muted">This saved result did not cite a trust center.</p>{% endif %}
 <div class="export-actions">
   <a class="button-link" href="{{ url_for('risks.export_risk', risk_id=risk.risk_id, export_format='json') }}">Download JSON</a>
@@ -73,6 +73,70 @@
 </section>
 <section class="content-section"><h2>Remediation actions</h2>
 {% if risk.actions %}{% for action in risk.actions %}<article class="claim-card"><div class="claim-heading"><div><h3>{{ action.description }}</h3><p class="muted">Priority: {{ action.priority|title }} · Created {{ action.created_at }} · Updated {{ action.updated_at }}</p></div><span class="status status-{{ action.status|replace('_', '-') }}">{{ action.status|replace('_', ' ')|title }}</span></div><form class="action-form" method="post" action="{{ url_for('risks.update_remediation', action_id=action.action_id, walk=walkthrough.step_id) if walkthrough and walkthrough.on_page else url_for('risks.update_remediation', action_id=action.action_id) }}"><input type="hidden" name="risk_id" value="{{ risk.risk_id }}"><label>Owner<input name="owner" maxlength="100" required value="{{ action.owner }}"></label><label>Due date<input name="due_date" type="date" value="{{ action.due_date or '' }}"></label><label>Status<select name="status">{% for status in ['open', 'in_progress', 'completed'] %}<option value="{{ status }}" {% if action.status == status %}selected{% endif %}>{{ status|replace('_', ' ')|title }}</option>{% endfor %}</select></label><label>Completion notes<textarea name="completion_notes" maxlength="1000" rows="2" placeholder="Required when status is Completed">{{ action.completion_notes }}</textarea></label><button class="button-link" type="submit">Save action</button></form></article>{% endfor %}{% else %}<p>No remediation action was created: this scenario had no configured escalation, matched policy restriction, or unresolved evidence gap.</p>{% endif %}
+</section>
+<section class="content-section" id="reviewer-findings"><h2>Reviewer-authored findings</h2>
+<p>A reviewer-authored finding is a note written on this saved assessment. It is not an engine escalation. It does not change the inherent score, the residual tier, evidence confidence, or the policy outcome. The linked assessment is this record. A linked vendor is optional. Linked mappings are chosen from the current mapping set. A draft mapping stays draft.</p>
+{% if finding_error %}<div class="inline-warning" role="alert"><strong>Finding not saved.</strong> {{ finding_error }}</div>{% endif %}
+{% if risk.findings %}
+{% for finding in risk.findings %}
+<article class="claim-card">
+  <div class="claim-heading">
+    <div>
+      <h3>{{ finding.title }}</h3>
+      <p class="muted">{{ finding.origin_label }} · Severity {{ finding.severity|title }} · Created {{ finding.created_at }} · Updated {{ finding.updated_at }}</p>
+    </div>
+    <span class="status status-{{ finding.status }}">{{ finding.status|title }}</span>
+  </div>
+  <p>{{ finding.description }}</p>
+  <dl class="meta-list">
+    <dt>Origin</dt><dd>{{ finding.origin_label }}. {{ finding.score_effect_note }}</dd>
+    <dt>Linked assessment</dt><dd>{{ finding.linked_risk_id }} · {{ risk.scenario_name }}</dd>
+    <dt>Linked vendor</dt><dd>{% if finding.linked_vendor %}{{ finding.linked_vendor }}{% else %}Not linked{% endif %}</dd>
+    <dt>Owner</dt><dd>{{ finding.owner }}</dd>
+    {% if finding.status == 'closed' %}<dt>Closing note</dt><dd>{{ finding.closing_note }}</dd>{% endif %}
+    <dt>Linked mappings</dt>
+    <dd>
+      {% for mapping in finding.mappings %}
+      <span>{% if mapping.missing_from_library %}<code>{{ mapping.mapping_id }}</code> · unverified. Not in the current mapping set.{% else %}<code>{{ mapping.control_id }}</code> {{ mapping.title }} · {{ mapping.framework }} {{ mapping.framework_version }} · {{ mapping.review_status|title }}{% endif %}</span>{% if not loop.last %}<br>{% endif %}
+      {% endfor %}
+    </dd>
+  </dl>
+  <form class="action-form" method="post" action="{{ url_for('risks.update_risk_finding', risk_id=risk.risk_id, finding_id=finding.finding_id) }}">
+    <label>Title<input name="title" maxlength="120" required value="{{ finding.title }}"></label>
+    <label>Severity<select name="severity">{% for severity in finding_severities %}<option value="{{ severity }}" {% if finding.severity == severity %}selected{% endif %}>{{ severity|title }}</option>{% endfor %}</select></label>
+    <label>Owner<input name="owner" maxlength="100" required value="{{ finding.owner }}"></label>
+    <label>Linked vendor (optional)<input name="vendor_name" maxlength="80" value="{{ finding.vendor_name }}" placeholder="Leave blank if not linked"></label>
+    <label>Status<select name="status">{% for status in finding_statuses %}<option value="{{ status }}" {% if finding.status == status %}selected{% endif %}>{{ status|title }}</option>{% endfor %}</select></label>
+    <label class="wide">Description<textarea name="description" maxlength="2000" rows="3" required>{{ finding.description }}</textarea></label>
+    <label class="wide">Closing note<textarea name="closing_note" maxlength="1000" rows="2" placeholder="Required to close. Clear it to set the finding back to open.">{{ finding.closing_note }}</textarea></label>
+    <fieldset class="wide mapping-choices">
+      <legend>Linked control mappings</legend>
+      {% for mapping in mapping_library %}
+      <label><input type="checkbox" name="mapping_id" value="{{ mapping.mapping_id }}" {% if mapping.mapping_id in finding.mapping_ids %}checked{% endif %}><span><code>{{ mapping.control_id }}</code> {{ mapping.title }} · {{ mapping.framework }} · {{ mapping.review_status|title }}</span></label>
+      {% endfor %}
+    </fieldset>
+    <button class="button-link" type="submit">Save finding</button>
+  </form>
+</article>
+{% endfor %}
+{% else %}
+<p>No reviewer-authored findings on this assessment.</p>
+{% endif %}
+<form class="action-form" method="post" action="{{ url_for('risks.create_risk_finding', risk_id=risk.risk_id) }}">
+  <label>Title<input name="title" maxlength="120" required></label>
+  <label>Severity<select name="severity">{% for severity in finding_severities %}<option value="{{ severity }}">{{ severity|title }}</option>{% endfor %}</select></label>
+  <label>Owner<input name="owner" maxlength="100" required placeholder="Example: GRC reviewer"></label>
+  <label>Linked vendor (optional)<input name="vendor_name" maxlength="80" placeholder="Leave blank if not linked"></label>
+  <label class="wide">Description<textarea name="description" maxlength="2000" rows="3" required></textarea></label>
+  <fieldset class="wide mapping-choices">
+    <legend>Linked control mappings</legend>
+    {% for mapping in mapping_library %}
+    <label><input type="checkbox" name="mapping_id" value="{{ mapping.mapping_id }}"><span><code>{{ mapping.control_id }}</code> {{ mapping.title }} · {{ mapping.framework }} · {{ mapping.review_status|title }}</span></label>
+    {% endfor %}
+  </fieldset>
+  <button class="button-link" type="submit">Add finding</button>
+</form>
+<p class="muted">Saving a finding writes a workflow event on this browser's hash chain. The event is tamper-evident, not tamper-proof. Another browser does not see the finding. The public intake form does not create one. A finding is not an approval and it is not a case-management record.</p>
 </section>
 <section class="content-section"><h2>Workflow history</h2><ol class="event-list">{% for event in risk.events %}<li><strong>{{ event.event_type|replace('_', ' ')|title }}</strong> · {{ event.detail }}<br><span class="muted">{{ event.occurred_at }}</span>{% if event.chain_origin == 'chained_after_the_fact' %}<br><span class="muted">Chained after the fact. This row was hashed when the chain was added. The original write was not hashed.</span>{% endif %}</li>{% endfor %}</ol><p class="muted">This local event log is tamper-evident, not tamper-proof. Each event stores a SHA-256 hash of its fields and the previous event's hash in the same chain. A browser sandbox is its own chain. The shared rows are a separate chain. The sandbox id is not part of the hash. Someone who can rewrite the database can rebuild the chain. The log is not immutable storage, a production audit log, or a certification.</p></section>
 {% endblock %}

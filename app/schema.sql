@@ -72,5 +72,30 @@ CREATE TABLE IF NOT EXISTS decisions (
     cash_savings_dollars INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS findings (
+    finding_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    risk_id TEXT NOT NULL REFERENCES risks(risk_id) ON DELETE CASCADE,
+    sandbox_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    severity TEXT NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+    vendor_name TEXT NOT NULL DEFAULT '',
+    owner TEXT NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('open', 'closed')),
+    closing_note TEXT NOT NULL DEFAULT '',
+    origin TEXT NOT NULL DEFAULT 'reviewer' CHECK (origin = 'reviewer'),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    closed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS finding_mappings (
+    finding_id INTEGER NOT NULL REFERENCES findings(finding_id) ON DELETE CASCADE,
+    mapping_id TEXT NOT NULL,
+    PRIMARY KEY (finding_id, mapping_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_actions_risk ON remediation_actions(risk_id);
 CREATE INDEX IF NOT EXISTS idx_events_risk ON workflow_events(risk_id, event_id);
+CREATE INDEX IF NOT EXISTS idx_findings_risk ON findings(risk_id);
+CREATE INDEX IF NOT EXISTS idx_findings_sandbox ON findings(sandbox_id);

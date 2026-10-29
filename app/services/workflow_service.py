@@ -152,12 +152,18 @@ def get_risk(db, risk_id, sandbox_id=UNSCOPED):
     risk["actions"] = [_dict(item) for item in db.execute(
         "SELECT * FROM remediation_actions WHERE risk_id = ? ORDER BY action_id", (risk_id,)
     ).fetchall()]
-    risk["events"] = [_dict(item) for item in db.execute(
+    events = [_dict(item) for item in db.execute(
         "SELECT * FROM workflow_events WHERE risk_id = ? ORDER BY event_id", (risk_id,)
     ).fetchall()]
+    risk["events"] = [
+        item for item in events
+        if sandbox_visible(item.get("sandbox_id"), sandbox_id)
+    ]
     risk["decision"] = _dict(db.execute(
         "SELECT * FROM decisions WHERE risk_id = ?", (risk_id,)
     ).fetchone())
+    from app.services.findings import findings_for_risk
+    risk["findings"] = findings_for_risk(db, risk_id, sandbox_id)
     return risk
 
 

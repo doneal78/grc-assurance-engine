@@ -5,8 +5,13 @@ from flask import Blueprint, Response, abort, redirect, render_template, request
 from app.db import get_db
 from app.services.cost_model import disposition_avoided_incident_problem
 from app.services.demo_auth import request_is_signed_in
+from app.services.control_mapper import list_library
+from app.services.findings import (
+    FINDING_SEVERITIES, FINDING_STATUSES, crafted_finding_metric_problem, create_finding,
+    parse_finding_update, parse_new_finding, update_finding,
+)
 from app.services.intake_export import package_from_saved_risk, render_export
-from app.services.sandbox_http import request_scope
+from app.services.sandbox_http import issue_sandbox, request_scope
 from app.services.walkthrough import carried_walk_step
 from app.services.workflow_service import (
     DISPOSITIONS, WorkflowInputError, get_risk, list_risks, record_decision, update_action,
@@ -25,7 +30,7 @@ def detail(risk_id):
     risk = get_risk(get_db(), risk_id, sandbox_id=request_scope())
     if risk is None:
         abort(404)
-    return render_template("risk_detail.html", risk=risk, dispositions=DISPOSITIONS)
+    return render_template("risk_detail.html", **_detail_context(risk))
 
 
 @bp.get("/risks/<risk_id>/export/<export_format>")
@@ -65,7 +70,7 @@ def record_risk_decision(risk_id):
         if risk is None:
             abort(404)
         return render_template(
-            "risk_detail.html", risk=risk, dispositions=DISPOSITIONS, decision_error=crafted,
+            "risk_detail.html", **_detail_context(risk, decision_error=crafted),
         ), 400
     try:
         saved = record_decision(
@@ -86,11 +91,101 @@ def record_risk_decision(risk_id):
             abort(404)
         get_db().rollback()
         return render_template(
-            "risk_detail.html", risk=risk, dispositions=DISPOSITIONS, decision_error=str(exc),
+            "risk_detail.html", **_detail_context(risk, decision_error=str(exc)),
         ), 400
     if saved is None:
         abort(404)
     return _redirect_keeping_walk("risks.detail", risk_id=saved)
+
+
+@bp.post("/risks/<risk_id>/findings")
+def create_risk_finding(risk_id):
+    risk = get_risk(get_db(), risk_id, sandbox_id=request_scope())
+    if risk is None:
+        abort(404)
+    blocked = crafted_finding_metric_problem(request.form)
+    if blocked:
+        return render_template(
+            "risk_detail.html", **_detail_context(risk, finding_error=blocked),
+        ), 400
+    problems, fields = parse_new_finding(
+        request.form.get("title", ""),
+        request.form.get("description", ""),
+        request.form.get("severity", ""),
+        request.form.get("owner", ""),
+        request.form.get("vendor_name", ""),
+        request.form.getlist("mapping_id"),
+        request.form.get("status", "open"),
+        request.form.get("closing_note", ""),
+    )
+    if problems:
+        return render_template(
+            "risk_detail.html", **_detail_context(risk, finding_error="; ".join(problems)),
+        ), 400
+    try:
+        saved = create_finding(get_db(), risk_id, fields, sandbox_id=issue_sandbox())
+    except WorkflowInputError as exc:
+        get_db().rollback()
+        risk = get_risk(get_db(), risk_id, sandbox_id=request_scope())
+        if risk is None:
+            abort(404)
+        return render_template(
+            "risk_detail.html", **_detail_context(risk, finding_error=str(exc)),
+        ), 400
+    if saved is None:
+        abort(404)
+    return _redirect_keeping_walk("risks.detail", risk_id=risk_id)
+
+
+@bp.post("/risks/<risk_id>/findings/<int:finding_id>")
+def update_risk_finding(risk_id, finding_id):
+    risk = get_risk(get_db(), risk_id, sandbox_id=request_scope())
+    if risk is None:
+        abort(404)
+    blocked = crafted_finding_metric_problem(request.form)
+    if blocked:
+        return render_template(
+            "risk_detail.html", **_detail_context(risk, finding_error=blocked),
+        ), 400
+    problems, fields = parse_finding_update(
+        request.form.get("title", ""),
+        request.form.get("description", ""),
+        request.form.get("severity", ""),
+        request.form.get("owner", ""),
+        request.form.get("vendor_name", ""),
+        request.form.getlist("mapping_id"),
+        request.form.get("status", ""),
+        request.form.get("closing_note", ""),
+    )
+    if problems:
+        return render_template(
+            "risk_detail.html", **_detail_context(risk, finding_error="; ".join(problems)),
+        ), 400
+    try:
+        saved = update_finding(
+            get_db(), risk_id, finding_id, fields, sandbox_id=request_scope(),
+        )
+    except WorkflowInputError as exc:
+        get_db().rollback()
+        return render_template(
+            "risk_detail.html", **_detail_context(risk, finding_error=str(exc)),
+        ), 400
+    if saved is None:
+        abort(404)
+    return _redirect_keeping_walk("risks.detail", risk_id=saved)
+
+
+def _detail_context(risk, **extra):
+    library = list_library()
+    context = {
+        "risk": risk,
+        "dispositions": DISPOSITIONS,
+        "mapping_library": library["mappings"],
+        "finding_severities": FINDING_SEVERITIES,
+        "finding_statuses": FINDING_STATUSES,
+    }
+    context.update(extra)
+    return context
 
 
 def _redirect_keeping_walk(endpoint, **values):

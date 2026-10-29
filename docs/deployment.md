@@ -68,8 +68,9 @@ Put these in `/etc/grc-assurance-engine.env` when you want a value other than th
 | `SANDBOX_COOKIE_SECURE` | No | `false`, so a local HTTP demo can store the cookie. Browsers still send it on HTTPS. | `true` on this HTTPS host, so the cookie is not sent on an `http://` request. |
 | `SANDBOX_TTL_SECONDS` | No | `1209600` (14 days) | How long a sandbox may sit unseen before a request deletes it, including its event chain. The cookie uses the same lifetime. A value below 1 is ignored and the default is kept. |
 | `SANDBOX_MAX_RISKS` | No | `25` | How many saved assessments one sandbox may hold. A further save is rejected. A value below 1 is ignored and the default is kept. |
+| `SANDBOX_MAX_FINDINGS` | No | `50` | How many reviewer-authored findings one sandbox may hold. A further finding is rejected. Edit and close do not use another slot. A value below 1 is ignored and the default is kept. |
 
-`SECRET_KEY` is the secret. The other three have safe defaults and can stay unset. The generated `instance/sandbox_secret` is also a secret. Do not copy it into the repository. Rows saved before sandboxes existed, and rows saved by the local CLI, have no sandbox id and remain visible to every visitor. New browser saves do not.
+`SECRET_KEY` is the secret. The other settings have safe defaults and can stay unset. | The generated `instance/sandbox_secret` is also a secret. Do not copy it into the repository. Rows saved before sandboxes existed, and rows saved by the local CLI, have no sandbox id and remain visible to every visitor. New browser saves do not.
 
 ## Updating and rolling back
 

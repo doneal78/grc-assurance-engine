@@ -27,6 +27,7 @@ COOKIE_NAME = "grc_sandbox"
 COOKIE_SALT = "grc-visitor-sandbox"
 DEFAULT_TTL_SECONDS = 14 * 24 * 60 * 60
 DEFAULT_MAX_RISKS = 25
+DEFAULT_MAX_FINDINGS = 50
 SANDBOX_ID_RE = re.compile(r"^[0-9a-f]{32}$")
 
 
@@ -102,6 +103,27 @@ def resolve_secret_key(app):
     app.config["SECRET_KEY"] = key
 
 
+def _delete_sandbox_findings(db, sandbox_id):
+    """Remove one sandbox's reviewer-authored findings. Does not commit.
+
+    The findings table is absent only on a connection that has not run the
+    current schema. A missing table is left alone.
+    """
+    tables = {
+        row[0]
+        for row in db.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+    }
+    if "findings" not in tables:
+        return
+    db.execute(
+        """DELETE FROM finding_mappings WHERE finding_id IN (
+               SELECT finding_id FROM findings WHERE sandbox_id = ?
+           )""",
+        (sandbox_id,),
+    )
+    db.execute("DELETE FROM findings WHERE sandbox_id = ?", (sandbox_id,))
+
+
 def touch_sandbox(db, sandbox_id, now):
     """Insert or refresh one sandbox row. Does not commit."""
     stamp = now.astimezone(timezone.utc).isoformat(timespec="seconds")
@@ -117,7 +139,9 @@ def cleanup_stale_sandboxes(db, *, now, ttl_seconds):
     """Delete sandboxes that have not been seen within ``ttl_seconds``.
 
     Shared rows, which have no sandbox id, are not deleted. Each deleted
-    sandbox loses its risks, decisions, remediation, events, and chain tip.
+    sandbox loses its risks, decisions, remediation, reviewer-authored
+    findings, events, and chain tip. A finding written on a shared risk is
+    removed when its sandbox is removed. The shared risk stays.
     Returns the number of sandboxes removed. Commits only when it removes one.
     """
     if not isinstance(ttl_seconds, int) or ttl_seconds < 1:
@@ -135,6 +159,7 @@ def cleanup_stale_sandboxes(db, *, now, ttl_seconds):
     if not stale:
         return 0
     for sandbox_id in stale:
+        _delete_sandbox_findings(db, sandbox_id)
         risk_ids = [
             row["risk_id"]
             for row in db.execute(

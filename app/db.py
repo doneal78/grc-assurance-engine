@@ -73,6 +73,7 @@ def migrate(connection):
     from app.services.event_chain import ensure_event_chain
     ensure_event_chain(connection)
     _add_sandbox_scope(connection)
+    _ensure_findings(connection)
     connection.commit()
 
 
@@ -264,6 +265,42 @@ def _replace_global_scenario_unique(connection):
         connection.commit()
     finally:
         connection.execute("PRAGMA foreign_keys = ON")
+
+
+def _ensure_findings(connection):
+    """Add reviewer-authored finding tables when a database predates them.
+
+    ``CREATE TABLE IF NOT EXISTS`` in the schema file also creates them on
+    startup. This keeps a connection that only runs ``migrate`` aligned.
+    Existing risk rows are not changed.
+    """
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS findings (
+            finding_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            risk_id TEXT NOT NULL REFERENCES risks(risk_id) ON DELETE CASCADE,
+            sandbox_id TEXT NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT NOT NULL,
+            severity TEXT NOT NULL CHECK (severity IN ('low', 'medium', 'high', 'critical')),
+            vendor_name TEXT NOT NULL DEFAULT '',
+            owner TEXT NOT NULL,
+            status TEXT NOT NULL CHECK (status IN ('open', 'closed')),
+            closing_note TEXT NOT NULL DEFAULT '',
+            origin TEXT NOT NULL DEFAULT 'reviewer' CHECK (origin = 'reviewer'),
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            closed_at TEXT
+        )"""
+    )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS finding_mappings (
+            finding_id INTEGER NOT NULL REFERENCES findings(finding_id) ON DELETE CASCADE,
+            mapping_id TEXT NOT NULL,
+            PRIMARY KEY (finding_id, mapping_id)
+        )"""
+    )
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_findings_risk ON findings(risk_id)")
+    connection.execute("CREATE INDEX IF NOT EXISTS idx_findings_sandbox ON findings(sandbox_id)")
 
 
 def _add_decision_minutes(connection, column):
