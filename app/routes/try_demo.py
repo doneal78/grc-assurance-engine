@@ -27,6 +27,7 @@ from app.services.intake_replay import intake_field_names, query_form
 from app.services.org_policy import load_org_policy
 from app.services.scenario_runner import ScenarioNotFoundError, list_scenarios, run_scenario
 from app.services.walkthrough import SUBMISSION_COMPLETE_ATTR, carried_walk_step
+from app.services.sandbox_http import issue_sandbox
 from app.services.workflow_service import DISPOSITIONS, WorkflowInputError, register_intake
 
 # Intake, custom vendor, and trust center share the public form. A re-run
@@ -281,7 +282,7 @@ def import_save():
         return _import_result(imported, document, save_error=crafted, status=400)
     decision = _decision_from_form(request.form)
     try:
-        risk_id = register_intake(get_db(), match, decision)
+        risk_id = register_intake(get_db(), match, decision, sandbox_id=issue_sandbox())
     except WorkflowInputError as exc:
         get_db().rollback()
         return _import_result(imported, document, save_error=str(exc), status=400)

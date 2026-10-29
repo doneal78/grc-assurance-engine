@@ -7,6 +7,7 @@ coaching note for that stop. The guide does not write a risk.
 from flask import Blueprint, g, redirect, render_template, request, url_for
 
 from app.db import get_db
+from app.services.sandbox_http import request_scope
 from app.services.walkthrough import (
     PROHIBITED_SCENARIO_ID, SUBMISSION_COMPLETE_ATTR, WALK_COOKIE, WALK_QUERY,
     WALKTHROUGH_VERSION, known_step_id, neighbors, page_matches, scenario_card_step,
@@ -20,7 +21,7 @@ _SAVE_FIRST = "Save the eligibility case first."
 
 
 def _saved_prohibited():
-    return risk_for_scenario(get_db(), PROHIBITED_SCENARIO_ID)
+    return risk_for_scenario(get_db(), PROHIBITED_SCENARIO_ID, sandbox_id=request_scope())
 
 
 def destination(step, saved_risk):
@@ -103,7 +104,7 @@ def coach_for_request():
     if step.get("await_kind") == "decision" and saved:
         current = (request.view_args or {}).get("risk_id")
         if current == saved["risk_id"]:
-            risk = get_risk(get_db(), saved["risk_id"])
+            risk = get_risk(get_db(), saved["risk_id"], sandbox_id=request_scope())
             decided = bool(risk and risk.get("decision"))
     complete = submission_satisfied(
         step,

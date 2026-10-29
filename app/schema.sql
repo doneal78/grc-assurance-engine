@@ -2,7 +2,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS risks (
     risk_id TEXT PRIMARY KEY,
-    scenario_id TEXT NOT NULL UNIQUE,
+    scenario_id TEXT NOT NULL,
     scenario_name TEXT NOT NULL,
     risk_statement TEXT NOT NULL,
     inherent_tier TEXT NOT NULL,
@@ -11,7 +11,8 @@ CREATE TABLE IF NOT EXISTS risks (
     created_at TEXT NOT NULL,
     policy_id TEXT,
     policy_version TEXT,
-    policy_outcome TEXT
+    policy_outcome TEXT,
+    sandbox_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS remediation_actions (
@@ -35,7 +36,14 @@ CREATE TABLE IF NOT EXISTS workflow_events (
     occurred_at TEXT NOT NULL,
     prev_hash TEXT,
     hash TEXT,
-    chain_origin TEXT
+    chain_origin TEXT,
+    sandbox_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS sandboxes (
+    sandbox_id TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    last_seen_at TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS schema_meta (

@@ -17,6 +17,15 @@ unless the stored tip still names the removed row. This is tamper-evident.
 It is not tamper-proof, immutable storage, a production audit log, or a
 certification.
 
+Events with no sandbox id are one shared chain, in ``event_id`` order.
+Each browser sandbox is a separate chain, also in ``event_id`` order.
+``prev_hash`` points at the previous event in that same chain. The sandbox
+id is stored on the row and is not part of the hashed JSON.
+``verify_event_chain`` still checks one sequence. ``read_event_chain``
+checks every sequence and is intact only when each one is intact. Deleting
+one sandbox deletes that sequence and its tip. The other sequences are not
+rewritten.
+
 ``verify_event_chain`` does not import Flask and does not open a database.
 """
 
@@ -157,7 +166,9 @@ def describe_event_chain(events, *, tip_event_id=None, tip_hash=None):
         "limit": (
             "Someone who can rewrite the database can rebuild the whole chain. "
             "This check is not immutable storage, a production audit log, or a certification. "
-            "It does not change observed register counts or the illustrative cost formula."
+            "It does not change observed register counts or the illustrative cost formula. "
+            "A browser sandbox is its own chain. Deleting that sandbox removes its events "
+            "and does not rewrite the shared chain."
         ),
     }
 
@@ -180,12 +191,20 @@ def _meta_value(connection, key):
     return row[0] if not isinstance(row, sqlite3.Row) else row["value"]
 
 
-def write_chain_tip(connection, event_id, digest):
-    """Store the latest event id and hash. Does not commit."""
+def _tip_keys(sandbox_id):
+    """Meta keys for one chain. ``None`` is the shared chain."""
+    if sandbox_id is None:
+        return TIP_EVENT_ID_KEY, TIP_HASH_KEY
+    return f"{TIP_EVENT_ID_KEY}:{sandbox_id}", f"{TIP_HASH_KEY}:{sandbox_id}"
+
+
+def write_chain_tip(connection, event_id, digest, sandbox_id=None):
+    """Store the latest event id and hash for one chain. Does not commit."""
     _meta_table(connection)
+    event_key, hash_key = _tip_keys(sandbox_id)
     for key, value in (
-        (TIP_EVENT_ID_KEY, str(event_id)),
-        (TIP_HASH_KEY, digest),
+        (event_key, str(event_id)),
+        (hash_key, digest),
     ):
         connection.execute(
             """INSERT INTO schema_meta (key, value) VALUES (?, ?)
@@ -194,8 +213,23 @@ def write_chain_tip(connection, event_id, digest):
         )
 
 
-def read_chain_tip(connection):
-    """Return ``(tip_event_id, tip_hash)``. Missing keys stay ``None``."""
+def delete_chain_tip(connection, sandbox_id):
+    """Remove one sandbox chain's tip. The shared tip is left in place."""
+    if not sandbox_id:
+        return
+    tables = {
+        row[0] for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+    }
+    if "schema_meta" not in tables:
+        return
+    for key in _tip_keys(sandbox_id):
+        connection.execute("DELETE FROM schema_meta WHERE key = ?", (key,))
+
+
+def read_chain_tip(connection, sandbox_id=None):
+    """Return ``(tip_event_id, tip_hash)`` for one chain. Missing keys stay ``None``."""
     tables = {
         row[0] for row in connection.execute(
             "SELECT name FROM sqlite_master WHERE type = 'table'"
@@ -203,23 +237,17 @@ def read_chain_tip(connection):
     }
     if "schema_meta" not in tables:
         return None, None
-    raw_id = _meta_value(connection, TIP_EVENT_ID_KEY)
-    tip_hash = _meta_value(connection, TIP_HASH_KEY)
+    event_key, hash_key = _tip_keys(sandbox_id)
+    raw_id = _meta_value(connection, event_key)
+    tip_hash = _meta_value(connection, hash_key)
     tip_event_id = int(raw_id) if isinstance(raw_id, str) and raw_id.isdigit() else None
     if not isinstance(tip_hash, str):
         tip_hash = None
     return tip_event_id, tip_hash
 
 
-def read_event_chain(connection):
-    """Load workflow events in ``event_id`` order and describe the chain."""
-    rows = [dict(row) for row in connection.execute(
-        """SELECT event_id, risk_id, event_type, detail, occurred_at,
-                  prev_hash, hash, chain_origin
-           FROM workflow_events
-           ORDER BY event_id"""
-    ).fetchall()]
-    tip_event_id, tip_hash = read_chain_tip(connection)
+def _describe_stored_chain(rows, tip_event_id, tip_hash):
+    """Describe one stored sequence, including a missing tip."""
     if rows and (tip_event_id is None or tip_hash is None):
         described = describe_event_chain(rows)
         described["status"] = "broken"
@@ -230,6 +258,81 @@ def read_event_chain(connection):
         )
         return described
     return describe_event_chain(rows, tip_event_id=tip_event_id, tip_hash=tip_hash)
+
+
+def _backfill_note(backfilled):
+    if backfilled == 0:
+        return "No stored event was chained after the fact."
+    if backfilled == 1:
+        return (
+            "1 event was chained after the fact. It already existed when the hash chain was added. "
+            "The mark is stored on the row. It does not mean the original write was hashed."
+        )
+    return (
+        f"{backfilled} events were chained after the fact. They already existed when the hash "
+        "chain was added. The mark is stored on those rows. It does not mean the original "
+        "writes were hashed."
+    )
+
+
+def _combine_chains(parts):
+    """One page result for several intact or broken chains."""
+    total = sum(part["event_count"] for part in parts)
+    backfilled = sum(part["backfilled_count"] for part in parts)
+    broken = [part for part in parts if part["status"] != "intact"]
+    if broken:
+        chosen = min(
+            broken,
+            key=lambda part: part["event_id"] if isinstance(part["event_id"], int) else 10**18,
+        )
+        status = "broken"
+        event_id = chosen["event_id"]
+        summary = chosen["summary"]
+    else:
+        status = "intact"
+        event_id = None
+        summary = (
+            f"Chain check: intact ({total} events). "
+            "Each browser sandbox has its own chain. The shared chain is separate. "
+            "verify_event_chain checks each chain on its own."
+        )
+    return {
+        "label": CHAIN_LABEL,
+        "status": status,
+        "event_id": event_id,
+        "event_count": total,
+        "backfilled_count": backfilled,
+        "summary": summary,
+        "backfill_note": _backfill_note(backfilled),
+        "limit": parts[0]["limit"],
+    }
+
+
+def read_event_chain(connection):
+    """Load workflow events and describe every chain.
+
+    Rows with no sandbox id are the shared chain. Each other sandbox id is
+    its own chain. One chain uses the same summary as a single sequence.
+    """
+    rows = [dict(row) for row in connection.execute(
+        """SELECT event_id, risk_id, event_type, detail, occurred_at,
+                  prev_hash, hash, chain_origin, sandbox_id
+           FROM workflow_events
+           ORDER BY event_id"""
+    ).fetchall()]
+    groups = {}
+    for row in rows:
+        groups.setdefault(row.get("sandbox_id"), []).append(row)
+    if not groups:
+        tip_event_id, tip_hash = read_chain_tip(connection, None)
+        return _describe_stored_chain([], tip_event_id, tip_hash)
+    described = []
+    for sandbox_id, group in groups.items():
+        tip_event_id, tip_hash = read_chain_tip(connection, sandbox_id)
+        described.append(_describe_stored_chain(group, tip_event_id, tip_hash))
+    if len(described) == 1:
+        return described[0]
+    return _combine_chains(described)
 
 
 def ensure_event_chain(connection):

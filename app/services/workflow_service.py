@@ -5,9 +5,12 @@ import re
 from datetime import date, datetime, timezone
 from uuid import uuid4
 
+from flask import current_app, has_request_context
+
 from app.services.event_chain import (
     CHAIN_ORIGIN_APPENDED, GENESIS_PREV_HASH, event_digest, write_chain_tip,
 )
+from app.services.sandbox import DEFAULT_MAX_RISKS, UNSCOPED
 
 
 class WorkflowInputError(ValueError):
@@ -51,22 +54,34 @@ def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def _append_event(db, risk_id, event_type, detail, occurred_at):
-    """Insert one workflow event and link it to the previous hash.
+def _append_event(db, risk_id, event_type, detail, occurred_at, sandbox_id=None):
+    """Insert one workflow event and link it to the previous hash in its chain.
 
-    The hash covers the canonical event fields plus ``prev_hash``. The row
-    is marked appended, which means it was hashed when it was written.
+    Events with no sandbox id continue the shared chain. A browser sandbox
+    continues only that sandbox's chain. The hash covers the canonical event
+    fields plus ``prev_hash``. The sandbox id is stored and is not hashed.
+    The row is marked appended, which means it was hashed when it was written.
     Does not commit.
     """
-    previous = db.execute(
-        "SELECT hash FROM workflow_events ORDER BY event_id DESC LIMIT 1"
-    ).fetchone()
+    if sandbox_id is None:
+        previous = db.execute(
+            """SELECT hash FROM workflow_events
+               WHERE sandbox_id IS NULL
+               ORDER BY event_id DESC LIMIT 1"""
+        ).fetchone()
+    else:
+        previous = db.execute(
+            """SELECT hash FROM workflow_events
+               WHERE sandbox_id = ?
+               ORDER BY event_id DESC LIMIT 1""",
+            (sandbox_id,),
+        ).fetchone()
     prev_hash = GENESIS_PREV_HASH if previous is None else previous["hash"]
     cursor = db.execute(
         """INSERT INTO workflow_events
-           (risk_id, event_type, detail, occurred_at, prev_hash, hash, chain_origin)
-           VALUES (?, ?, ?, ?, ?, NULL, ?)""",
-        (risk_id, event_type, detail, occurred_at, prev_hash, CHAIN_ORIGIN_APPENDED),
+           (risk_id, event_type, detail, occurred_at, prev_hash, hash, chain_origin, sandbox_id)
+           VALUES (?, ?, ?, ?, ?, NULL, ?, ?)""",
+        (risk_id, event_type, detail, occurred_at, prev_hash, CHAIN_ORIGIN_APPENDED, sandbox_id),
     )
     event_id = cursor.lastrowid
     payload = {
@@ -83,31 +98,56 @@ def _append_event(db, risk_id, event_type, detail, occurred_at):
         "UPDATE workflow_events SET hash = ? WHERE event_id = ?",
         (digest, event_id),
     )
-    write_chain_tip(db, event_id, digest)
+    write_chain_tip(db, event_id, digest, sandbox_id)
     return event_id
+
+
+def sandbox_visible(owner, sandbox_id):
+    """Whether one stored sandbox id may be shown for this caller.
+
+    ``UNSCOPED`` is a service call and can see every row. A null owner is a
+    shared row and stays visible. Any other owner matches only that sandbox.
+    """
+    if sandbox_id is UNSCOPED:
+        return True
+    if owner is None:
+        return True
+    return owner == sandbox_id
+
+
+def _list_scope(sandbox_id):
+    if sandbox_id is UNSCOPED:
+        return "", []
+    if sandbox_id is None:
+        return "WHERE r.sandbox_id IS NULL", []
+    return "WHERE r.sandbox_id IS NULL OR r.sandbox_id = ?", [sandbox_id]
 
 
 def _dict(row):
     return dict(row) if row is not None else None
 
 
-def list_risks(db):
+def list_risks(db, sandbox_id=UNSCOPED):
+    where, args = _list_scope(sandbox_id)
     rows = db.execute(
-        """SELECT r.*,
+        f"""SELECT r.*,
            (SELECT COUNT(*) FROM remediation_actions a WHERE a.risk_id = r.risk_id) AS action_count,
            (SELECT COUNT(*) FROM remediation_actions a
             WHERE a.risk_id = r.risk_id AND a.status != 'completed') AS open_action_count,
            (SELECT d.disposition FROM decisions d WHERE d.risk_id = r.risk_id) AS decision_disposition
-           FROM risks r ORDER BY r.created_at DESC"""
+           FROM risks r {where} ORDER BY r.created_at DESC""",
+        args,
     ).fetchall()
     return [_dict(row) for row in rows]
 
 
-def get_risk(db, risk_id):
+def get_risk(db, risk_id, sandbox_id=UNSCOPED):
     row = db.execute("SELECT * FROM risks WHERE risk_id = ?", (risk_id,)).fetchone()
     if row is None:
         return None
     risk = _dict(row)
+    if not sandbox_visible(risk.get("sandbox_id"), sandbox_id):
+        return None
     risk["rationale"] = json.loads(risk.pop("rationale_json"))
     risk["actions"] = [_dict(item) for item in db.execute(
         "SELECT * FROM remediation_actions WHERE risk_id = ? ORDER BY action_id", (risk_id,)
@@ -121,9 +161,58 @@ def get_risk(db, risk_id):
     return risk
 
 
-def risk_for_scenario(db, scenario_id):
-    row = db.execute("SELECT risk_id FROM risks WHERE scenario_id = ?", (scenario_id,)).fetchone()
+def risk_for_scenario(db, scenario_id, sandbox_id=None):
+    """Return the shared row, or the row in one browser sandbox.
+
+    ``sandbox_id`` omitted or ``None`` selects the shared row, whose sandbox
+    id is null. A browser id selects only that sandbox. Another browser's
+    copy is not returned.
+    """
+    if sandbox_id is None:
+        row = db.execute(
+            "SELECT risk_id FROM risks WHERE scenario_id = ? AND sandbox_id IS NULL",
+            (scenario_id,),
+        ).fetchone()
+    else:
+        row = db.execute(
+            "SELECT risk_id FROM risks WHERE scenario_id = ? AND sandbox_id = ?",
+            (scenario_id, sandbox_id),
+        ).fetchone()
     return _dict(row)
+
+
+def _enforce_sandbox_cap(db, sandbox_id):
+    """Reject a new row when this browser sandbox is already at its cap.
+
+    Shared rows have no sandbox id and are not capped here. The cap is a
+    size limit for one browser, not a security boundary.
+    """
+    if sandbox_id is None:
+        return
+    maximum = DEFAULT_MAX_RISKS
+    if has_request_context():
+        configured = current_app.config.get("SANDBOX_MAX_RISKS", DEFAULT_MAX_RISKS)
+        if isinstance(configured, int) and configured >= 1:
+            maximum = configured
+    count = db.execute(
+        "SELECT COUNT(*) AS n FROM risks WHERE sandbox_id = ?",
+        (sandbox_id,),
+    ).fetchone()["n"]
+    if count >= maximum:
+        raise WorkflowInputError(
+            f"This browser sandbox already holds the maximum of {maximum} saved assessments. "
+            "Nothing new was saved."
+        )
+
+
+def _sandbox_for_risk(db, risk_id):
+    row = db.execute(
+        "SELECT sandbox_id FROM risks WHERE risk_id = ?",
+        (risk_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return row["sandbox_id"]
 
 
 def _stored_rationale(result):
@@ -170,23 +259,29 @@ def _intake_statement(result):
     return summary
 
 
-def register_scenario(db, result):
-    """Persist one scenario as a local risk record and create a follow-up action."""
+def register_scenario(db, result, sandbox_id=None):
+    """Persist one scenario as a local risk record and create a follow-up action.
+
+    ``sandbox_id`` omitted stores a shared row. A browser id stores a private
+    copy in that sandbox. The same scenario can exist once per sandbox.
+    """
     if not result.get("synthetic_data"):
         raise WorkflowInputError("Only synthetic demonstration scenarios may be saved by this workflow.")
     scenario_id = result.get("scenario_id")
-    existing = risk_for_scenario(db, scenario_id)
+    existing = risk_for_scenario(db, scenario_id, sandbox_id=sandbox_id)
     if existing:
         return existing["risk_id"]
+    _enforce_sandbox_cap(db, sandbox_id)
     risk_id = _persist_assessment(
         db, result, scenario_id, result["summary"],
         "Synthetic scenario result added to the local risk register.",
+        sandbox_id=sandbox_id,
     )
     db.commit()
     return risk_id
 
 
-def register_intake(db, result, decision, *, commit=True):
+def register_intake(db, result, decision, *, commit=True, sandbox_id=None):
     """Save one synthetic intake and the human disposition in one transaction.
 
     The caller has already confirmed. Assess-only results never reach this
@@ -217,6 +312,7 @@ def register_intake(db, result, decision, *, commit=True):
     )
     if problems:
         raise WorkflowInputError("; ".join(problems))
+    _enforce_sandbox_cap(db, sandbox_id)
     risk_id = _persist_assessment(
         db, result, f"intake-{uuid4().hex[:12]}", _intake_statement(result),
         "Synthetic general intake added to the local risk register. Demonstration data.",
@@ -225,6 +321,7 @@ def register_intake(db, result, decision, *, commit=True):
             "Synthetic general intake confirmed for save. Demonstration data. "
             "The engine score is not a disposition.",
         ),
+        sandbox_id=sandbox_id,
     )
     _save_decision_row(db, risk_id, normalized, existing=None)
     if commit:
@@ -232,7 +329,8 @@ def register_intake(db, result, decision, *, commit=True):
     return risk_id
 
 
-def _persist_assessment(db, result, scenario_id, statement, created_detail, opening_event=None):
+def _persist_assessment(db, result, scenario_id, statement, created_detail, opening_event=None,
+                        sandbox_id=None):
     """Insert the risk, its follow-up action, and the creation events. Does not commit."""
     risk_id = f"R-{uuid4().hex[:8].upper()}"
     risk = result["risk"]
@@ -242,15 +340,15 @@ def _persist_assessment(db, result, scenario_id, statement, created_detail, open
     db.execute(
         """INSERT INTO risks
         (risk_id, scenario_id, scenario_name, risk_statement, inherent_tier, residual_tier,
-         rationale_json, created_at, policy_id, policy_version, policy_outcome)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+         rationale_json, created_at, policy_id, policy_version, policy_outcome, sandbox_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (risk_id, scenario_id, result["name"], statement, risk["inherent"]["tier"],
          risk["residual"]["tier"], json.dumps(_stored_rationale(result)), now,
-         policy.get("policy_id"), policy.get("policy_version"), policy_outcome),
+         policy.get("policy_id"), policy.get("policy_version"), policy_outcome, sandbox_id),
     )
     if opening_event:
-        _append_event(db, risk_id, opening_event[0], opening_event[1], now)
-    _append_event(db, risk_id, "risk_created", created_detail, now)
+        _append_event(db, risk_id, opening_event[0], opening_event[1], now, sandbox_id)
+    _append_event(db, risk_id, "risk_created", created_detail, now, sandbox_id)
 
     statuses = {claim["evidence_status"] for claim in result["claims"]}
     prohibited = policy_outcome == "prohibited"
@@ -279,11 +377,11 @@ def _persist_assessment(db, result, scenario_id, statement, created_detail, open
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
             (risk_id, description, priority, "Unassigned", None, "open", now, now),
         )
-        _append_event(db, risk_id, "remediation_created", description, now)
+        _append_event(db, risk_id, "remediation_created", description, now, sandbox_id)
     return risk_id
 
 
-def update_action(db, action_id, status, owner, due_date, completion_notes):
+def update_action(db, action_id, status, owner, due_date, completion_notes, sandbox_id=UNSCOPED):
     problems = []
     if status not in ACTION_STATUSES:
         problems.append("status must be open, in_progress, or completed")
@@ -301,8 +399,14 @@ def update_action(db, action_id, status, owner, due_date, completion_notes):
     if problems:
         raise WorkflowInputError("; ".join(problems))
 
-    row = db.execute("SELECT risk_id FROM remediation_actions WHERE action_id = ?", (action_id,)).fetchone()
-    if row is None:
+    row = db.execute(
+        """SELECT a.risk_id, r.sandbox_id
+           FROM remediation_actions a
+           JOIN risks r ON r.risk_id = a.risk_id
+           WHERE a.action_id = ?""",
+        (action_id,),
+    ).fetchone()
+    if row is None or not sandbox_visible(row["sandbox_id"], sandbox_id):
         return None
     risk_id = row["risk_id"]
     now = _now()
@@ -313,6 +417,7 @@ def update_action(db, action_id, status, owner, due_date, completion_notes):
     )
     _append_event(
         db, risk_id, "remediation_updated", f"Action {action_id} status changed to {status}.", now,
+        row["sandbox_id"],
     )
     db.commit()
     return risk_id
@@ -586,7 +691,7 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
                     exception_rationale="", handling_minutes=None, rework_minutes=None,
                     manual_touches=None, handoffs=None, authenticated_effort_minutes=None,
                     cash_savings_dollars=None, *, accept_authenticated_effort=False,
-                    accept_cash_savings=False):
+                    accept_cash_savings=False, sandbox_id=UNSCOPED):
     """Record the human disposition for one saved risk.
 
     A prohibited result can still be approved. The check cites the policy and
@@ -633,7 +738,7 @@ def record_decision(db, risk_id, disposition, rationale, decider, conditions="",
     times handling minutes, rework minutes, touches, handoffs, or
     authenticated effort.
     """
-    risk = get_risk(db, risk_id)
+    risk = get_risk(db, risk_id, sandbox_id=sandbox_id)
     if risk is None:
         return None
     stored = risk["rationale"].get("risk", {})
@@ -710,4 +815,4 @@ def _save_decision_row(db, risk_id, normalized, existing):
         detail += " Exception rationale recorded."
     if existing:
         detail += f" Replaces {existing['disposition']}."
-    _append_event(db, risk_id, "decision_recorded", detail, now)
+    _append_event(db, risk_id, "decision_recorded", detail, now, _sandbox_for_risk(db, risk_id))

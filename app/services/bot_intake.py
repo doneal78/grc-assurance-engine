@@ -212,17 +212,20 @@ def load_json_object(text):
 
 
 def assess_request_text(text, db=None, *, open_url=None, resolver=None,
-                        accept_authenticated_effort=False, accept_cash_savings=False):
+                        accept_authenticated_effort=False, accept_cash_savings=False,
+                        bind_sandbox=False):
     """Parse a JSON request body and return one assessment document."""
     return assess_request(
         load_json_object(text), db=db, open_url=open_url, resolver=resolver,
         accept_authenticated_effort=accept_authenticated_effort,
         accept_cash_savings=accept_cash_savings,
+        bind_sandbox=bind_sandbox,
     )
 
 
 def assess_request(payload, db=None, *, open_url=None, resolver=None,
-                   accept_authenticated_effort=False, accept_cash_savings=False):
+                   accept_authenticated_effort=False, accept_cash_savings=False,
+                   bind_sandbox=False):
     """Validate one assess request and run it through intake.
 
     persist defaults to false. A true value writes the synthetic vendor and
@@ -243,8 +246,12 @@ def assess_request(payload, db=None, *, open_url=None, resolver=None,
     if db is None:
         raise BotRequestError(["persist is true, but no database is available. Nothing was saved."])
     _require_decision(result, decision)
+    sandbox_id = None
+    if bind_sandbox:
+        from app.services.sandbox_http import issue_sandbox
+        sandbox_id = issue_sandbox()
     try:
-        risk_id = register_intake(db, result, decision)
+        risk_id = register_intake(db, result, decision, sandbox_id=sandbox_id)
     except WorkflowInputError as exc:
         db.rollback()
         raise BotRequestError([str(exc)]) from exc

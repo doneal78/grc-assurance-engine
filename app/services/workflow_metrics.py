@@ -36,6 +36,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 from app.services.cost_model import avoided_incident_value
+from app.services.sandbox import UNSCOPED
 from app.services.workflow_service import DISPOSITIONS
 
 
@@ -188,27 +189,61 @@ def _not_measured_items(avoided):
     }]
 
 
-def observed_metrics(db, *, avoided_incident=None):
+def _metric_scope(sandbox_id):
+    """SQL predicate for definition 9's input rows.
+
+    ``UNSCOPED`` reads the whole table, which is what a direct service call
+    does. A request scope keeps that browser's rows and rows with no sandbox
+    id. Another browser's sandbox is left out. The formulas in
+    ``summarize_register`` are unchanged.
+    """
+    if sandbox_id is UNSCOPED:
+        return "", []
+    if sandbox_id is None:
+        return "sandbox_id IS NULL", []
+    return "(sandbox_id IS NULL OR sandbox_id = ?)", [sandbox_id]
+
+
+def observed_metrics(db, *, avoided_incident=None, sandbox_id=UNSCOPED):
     """Read the register and return observed metrics. Performs no writes."""
+    clause, args = _metric_scope(sandbox_id)
+    if clause:
+        risk_where = f"WHERE {clause}"
+        child_where = f"WHERE risk_id IN (SELECT risk_id FROM risks WHERE {clause})"
+        child_args = list(args)
+    else:
+        risk_where = ""
+        child_where = ""
+        child_args = []
     risks = [dict(row) for row in db.execute(
-        "SELECT risk_id, scenario_id, residual_tier, rationale_json FROM risks"
+        f"SELECT risk_id, scenario_id, residual_tier, rationale_json FROM risks {risk_where}",
+        args,
     ).fetchall()]
     actions = [dict(row) for row in db.execute(
-        "SELECT status FROM remediation_actions"
+        f"SELECT status FROM remediation_actions {child_where}",
+        child_args,
     ).fetchall()]
     decisions = [dict(row) for row in db.execute(
-        """SELECT risk_id, disposition, decided_at, handling_minutes, rework_minutes,
+        f"""SELECT risk_id, disposition, decided_at, handling_minutes, rework_minutes,
                   manual_touches, handoffs, authenticated_effort_minutes,
                   cash_savings_dollars
-           FROM decisions"""
+           FROM decisions {child_where}""",
+        child_args,
     ).fetchall()]
-    events = [dict(row) for row in db.execute(
-        """SELECT risk_id, event_type, occurred_at
+    if clause:
+        event_sql = f"""SELECT risk_id, event_type, occurred_at
            FROM workflow_events
            WHERE event_type IN (?, ?)
-           ORDER BY event_id""",
-        (INTAKE_EVENT, DISPOSITION_EVENT),
-    ).fetchall()]
+             AND risk_id IN (SELECT risk_id FROM risks WHERE {clause})
+           ORDER BY event_id"""
+        event_args = [INTAKE_EVENT, DISPOSITION_EVENT, *args]
+    else:
+        event_sql = """SELECT risk_id, event_type, occurred_at
+           FROM workflow_events
+           WHERE event_type IN (?, ?)
+           ORDER BY event_id"""
+        event_args = [INTAKE_EVENT, DISPOSITION_EVENT]
+    events = [dict(row) for row in db.execute(event_sql, event_args).fetchall()]
     return summarize_register(
         risks, actions, decisions, events, avoided_incident=avoided_incident,
     )
