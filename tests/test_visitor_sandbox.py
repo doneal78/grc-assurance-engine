@@ -190,7 +190,9 @@ def test_cookie_tampering_is_rejected_and_a_copied_cookie_is_not_a_login(tmp_pat
     assert read_sandbox_cookie(stored.value, "sandbox-test-secret", DEFAULT_TTL_SECONDS)
 
     stranger = app.test_client()
-    stranger.set_cookie(COOKIE_NAME, stored.value[:-1] + ("a" if stored.value[-1] != "a" else "b"))
+    # The final base64 character can change without changing the decoded
+    # signature. Appending a character always breaks the cookie.
+    stranger.set_cookie(COOKIE_NAME, stored.value + "x")
     assert stranger.get(f"/risks/{risk_id}").status_code == 404
     assert risk_id.encode() not in stranger.get("/risks").data
 

@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 
 from flask import Flask, Response, request
 
+from app.services.sandbox import DEFAULT_MAX_FINDINGS as _SANDBOX_MAX_FINDINGS
 from app.services.sandbox import DEFAULT_MAX_RISKS as _SANDBOX_MAX_RISKS
 from app.services.sandbox import DEFAULT_TTL_SECONDS as _SANDBOX_TTL_SECONDS
 
@@ -40,6 +41,7 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
         SECRET_KEY=os.environ.get("SECRET_KEY", ""),
         SANDBOX_TTL_SECONDS=_env_int("SANDBOX_TTL_SECONDS", _SANDBOX_TTL_SECONDS),
         SANDBOX_MAX_RISKS=_env_int("SANDBOX_MAX_RISKS", _SANDBOX_MAX_RISKS),
+        SANDBOX_MAX_FINDINGS=_env_int("SANDBOX_MAX_FINDINGS", _SANDBOX_MAX_FINDINGS),
         SANDBOX_COOKIE_SECURE=os.environ.get("SANDBOX_COOKIE_SECURE", "false").lower() == "true",
         TESTING=False,
     )
