@@ -314,6 +314,8 @@ def test_backup_destination_shape_and_online_backup_keeps_the_source(tmp_path):
     )
     assert copied.returncode == 0, copied.stderr
     assert backup.is_file()
+    assert backup.stat().st_mode & 0o777 == 0o600
+    assert backup.parent.stat().st_mode & 0o777 == 0o700
     copy = sqlite3.connect(backup)
     assert copy.execute("SELECT id FROM saved").fetchone() == (7,)
     copy.close()
@@ -575,8 +577,14 @@ def test_deploy_script_is_a_lighter_path_than_bootstrap():
     assert ".backup" in text
     assert "/etc/grc-assurance-revision" in text
     assert "DEPLOYED_COMMIT" not in text
-    assert 'chown -R "$running_user:$running_user" "$APP_DIR"' in text
+    assert "apply_runtime_ownership" in text
+    assert 'chown -R "$running_user:$running_user" "$APP_DIR"' not in text
     assert 'chown -R "$running_user:$running_user" "$DATA_DIR"' not in text
+    assert "BACKUP_KEEP" in text
+    assert "prune_sqlite_backups" in text
+    main = text.split("\nmain() {", 1)[1]
+    assert main.index("backup_sqlite_online") < main.index("prune_sqlite_backups") < main.index("replace_app_tree")
+    assert main.index("apply_runtime_ownership") < main.index('systemctl restart "$UNIT_NAME"')
     assert "rm -rf" not in text
     assert "apt-get" not in text
     assert "useradd" not in text
@@ -632,6 +640,277 @@ def test_deployment_doc_describes_the_script_and_the_remaining_gaps():
     assert "da9329c2aed979fcf6465392b9b4393fa03e7421" in text
     assert "The owner states" in text
     assert "did not SSH" in text
+    assert "4af28b7302340baec080c1f34156ef8b35b1f0b2" in text
+    assert "2026-10-29" in text
+    assert "except for comments" in text
+    assert "valid until 2041" in text
+    assert "Certbot is not used, by design." in text
+    assert "There is no swap" in text
+    assert "BACKUP_KEEP" in text
+    assert "defaults to 14" in text
+    assert "does not delete those loose copies" in text
+    assert "harden-lightsail-host.sh" in text
+    assert "PermitRootLogin no" in text
+    assert "Nothing in this repository runs it" in text
     assert "has not been executed" not in text
     assert "still untested" not in text
     assert "not installed yet" not in text
+
+
+def _mode(path: Path) -> int:
+    return path.stat().st_mode & 0o7777
+
+
+def test_backup_keep_count_reads_the_environment():
+    default = _source_deploy("unset BACKUP_KEEP; backup_keep_count")
+    assert default.returncode == 0, default.stderr
+    assert default.stdout.strip() == "14"
+
+    zero = _source_deploy("backup_keep_count", env={"BACKUP_KEEP": "0"})
+    assert zero.returncode == 0, zero.stderr
+    assert zero.stdout.strip() == "0"
+
+    padded = _source_deploy("backup_keep_count", env={"BACKUP_KEEP": "014"})
+    assert padded.returncode == 0, padded.stderr
+    assert padded.stdout.strip() == "14"
+
+    for bad in ("-1", "14.5", "nope", "9999999", "14 "):
+        result = _source_deploy("backup_keep_count", env={"BACKUP_KEEP": bad})
+        assert result.returncode != 0, bad
+        assert "BACKUP_KEEP" in result.stderr
+
+
+def _backup_name(day: int, sha: str = SHA_A) -> str:
+    return f"grc_assurance-202610{day:02d}T010000Z-{sha}.sqlite3"
+
+
+def test_prune_keeps_the_newest_and_never_deletes_the_backup_just_made(tmp_path):
+    backups = tmp_path / "backups"
+    backups.mkdir()
+    parent_copy = tmp_path / _backup_name(3)
+    parent_copy.write_text("loose", encoding="utf-8")
+    loose_inside = backups / "grc_assurance-copy.sqlite3"
+    loose_inside.write_text("not-the-pattern", encoding="utf-8")
+    notes = backups / "notes.txt"
+    notes.write_text("keep", encoding="utf-8")
+    target = tmp_path / "symlink-target.sqlite3"
+    target.write_text("target", encoding="utf-8")
+    link = backups / _backup_name(2, SHA_B)
+    link.symlink_to(target)
+    written = {}
+    for day in range(1, 21):
+        path = backups / _backup_name(day)
+        path.write_text(str(day), encoding="utf-8")
+        written[day] = path
+    newest = written[20]
+    oldest = written[1]
+
+    kept = _source_deploy(
+        "prune_sqlite_backups "
+        f"{shlex.quote(str(backups))} 14 {shlex.quote(str(newest))}"
+    )
+    assert kept.returncode == 0, kept.stderr
+    names = {path.name for path in backups.iterdir()}
+    for day in range(7, 21):
+        assert _backup_name(day) in names
+    for day in range(1, 7):
+        assert _backup_name(day) not in names
+    regular = {
+        path.name
+        for path in backups.iterdir()
+        if path.is_symlink() is False and path.name.startswith("grc_assurance-2026")
+    }
+    assert regular == {_backup_name(day) for day in range(7, 21)}
+    assert loose_inside.read_text(encoding="utf-8") == "not-the-pattern"
+    assert notes.read_text(encoding="utf-8") == "keep"
+    assert parent_copy.read_text(encoding="utf-8") == "loose"
+    assert link.is_symlink()
+    assert target.read_text(encoding="utf-8") == "target"
+
+    again = _source_deploy(
+        "prune_sqlite_backups "
+        f"{shlex.quote(str(backups))} 14 {shlex.quote(str(newest))}"
+    )
+    assert again.returncode == 0, again.stderr
+    assert {path.name for path in backups.iterdir()} == names
+
+    for day in range(1, 7):
+        written[day].write_text(str(day), encoding="utf-8")
+    preserved = _source_deploy(
+        "prune_sqlite_backups "
+        f"{shlex.quote(str(backups))} 1 {shlex.quote(str(oldest))}"
+    )
+    assert preserved.returncode == 0, preserved.stderr
+    assert oldest.read_text(encoding="utf-8") == "1"
+    assert newest.read_text(encoding="utf-8") == "20"
+    assert not written[10].exists()
+
+    only_new = _source_deploy(
+        "prune_sqlite_backups "
+        f"{shlex.quote(str(backups))} 0 {shlex.quote(str(newest))}"
+    )
+    assert only_new.returncode == 0, only_new.stderr
+    assert newest.read_text(encoding="utf-8") == "20"
+    assert not oldest.exists()
+    assert loose_inside.exists()
+    assert parent_copy.exists()
+    assert link.is_symlink()
+    assert target.read_text(encoding="utf-8") == "target"
+
+
+def test_prune_refuses_paths_that_are_not_the_backup_directory(tmp_path):
+    data = tmp_path / "data"
+    data.mkdir()
+    live = data / "grc_assurance.sqlite3"
+    live.write_text("live", encoding="utf-8")
+    stray = data / _backup_name(1)
+    stray.write_text("stray", encoding="utf-8")
+    refused = _source_deploy(
+        "prune_sqlite_backups "
+        f"{shlex.quote(str(data))} 1 {shlex.quote(str(stray))}"
+    )
+    assert refused.returncode != 0
+    assert "not backups" in refused.stderr
+    assert live.read_text(encoding="utf-8") == "live"
+    assert stray.read_text(encoding="utf-8") == "stray"
+
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    victim = elsewhere / "victim"
+    victim.write_text("victim", encoding="utf-8")
+    linked = tmp_path / "backups"
+    linked.symlink_to(elsewhere, target_is_directory=True)
+    refused_link = _source_deploy(f"prune_sqlite_backups {shlex.quote(str(linked))} 0")
+    assert refused_link.returncode != 0
+    assert victim.read_text(encoding="utf-8") == "victim"
+    assert linked.is_symlink()
+
+    real_backups = tmp_path / "real" / "backups"
+    real_backups.mkdir(parents=True)
+    sample = real_backups / _backup_name(4)
+    sample.write_text("sample", encoding="utf-8")
+    bad = _source_deploy(
+        "prune_sqlite_backups "
+        f"{shlex.quote(str(real_backups))} nope {shlex.quote(str(sample))}"
+    )
+    assert bad.returncode != 0
+    assert sample.read_text(encoding="utf-8") == "sample"
+
+
+def test_runtime_ownership_is_idempotent_and_limits_writes(tmp_path):
+    user = subprocess.check_output(["id", "-un"], text=True).strip()
+    group = subprocess.check_output(["id", "-gn"], text=True).strip()
+    app = tmp_path / "grc-assurance-engine"
+    (app / "app").mkdir(parents=True)
+    source = app / "app" / "demo.py"
+    source.write_text("print('ok')\n", encoding="utf-8")
+    source.chmod(0o777)
+    venv_bin = app / ".venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    gunicorn = venv_bin / "gunicorn"
+    gunicorn.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+    gunicorn.chmod(0o777)
+    real_python = tmp_path / "python-real"
+    real_python.write_text("#!/bin/sh\n", encoding="utf-8")
+    real_python.chmod(0o700)
+    (venv_bin / "python").symlink_to(real_python)
+    instance = app / "instance"
+    instance.mkdir()
+    secret = instance / "sandbox_secret"
+    secret.write_text("secret-value", encoding="utf-8")
+    secret.chmod(0o644)
+    data = tmp_path / "data"
+    data.mkdir()
+    database = data / "grc_assurance.sqlite3"
+    database.write_text("db", encoding="utf-8")
+    wal = data / "grc_assurance.sqlite3-wal"
+    wal.write_text("wal", encoding="utf-8")
+    loose = data / "loose-copy.sqlite3"
+    loose.write_text("loose", encoding="utf-8")
+    loose.chmod(0o644)
+    backups = data / "backups"
+    backups.mkdir()
+    backup = backups / f"grc_assurance-20261029T000000Z-{SHA_A}.sqlite3"
+    backup.write_text("backup", encoding="utf-8")
+    backup.chmod(0o644)
+    log = tmp_path / "chown.log"
+    result = _run(
+        "source infra/lightsail-bootstrap.sh\n"
+        "chown() { printf '%s\\n' \"$*\" >> "
+        + shlex.quote(str(log))
+        + "; }\n"
+        "apply_runtime_ownership "
+        f"{shlex.quote(str(app))} {shlex.quote(str(data))} {shlex.quote(user)}\n"
+        "apply_runtime_ownership "
+        f"{shlex.quote(str(app))} {shlex.quote(str(data))} {shlex.quote(user)}\n"
+    )
+    assert result.returncode == 0, result.stderr
+    assert _mode(source) == 0o644
+    assert _mode(gunicorn) == 0o755
+    assert _mode(app) == 0o755
+    assert _mode(real_python) == 0o700
+    assert (venv_bin / "python").is_symlink()
+    assert secret.read_text(encoding="utf-8") == "secret-value"
+    assert _mode(secret) == 0o600
+    assert _mode(instance) == 0o750
+    assert _mode(data) == 0o1770
+    assert _mode(database) == 0o600
+    assert database.read_text(encoding="utf-8") == "db"
+    assert _mode(wal) == 0o600
+    assert wal.read_text(encoding="utf-8") == "wal"
+    assert _mode(backups) == 0o700
+    assert _mode(backup) == 0o600
+    assert backup.read_text(encoding="utf-8") == "backup"
+    assert loose.read_text(encoding="utf-8") == "loose"
+    assert _mode(loose) == 0o644
+    logged = log.read_text(encoding="utf-8")
+    assert f"root:root -- {source}" in logged
+    assert f"root:root -- {gunicorn}" in logged
+    assert f"root:{group} -- {data}" in logged
+    assert f"{user}:{group} -- {database}" in logged
+    assert f"{user}:{group} -- {wal}" in logged
+    assert f"{user}:{group} -- {instance}" in logged
+    assert f"root:root -- {backup}" in logged
+    assert "loose-copy.sqlite3" not in logged
+    assert "python-real" not in logged
+
+
+def test_runtime_ownership_refuses_unsafe_paths_before_changing_modes(tmp_path):
+    user = subprocess.check_output(["id", "-un"], text=True).strip()
+    app = tmp_path / "grc-assurance-engine"
+    app.mkdir()
+    marker = app / "keep.py"
+    marker.write_text("keep", encoding="utf-8")
+    marker.chmod(0o777)
+    inside = app / "data"
+    refused_inside = _run(
+        "source infra/lightsail-bootstrap.sh\n"
+        "chown() { return 0; }\n"
+        "apply_runtime_ownership "
+        f"{shlex.quote(str(app))} {shlex.quote(str(inside))} {shlex.quote(user)}"
+    )
+    assert refused_inside.returncode != 0
+    assert "inside the app tree" in refused_inside.stderr
+    assert _mode(marker) == 0o777
+
+    refused_root = _run(
+        "source infra/lightsail-bootstrap.sh\n"
+        "apply_runtime_ownership "
+        f"{shlex.quote(str(app))} {shlex.quote(str(tmp_path / 'data'))} root"
+    )
+    assert refused_root.returncode != 0
+    assert "root" in refused_root.stderr.lower()
+    assert _mode(marker) == 0o777
+
+    link = app / "instance"
+    link.symlink_to(tmp_path, target_is_directory=True)
+    refused_link = _run(
+        "source infra/lightsail-bootstrap.sh\n"
+        "chown() { return 0; }\n"
+        "apply_runtime_ownership "
+        f"{shlex.quote(str(app))} {shlex.quote(str(tmp_path / 'safe-data'))} {shlex.quote(user)}"
+    )
+    assert refused_link.returncode != 0
+    assert "symlink" in refused_link.stderr.lower()
+    assert _mode(marker) == 0o777
+    assert link.is_symlink()

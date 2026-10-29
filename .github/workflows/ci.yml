@@ -29,3 +29,16 @@ jobs:
 
       - name: Run pytest
         run: python -m pytest
+
+  shellcheck:
+    name: shellcheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Run shellcheck
+        run: shellcheck -x --source-path=infra infra/*.sh

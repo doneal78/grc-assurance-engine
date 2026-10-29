@@ -11,6 +11,14 @@
 # SHA in /etc/grc-assurance-revision only after local /health returns
 # "status":"ok" and "database":"reachable".
 #
+# The app tree and the virtualenv are left root-owned and not writable by
+# the service account. That account can write the data directory and
+# instance/ only. Backup files are root-owned mode 0600 under
+# /var/lib/grc-assurance/backups. After the new backup is written, older
+# matching backups are pruned to BACKUP_KEEP (default 14). The backup just
+# written is never deleted. Loose copies beside the live database are not
+# deleted.
+#
 # Does not install OS packages, create the service account, or rewrite the systemd unit.
 # Leaves Nginx unchanged unless --update-nginx is set. That flag installs
 # infra/nginx-site.conf from the same SHA, runs nginx -t, and reloads.
@@ -142,7 +150,7 @@ auth_env_is_consistent() {
       DEMO_USERNAME=*)
         value=${line#DEMO_USERNAME=}
         if [[ -n "$value" && "$value" != '""' && "$value" != "''" ]]; then
-          user=set
+          user="set"
         else
           user=""
         fi
@@ -150,7 +158,7 @@ auth_env_is_consistent() {
       DEMO_PASSWORD=*)
         value=${line#DEMO_PASSWORD=}
         if [[ -n "$value" && "$value" != '""' && "$value" != "''" ]]; then
-          pass=set
+          pass="set"
         else
           pass=""
         fi
@@ -407,6 +415,115 @@ assert_safe_deploy_paths() {
   fi
 }
 
+# chmod, and chown root:root when this script is root. Non-root test runs
+# still set the mode. A symlink is refused so chmod cannot follow it.
+lock_root_path() {
+  local mode=$1
+  local path=$2
+  if [[ -L "$path" ]]; then
+    echo "Refusing to lock a symlink at ${path}." >&2
+    return 1
+  fi
+  chmod "$mode" "$path"
+  if [[ "$(id -u)" -eq 0 ]]; then
+    chown root:root -- "$path"
+  fi
+}
+
+backup_keep_count() {
+  local raw=${BACKUP_KEEP:-14}
+  if [[ ! "$raw" =~ ^[0-9]+$ || ${#raw} -gt 6 ]]; then
+    echo "BACKUP_KEEP must be a non-negative integer." >&2
+    return 1
+  fi
+  printf '%s\n' "$((10#$raw))"
+}
+
+# Delete matching backups in dir until the newest `keep` remain. Never
+# delete `preserve`, even when that leaves one extra file. Names that do
+# not match, and anything outside dir, are left in place. Symlinks are not
+# removed.
+prune_sqlite_backups() {
+  local dir=$1
+  local keep=$2
+  local preserve=${3-}
+  local resolved_dir resolved_preserve="" path name stamp line kept sorted
+  local -a ranked=()
+  if [[ -z "$dir" || -z "$keep" ]]; then
+    echo "Refusing to prune without a backup directory and a retention count." >&2
+    return 1
+  fi
+  if [[ ! "$keep" =~ ^[0-9]+$ || ${#keep} -gt 6 ]]; then
+    echo "BACKUP_KEEP must be a non-negative integer." >&2
+    return 1
+  fi
+  keep=$((10#$keep))
+  if [[ -L "$dir" || ! -d "$dir" ]]; then
+    echo "Refusing to prune a backup path that is not a real directory." >&2
+    return 1
+  fi
+  resolved_dir=$(readlink -f -- "$dir")
+  if [[ "$(basename -- "$resolved_dir")" != "backups" ]]; then
+    echo "Refusing to prune a directory whose name is not backups." >&2
+    return 1
+  fi
+  if [[ -n "$preserve" ]]; then
+    if [[ -L "$preserve" || ! -f "$preserve" ]]; then
+      echo "The backup just made is missing or is a symlink." >&2
+      return 1
+    fi
+    resolved_preserve=$(readlink -f -- "$preserve")
+    case "$resolved_preserve" in
+      "$resolved_dir"/*) ;;
+      *)
+        echo "Refusing to prune while the new backup is outside ${resolved_dir}." >&2
+        return 1
+        ;;
+    esac
+  fi
+  while IFS= read -r -d '' path; do
+    [[ -f "$path" ]] || continue
+    name=$(basename -- "$path")
+    if [[ ! "$name" =~ ^grc_assurance-([0-9]{8}T[0-9]{6}Z)-([0-9a-fA-F]{40})\.sqlite3$ ]]; then
+      continue
+    fi
+    stamp=${BASH_REMATCH[1]}
+    path=$(readlink -f -- "$path")
+    ranked+=("${stamp}"$'\t'"${path}")
+  done < <(find -P "$resolved_dir" -mindepth 1 -maxdepth 1 -type f -print0)
+  sorted=""
+  if [[ ${#ranked[@]} -gt 0 ]]; then
+    sorted=$(printf '%s\n' "${ranked[@]}" | LC_ALL=C sort -r)
+  fi
+  kept=0
+  while IFS= read -r line || [[ -n "${line-}" ]]; do
+    [[ -z "${line-}" ]] && continue
+    path=${line#*$'\t'}
+    if [[ -n "$resolved_preserve" && "$path" == "$resolved_preserve" ]]; then
+      if [[ "$kept" -lt "$keep" ]]; then
+        kept=$((kept + 1))
+      fi
+      continue
+    fi
+    if [[ "$kept" -lt "$keep" ]]; then
+      kept=$((kept + 1))
+      continue
+    fi
+    if [[ -L "$path" || ! -f "$path" ]]; then
+      echo "Refusing to delete ${path}." >&2
+      return 1
+    fi
+    case "$path" in
+      "$resolved_dir"/*) ;;
+      *)
+        echo "Refusing to delete ${path}." >&2
+        return 1
+        ;;
+    esac
+    rm -f -- "$path"
+  done <<< "$sorted"
+}
+
 backup_sqlite_online() {
   local app=$1
   local database=$2
@@ -414,10 +531,18 @@ backup_sqlite_online() {
   local dest_dir
   assert_safe_deploy_paths "$app" "$database" "$dest"
   dest_dir=$(dirname -- "$dest")
+  if [[ -L "$dest_dir" ]]; then
+    echo "Refusing to use a symlink as the backup directory." >&2
+    return 1
+  fi
   mkdir -p -- "$dest_dir"
-  chmod 700 "$dest_dir"
+  if [[ -L "$dest_dir" || ! -d "$dest_dir" ]]; then
+    echo "Refusing to use a symlink as the backup directory." >&2
+    return 1
+  fi
+  lock_root_path 0700 "$dest_dir"
   assert_resolved_backup_target "$app" "$database" "$dest"
-  if [[ -e "$dest" ]]; then
+  if [[ -e "$dest" || -L "$dest" ]]; then
     echo "Backup destination already exists." >&2
     return 1
   fi
@@ -431,7 +556,7 @@ backup_sqlite_online() {
     echo "SQLite online backup failed. The app tree was not changed." >&2
     return 1
   fi
-  chmod 600 "$dest"
+  lock_root_path 0600 "$dest"
 }
 
 health_response_acceptable() {
@@ -482,10 +607,15 @@ ${APP_DIR}/.venv, and ${DATABASE_FILE}. A branch name or a short SHA is
 refused. ${PIN_FILE} is not used as the revision to install.
 
 The SQLite file is backed up with sqlite3 .backup before the app tree
-changes. .venv and instance/ stay. ${DATA_DIR} is not deleted. Dependencies
-are reinstalled into the existing virtualenv. The unit is restarted as
-whatever User= it already has. This script does not create that account
-and does not rewrite the unit.
+changes. The new file is root-owned mode 0600 under ${DATA_DIR}/backups.
+BACKUP_KEEP (default 14) is how many of the newest matching backups to
+keep. The backup just written is not deleted. Loose copies in ${DATA_DIR}
+itself are not deleted. .venv and instance/ stay. ${DATA_DIR} is not
+deleted. Dependencies are reinstalled into the existing virtualenv. The
+app tree and the virtualenv are root-owned and not writable by the unit's
+User=. That account can write ${DATA_DIR} and instance/ only. The unit is
+restarted as whatever User= it already has. This script does not create
+that account and does not rewrite the unit.
 
 The SHA is written to ${PIN_FILE} only after ${HEALTH_URL} returns
 "status":"ok" and "database":"reachable". Nginx is left alone unless
@@ -496,7 +626,7 @@ EOF
 }
 
 main() {
-  local revision update_nginx tarball backup dest_dir running_user previous url
+  local revision update_nginx tarball backup dest_dir running_user previous url keep
   if ! parse_deploy_args "$@"; then
     exit 1
   fi
@@ -532,6 +662,10 @@ main() {
 
   echo "deploy start $(date -u +%Y-%m-%dT%H:%M:%SZ) revision=${revision} update_nginx=${update_nginx}"
   assert_bootstrap_paths
+  if ! keep=$(backup_keep_count); then
+    exit 1
+  fi
+  echo "backup retention keep=${keep}"
   preflight_paths "$APP_DIR" "$DATABASE_FILE"
   auth_env_is_consistent "$ENV_FILE"
   if ! command -v curl >/dev/null 2>&1 || ! command -v python3 >/dev/null 2>&1 || ! command -v sqlite3 >/dev/null 2>&1; then
@@ -584,6 +718,10 @@ main() {
     echo "SQLite backup failed. The app tree was not changed." >&2
     exit 1
   fi
+  if ! prune_sqlite_backups "$(dirname -- "$backup")" "$keep" "$backup"; then
+    echo "Backup prune failed. The new backup was kept. The app tree was not changed. Backup: ${backup}." >&2
+    exit 1
+  fi
   if ! replace_app_tree "$APP_DIR" "$tarball"; then
     echo "Replacing the app tree failed. ${PIN_FILE} was not updated. Database backup: ${backup}." >&2
     exit 1
@@ -592,8 +730,8 @@ main() {
     echo "pip install failed. The unit was not restarted and ${PIN_FILE} was not updated. The app tree may already be ${revision}. Database backup: ${backup}." >&2
     exit 1
   fi
-  if ! chown -R "$running_user:$running_user" "$APP_DIR"; then
-    echo "Could not give the app tree to ${running_user}. The unit was not restarted and ${PIN_FILE} was not updated. Database backup: ${backup}." >&2
+  if ! apply_runtime_ownership "$APP_DIR" "$DATA_DIR" "$running_user"; then
+    echo "Could not set ownership so ${running_user} can write only the data directory and instance/. The unit was not restarted and ${PIN_FILE} was not updated. Database backup: ${backup}." >&2
     exit 1
   fi
   if ! systemctl restart "$UNIT_NAME"; then
@@ -673,7 +811,9 @@ install_nginx_from_tarball() {
   if ! systemctl reload nginx; then
     cp -a -- "$backup" "$NGINX_SITE"
     rm -f -- "$backup"
-    nginx -t && systemctl reload nginx || true
+    if nginx -t; then
+      systemctl reload nginx || true
+    fi
     echo "Nginx reload failed. Attempted to restore the previous site file." >&2
     return 1
   fi

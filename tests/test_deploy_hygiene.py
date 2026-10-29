@@ -57,6 +57,9 @@ def test_bootstrap_unit_uses_the_dedicated_account_and_leaves_auth_off():
     text = BOOTSTRAP.read_text(encoding="utf-8")
     assert "User=${SERVICE_USER}" in text or "User=grc-assurance" in text
     assert "SERVICE_USER=grc-assurance" in text
+    assert "apply_runtime_ownership" in text
+    assert 'chown -R "$SERVICE_USER:$SERVICE_USER" "$APP_DIR"' not in text
+    assert 'chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR"' not in text
     assert "Environment=REQUIRE_AUTH=false" in text
     assert "DATABASE_PATH=${DATA_DIR}/grc_assurance.sqlite3" in text
     assert "User=ubuntu" not in text
