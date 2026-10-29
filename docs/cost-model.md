@@ -15,8 +15,10 @@ The example inputs live in `app/data/cost_assumptions.json` so a result can be r
 | Ongoing maintenance | 2.0 hours per month | Illustrative assumption |
 | Loaded labor rate | $60 per hour | Illustrative assumption |
 | One-time development cost | Not provided; excluded | Unknown |
+| Incident cost | Null | Optional modeled assumption. Not an input to the labor-capacity formula. |
+| Avoided incident count | Null | Optional modeled assumption. Not an input to the labor-capacity formula. |
 
-These are modeled inputs, not observed application performance.
+These are modeled inputs, not observed application performance. Incident cost and avoided incident count stay null until both are set. While either is null, avoided-incident value is Not measured.
 
 ## Formulas and example result
 
@@ -36,13 +38,13 @@ The service uses decimal arithmetic and rounds output to two decimal places. If 
 
 ## Interpretation
 
-The result is **modeled labor capacity**, not actual cash savings. This formula does not measure a payroll reduction, reduced contractor spend, or other cash outflow. The formula reports no cash savings. Observed cash savings, when present, are whole dollars a signed-in reviewer entered on a disposition. They are not produced by this formula. One-time development costs are unknown and excluded; they must not be combined with recurring maintenance as though they were the same cost.
+The result is **modeled labor capacity**, not actual cash savings. This formula does not measure a payroll reduction, reduced contractor spend, or other cash outflow. The formula reports no cash savings. Observed cash savings, when present, are whole dollars a signed-in reviewer entered on a disposition. They are not produced by this formula. Avoided-incident value is also not produced by this formula. One-time development costs are unknown and excluded; they must not be combined with recurring maintenance as though they were the same cost.
 
 The modeled values above are a labeled example. They are separate from the observed register figures below. Workflow events are local trace records. A timestamp records when a row was written. Self-reported handling minutes, when a person entered them on a decision, are a separate observed figure. Self-reported rework minutes are another observed figure on that decision. Self-reported manual touches are another observed figure on that decision. Self-reported handoffs are another observed figure on that decision. The monthly assessment rate is a count of current decision timestamps when those timestamps cover 30 days. Authenticated effort is optional minutes a signed-in reviewer entered. Observed cash savings are optional whole dollars that same reviewer entered. None of them is copied into this formula. Do not present the modeled values as measured results, as cash savings, or as evidence of risk reduction.
 
 ## Observed measurements
 
-Definition version 8 lives in `app/services/workflow_metrics.py`. The dashboard and the methods page render its result. An empty register shows zeros for the counts that are counts. The monthly assessment rate says Not measured when no current decision covers a 30-day window.
+Definition version 9 lives in `app/services/workflow_metrics.py`. The dashboard and the methods page render its result. An empty register shows zeros for the counts that are counts. The monthly assessment rate says Not measured when no current decision covers a 30-day window. Avoided-incident value is not one of these observed rows. It is the modeled card described below.
 
 | Figure | Source | Reading |
 | --- | --- | --- |
@@ -81,12 +83,22 @@ A same-transaction save can write `intake_received` and `decision_recorded` with
 | Cash savings dollars | The dollars would have to be an output of this formula, or a wage times one of the observed counts. They are optional whole dollars a signed-in reviewer typed. | The median stays on its own observed card. `cash_savings` in this formula stays null. The dollars are not copied into gross value or net value. |
 | Open remediation, evidence status, residual tier, dispositions | These are inventory counts. The formula takes hours and a labor rate. | They stay on the observed panel. |
 
-This formula does not calculate a dollar figure from the register. `calculate_cost()` still returns null for cash savings. Observed cash savings are whole dollars a signed-in reviewer typed, on their own card, and only when that number was stored. Hypothetical avoided incidents stay unmonetized. One-time development cost stays excluded.
+This formula does not calculate a dollar figure from the register. `calculate_cost()` still returns null for cash savings. Observed cash savings are whole dollars a signed-in reviewer typed, on their own card, and only when that number was stored. Avoided-incident value is a separate modeled assumption. One-time development cost stays excluded.
+
+## Avoided-incident value
+
+`avoided_incident_value()` in `app/services/cost_model.py` reads `incident_cost` and `avoided_incident_count` from `app/data/cost_assumptions.json`. Both are null in the shipped file. The dashboard and methods card say **Not measured** until both are explicit labeled assumptions.
+
+When both are set, the value is `incident_cost × avoided_incident_count`, rounded half up to two decimal places. `incident_cost` is a non-negative number of dollars. `avoided_incident_count` is a non-negative whole number. Zero is an explicit assumption of zero, so the card shows 0.00 dollars. A missing key, null, a boolean, text, a negative number, or a fractional count leaves the card Not measured. No product is calculated from the one field that is usable. Text is not coerced into a number.
+
+The card says the figure is a modeled assumption, not an observed register figure. It is not cash savings. It is not labor-capacity dollars from `calculate_cost()`. It is not handling minutes, rework minutes, manual touches, handoffs, authenticated effort, the monthly assessment rate, or elapsed cycle time. `calculate_cost()` does not read the two fields and still returns `cash_savings` as null. Public `/try/` and file import do not accept the fields. An API decision that includes them is rejected.
+
+The shipped file does not monetize a hypothetical incident. Setting both assumptions later is a labeled model change in version control, not an observed measurement and not proof of risk reduction.
 
 ## Still unmeasured
 
 - Cash savings as an output of this formula. The monthly assessment rate and authenticated effort minutes are not converted into money. Observed cash savings are optional whole dollars on their own card. They are not this formula.
 - The four self-reported figures are still whatever a person typed. There is no timesheet for them. Authenticated effort is separate: a signed-in reviewer entered it, and the application still does not time the session.
-- Avoided-incident value
+- Avoided-incident value as an observed register figure. The modeled card stays Not measured while `incident_cost` and `avoided_incident_count` are null.
 
 The local event log can be edited. It is not a tamper-proof measurement store.

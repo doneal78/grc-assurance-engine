@@ -3,6 +3,7 @@
 from flask import Blueprint, Response, abort, redirect, render_template, request, url_for
 
 from app.db import get_db
+from app.services.cost_model import disposition_avoided_incident_problem
 from app.services.demo_auth import request_is_signed_in
 from app.services.intake_export import package_from_saved_risk, render_export
 from app.services.walkthrough import carried_walk_step
@@ -56,6 +57,14 @@ def update_remediation(action_id):
 
 @bp.post("/risks/<risk_id>/decision")
 def record_risk_decision(risk_id):
+    crafted = disposition_avoided_incident_problem(request.form)
+    if crafted:
+        risk = get_risk(get_db(), risk_id)
+        if risk is None:
+            abort(404)
+        return render_template(
+            "risk_detail.html", risk=risk, dispositions=DISPOSITIONS, decision_error=crafted,
+        ), 400
     try:
         saved = record_decision(
             get_db(), risk_id, request.form.get("disposition", ""),

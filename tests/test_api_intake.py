@@ -709,6 +709,23 @@ def test_cash_savings_require_a_signed_in_request(client, gated_app):
     assert "Fractional Savings" not in _risk_names(gated)
 
 
+def test_avoided_incident_fields_are_rejected_on_a_decision(client):
+    refused = client.post("/api/v1/intake/assess", json=payload(persist=True, decision={
+        "disposition": "escalate",
+        "rationale": "A crafted incident value must not be stored.",
+        "decider": "GRC analyst",
+        "handling_minutes": 60,
+        "incident_cost": 25000,
+        "avoided_incident_count": 2,
+    }))
+    assert refused.status_code == 400
+    body = refused.get_json()
+    assert body["persisted"] is False
+    assert any("incident_cost" in problem for problem in body["problems"])
+    assert any("avoided_incident_count" in problem for problem in body["problems"])
+    assert _risk_names(client) == []
+
+
 def test_cross_site_persist_is_rejected(client):
     response = client.post(
         "/api/v1/intake/assess",
