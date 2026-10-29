@@ -32,7 +32,15 @@ CREATE TABLE IF NOT EXISTS workflow_events (
     risk_id TEXT NOT NULL REFERENCES risks(risk_id) ON DELETE CASCADE,
     event_type TEXT NOT NULL,
     detail TEXT NOT NULL,
-    occurred_at TEXT NOT NULL
+    occurred_at TEXT NOT NULL,
+    prev_hash TEXT,
+    hash TEXT,
+    chain_origin TEXT
+);
+
+CREATE TABLE IF NOT EXISTS schema_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS decisions (

@@ -1,6 +1,6 @@
 # GRC Assurance Engine — Build Plan
 
-**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Questionnaire 1.1.0 adds optional vendor-direction context for a reviewer. Those fields are not scored, and the residual formula is unchanged. Trust-center citations can be pasted, or a reviewer can request one HTTP GET that stores the page for human review. A fetch is not verified evidence. File import does not fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow. Preview and confirm do not save. A person can then save one synthetic row with a disposition and rationale. A bot JSON contract and CLI run the same intake path. Assess alone does not save. `persist: true` with a human disposition does. The dashboard reports observed register counts, elapsed intake-to-disposition time, optional self-reported handling minutes, optional self-reported rework minutes, optional self-reported manual touches, and optional self-reported handoffs on a disposition, kept separate from the illustrative cost formula. Those four figures are not a stopwatch and are not cash savings. Observed metrics definition 9 also shows a monthly assessment rate when decision timestamps cover 30 days, authenticated effort when a signed-in reviewer stored minutes, and cash savings when that reviewer stored whole dollars. A public try does not collect the last two. Avoided-incident value is a modeled assumption on its own card. The shipped file leaves `incident_cost` and `avoided_incident_count` null, so that card says Not measured. None of those figures is copied into `calculate_cost()`. The control-mapping library is listed at `/mappings`. Mapping set 0.2.0 includes a small draft NIST SP 800-53 set and draft ISO/IEC 27001 and ISO/IEC 42001 review prompts. Those entries remain draft. Multi-tenant policy storage is not implemented. `/walkthrough` is a guided path over the existing pages, including a custom vendor and the optional trust-center choice on `/try/`, the conflicting-permissions scenario, and `/try/import`. A browser cookie remembers the last stop for 12 hours. The guide does not score or save on its own.
+**Project status:** Phases 1–7 initial demo slice implemented. An illustrative org policy profile and a human decision record were added after that slice. Required contract clauses are checked against evidence. The public intake questionnaire is versioned. Questionnaire 1.1.0 adds optional vendor-direction context for a reviewer. Those fields are not scored, and the residual formula is unchanged. Trust-center citations can be pasted, or a reviewer can request one HTTP GET that stores the page for human review. A fetch is not verified evidence. File import does not fetch. A per-vendor reviewer package can be exported. A file importer on `/try/import` reads questionnaire CSV and `.xlsx` files and a simulated ServiceNow JSON or CSV ticket file. It previews the rows, then runs them through the existing intake path. It does not call ServiceNow. Preview and confirm do not save. A person can then save one synthetic row with a disposition and rationale. A bot JSON contract and CLI run the same intake path. Assess alone does not save. `persist: true` with a human disposition does. The dashboard reports observed register counts, elapsed intake-to-disposition time, optional self-reported handling minutes, optional self-reported rework minutes, optional self-reported manual touches, and optional self-reported handoffs on a disposition, kept separate from the illustrative cost formula. Those four figures are not a stopwatch and are not cash savings. Observed metrics definition 9 also shows a monthly assessment rate when decision timestamps cover 30 days, authenticated effort when a signed-in reviewer stored minutes, and cash savings when that reviewer stored whole dollars. A public try does not collect the last two. Avoided-incident value is a modeled assumption on its own card. The shipped file leaves `incident_cost` and `avoided_incident_count` null, so that card says Not measured. None of those figures is copied into `calculate_cost()`. The control-mapping library is listed at `/mappings`. Mapping set 0.2.0 includes a small draft NIST SP 800-53 set and draft ISO/IEC 27001 and ISO/IEC 42001 review prompts. Those entries remain draft. Multi-tenant policy storage is not implemented. `/walkthrough` is a guided path over the existing pages, including a custom vendor and the optional trust-center choice on `/try/`, the conflicting-permissions scenario, and `/try/import`. A browser cookie remembers the last stop for 12 hours. The guide does not score or save on its own. Workflow events carry a SHA-256 hash chain. Rows that already existed are marked chained after the fact. The chain is tamper-evident. A person who can rewrite the database can rebuild it, so it is not immutable storage, a production audit log, or a certification. See section 24.
 **Project type:** GRC Engineering portfolio application  
 **Development approach:** Local-first, phased implementation, test-driven business logic  
 **Primary IDE:** Cursor  
@@ -77,7 +77,7 @@ The application will model a repeatable workflow for normalizing intake, evaluat
 - LLM-generated risk scores
 - Production identity management
 - Multi-tenant enterprise functionality
-- Immutable or tamper-proof audit storage
+- Immutable or tamper-proof audit storage. A local SHA-256 chain on workflow events is tamper-evident only. A person who can rewrite the database can rebuild the chain. That chain is not this item.
 - Production-grade evidence attestation
 - Claims of certification or complete compliance
 - Speculative financial estimates for prevented incidents
@@ -454,7 +454,7 @@ Record meaningful events for:
 
 Events should include timestamps and useful assessment/action identifiers.
 
-A local database event log provides traceability but is not tamper-proof or immutable.
+A local database event log provides traceability. Each new event stores `prev_hash` and a SHA-256 `hash` of its fields plus `prev_hash`. Rows that already existed are hashed once on startup and marked chained after the fact. The log is tamper-evident. It is not tamper-proof or immutable. Someone with database access can rewrite the whole chain. It is not a production audit log or a certification. See section 24.
 
 ### Simulated ServiceNow workflow
 
@@ -620,7 +620,7 @@ Do not remove or weaken tests to make a change pass. Report actual test results 
 - Use safe database queries.
 - Keep development debug mode away from public deployment.
 - Do not upload evidence to external services without deliberate approval.
-- Do not describe a basic local event log as immutable.
+- Do not describe the local event log as immutable, a production audit log, or a certification. The hash chain is tamper-evident. A person who can rewrite the database can rebuild it.
 - Do not claim production security based solely on passing tests.
 - Ask for approval before deployment, DNS changes, creating cloud resources, or making destructive changes.
 
@@ -802,7 +802,7 @@ Show what the local register can actually support, and keep those figures apart 
 
 ### Out of scope for this increment
 
-An observed avoided-incident register. The card above is a modeled assumption and stays Not measured until both versioned inputs are set. Authenticated effort is the optional minutes above. It is not cash savings, and it is not a session timer or a per-person identity system. Cash savings are the optional dollars above. They are not a wage times those minutes. The monthly assessment rate is measured only when current decision timestamps cover 30 days. It is not authenticated effort and it is not cash savings. The event log is still a local trace. It can be edited by someone with access to the database. A stored number can be edited the same way. It is not a tamper-proof timesheet.
+An observed avoided-incident register. The card above is a modeled assumption and stays Not measured until both versioned inputs are set. Authenticated effort is the optional minutes above. It is not cash savings, and it is not a session timer or a per-person identity system. Cash savings are the optional dollars above. They are not a wage times those minutes. The monthly assessment rate is measured only when current decision timestamps cover 30 days. It is not authenticated effort and it is not cash savings. The event log is a local trace with a SHA-256 hash chain (section 24). It can be edited by someone with access to the database, and that person can rebuild the chain. A stored number can be edited the same way. It is not a tamper-proof timesheet. The chain does not feed these observed figures and it does not call `calculate_cost()`.
 
 ## 23. Trust-center fetch
 
@@ -825,3 +825,23 @@ Let a reviewer supply a trust-center URL and have the application GET that page 
 ### Out of scope for this increment
 
 Authenticated trust centers, PDF parsing, a headless browser, a paid trust API, and treating the fetched page as independent verification or certification. File import does not fetch. The hosted demo should stay on synthetic or fictional URLs.
+
+## 24. Tamper-evident workflow event chain
+
+**Status:** Implemented in `app/services/event_chain.py`. The methods page and the dashboard show the check. Observed metrics stay on definition 9. `calculate_cost()` is unchanged.
+
+### Objective
+
+Make an edited, deleted, or reordered workflow event visible without claiming the SQLite file is immutable.
+
+### Behavior
+
+- Each new `workflow_events` row stores `prev_hash`, `hash`, and `chain_origin`. `hash` is the SHA-256 hex digest of canonical JSON. The JSON contains `event_id`, `risk_id`, `event_type`, `detail`, `occurred_at`, `prev_hash`, and `chain_origin`. Keys are sorted. The first event's `prev_hash` is 64 zeros. Later events use the previous row's hash. The chain is the whole table in `event_id` order.
+- `chain_origin` is `appended` when the application hashed the row as it was written.
+- A database that already had events is hashed once, at startup, in `event_id` order. Those rows are marked `chained_after_the_fact`. The mark is inside the hashed JSON. A later startup does not rehash, so an edit made after the backfill stays visible. The mark does not mean the original write was hashed.
+- `verify_event_chain()` takes the rows and, when the caller has one, the stored tip. It returns `intact` or the first broken event id. It does not import Flask and it does not write. The pages display that result with the label tamper-evident, not tamper-proof.
+- An empty log checks as intact. Deleting a row that still has a later row breaks the link at that later row. Deleting the last row breaks the check at the stored tip. Deleting every row and the tip leaves an empty log, which checks as intact. Rewriting the rows, the hashes, and the tip produces a chain that checks as intact.
+
+### Out of scope for this increment
+
+Immutable storage, a production audit log, and any certification. A person with database access can rebuild the chain. The check does not protect decision numbers, observed metrics, or the cost formula. `GET /health` does not verify the chain.

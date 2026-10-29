@@ -52,4 +52,5 @@
   </div>
   <p class="muted">Assumptions: {{ cost.assumptions.assessments_per_month|int }} modeled assessments/month (an assumption, not the saved assessment volume above and not the observed monthly assessment rate), {{ cost.assumptions.baseline_handling_hours_per_assessment }} baseline hours, {{ cost.assumptions.assisted_handling_hours_per_assessment }} assisted hours, {{ cost.assumptions.review_hours_per_assessment }} review hours per assessment, {{ cost.assumptions.monthly_maintenance_hours }} monthly maintenance hours, and ${{ cost.assumptions.loaded_hourly_labor_rate }}/hour. This estimates labor capacity only. These modeled dollars are not observed cash savings. Observed cash savings stay on their own card above, and only when a signed-in reviewer entered whole dollars. They are not the avoided-incident card. One-time development cost is unknown and excluded. <a href="{{ url_for('methodology.index') }}">See formulas and limitations</a>.</p>
 </section>
+{% include "_event_chain.html" %}
 {% endblock %}
