@@ -2,20 +2,28 @@
 
 The standard library performs the GET. Nothing in this module scores a
 vendor or marks a page verified. A caller supplies ``open_url`` and
-``resolver`` in tests so pytest does not use the live network.
+``resolver`` in tests so pytest does not use the live network. An
+injected opener replaces the socket. The production opener is the one
+that pins it.
 
-The address check is intentionally small. It allows only http and https,
-rejects private, loopback, link-local, and metadata targets, and checks
-each redirect the same way. It does not pin DNS, so a name that changes
-address after the check is a known limit of this portfolio prototype.
-Environment proxies are not used.
+Each hop resolves the hostname once. Every address is checked against
+the blocklist below. The TCP connection uses only an address from that
+check. The Host header, TLS SNI, and certificate hostname check use the
+original hostname. A redirect is resolved and pinned again. Environment
+proxies are not used.
+
+The pin stops a later lookup from moving the connection onto a private,
+loopback, or metadata address. It is not a full egress sandbox. A
+public address can still be an unexpected host, and a host firewall
+remains the outer control.
 """
 
+import http.client
 import ipaddress
 import re
 import socket
+import ssl
 import urllib.error
-import urllib.request
 from datetime import datetime, timezone
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlparse
@@ -84,13 +92,6 @@ class _Extractor(HTMLParser):
         return _clean(" ".join(self._title))
 
 
-class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    """Surface a redirect to the caller instead of following it."""
-
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise urllib.error.HTTPError(req.full_url, code, msg, headers, fp)
-
-
 def fetch_url_problems(url):
     """Return syntax and address problems. An empty list means the URL may be fetched.
 
@@ -136,9 +137,13 @@ def fetch_trust_center(url, *, open_url=None, resolver=None, clock=None,
     ``refused`` is true only when the URL itself must not be requested.
     A later redirect to a blocked address is a failed fetch, not a refusal
     of the caller's original URL. ``open_url(url, timeout)`` returns
-    ``(status, headers, body)``. ``resolver(host)`` returns IP strings.
+    ``(status, headers, body)`` and replaces the pinned socket. The
+    production opener receives the addresses this function already
+    checked and does not resolve the name again. ``resolver(host)``
+    returns IP strings. Each redirect resolves its host again.
     """
     stamp = _stamp(clock)
+    custom = open_url is not None
     opener = open_url or _default_open
     lookup = resolver or _system_resolver
     gate = _screen(url, lookup)
@@ -148,6 +153,7 @@ def fetch_trust_center(url, *, open_url=None, resolver=None, clock=None,
         return _result(url, stamp, ok=False, refused=False, error=gate["error"])
 
     current = url
+    pins = gate["addresses"]
     seen = set()
     for hop in range(max_redirects + 1):
         if current in seen:
@@ -160,8 +166,12 @@ def fetch_trust_center(url, *, open_url=None, resolver=None, clock=None,
                 detail = again["error"]
                 return _result(url, stamp, ok=False, refused=False,
                                error=f"The trust center redirect was refused. {detail}")
+            pins = again["addresses"]
         try:
-            opened = opener(current, timeout)
+            if custom:
+                opened = opener(current, timeout)
+            else:
+                opened = opener(current, timeout, pins)
         except TimeoutError:
             return _result(url, stamp, ok=False, refused=False,
                            error="The trust center request timed out.")
@@ -188,29 +198,38 @@ def fetch_trust_center(url, *, open_url=None, resolver=None, clock=None,
 
 
 def _screen(url, resolver):
+    """Resolve once and return the addresses a later connect may use.
+
+    A literal address is not resolved. A name is passed to ``resolver``
+    once. Every result is checked. One blocked result refuses the hop,
+    so the caller does not connect to a public sibling from the same
+    answer. The returned strings are the normalized addresses.
+    """
     problems = fetch_url_problems(url)
     if problems:
         return {"action": "refuse", "error": problems[0]}
     host = urlparse(url).hostname.rstrip(".").lower()
-    try:
-        ipaddress.ip_address(host)
-        return {"action": "allow"}
-    except ValueError:
-        pass
+    literal = _parse_ip(host)
+    if literal is not None:
+        return {"action": "allow", "addresses": [str(literal)]}
     try:
         addresses = list(resolver(host))
     except OSError:
         return {"action": "fail", "error": "The trust center host could not be resolved."}
     if not addresses:
         return {"action": "fail", "error": "The trust center host could not be resolved."}
+    pins = []
     for address in addresses:
-        try:
-            ip = ipaddress.ip_address(str(address).split("%", 1)[0])
-        except ValueError:
+        ip = _parse_ip(address)
+        if ip is None:
             return {"action": "refuse", "error": REFUSAL}
         if not _public_ip(ip):
-            return {"action": "refuse", "error": "Trust center URL resolves to a private, link-local, or metadata address."}
-    return {"action": "allow"}
+            return {
+                "action": "refuse",
+                "error": "Trust center URL resolves to a private, link-local, or metadata address.",
+            }
+        pins.append(str(ip))
+    return {"action": "allow", "addresses": list(dict.fromkeys(pins))}
 
 
 def _numeric_host(host):
@@ -228,6 +247,23 @@ def _numeric_host(host):
     return []
 
 
+def _parse_ip(value):
+    """Return a normalized address, or None when ``value`` is not an IP.
+
+    An IPv4-mapped IPv6 address is unwrapped to the IPv4 address so the
+    blocklist and the socket see the same target. A zone index is dropped
+    before parsing.
+    """
+    text = str(value).split("%", 1)[0].strip()
+    try:
+        ip = ipaddress.ip_address(text)
+    except ValueError:
+        return None
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        return ip.ipv4_mapped
+    return ip
+
+
 def _public_ip(ip):
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
         ip = ip.ipv4_mapped
@@ -242,23 +278,154 @@ def _system_resolver(host):
     return [info[4][0] for info in infos if info[4]]
 
 
-def _default_open(url, timeout):
-    request = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": USER_AGENT,
-            "Accept": "text/html, text/plain, application/json;q=0.8, */*;q=0.1",
-            "Accept-Encoding": "identity",
-        },
-        method="GET",
-    )
-    opener = urllib.request.build_opener(_NoRedirect, urllib.request.ProxyHandler({}))
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    """HTTP connection that dials ``pin`` and keeps ``host`` for the Host header."""
+
+    def __init__(self, host, port, pin, timeout):
+        super().__init__(host, port, timeout=timeout)
+        self._pin = pin
+
+    def connect(self):
+        self.sock = _connect_ip(self._pin, self.port, self.timeout)
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """HTTPS connection that dials ``pin`` and verifies ``host``.
+
+    SNI and certificate hostname matching use the URL hostname. The TCP
+    peer is the pinned address, not a second lookup of that name.
+    """
+
+    def __init__(self, host, port, pin, timeout):
+        super().__init__(host, port, timeout=timeout)
+        self._pin = pin
+
+    def connect(self):
+        sock = _connect_ip(self._pin, self.port, self.timeout)
+        context = ssl.create_default_context()
+        context.verify_mode = ssl.CERT_REQUIRED
+        context.check_hostname = True
+        try:
+            context.set_alpn_protocols(["http/1.1"])
+        except NotImplementedError:
+            pass
+        try:
+            self.sock = context.wrap_socket(sock, server_hostname=self.host)
+        except BaseException:
+            sock.close()
+            raise
+
+
+def _connect_ip(ip_text, port, timeout):
+    """Connect to an address that has already been parsed as an IP.
+
+    ``socket.create_connection`` asks ``getaddrinfo`` again. Dialing the
+    parsed address with ``socket.connect`` does not, including when the
+    text is a numeric literal.
+    """
+    ip = _parse_ip(ip_text)
+    if ip is None:
+        raise OSError("The trust center host has no pinned address.")
+    family = socket.AF_INET6 if isinstance(ip, ipaddress.IPv6Address) else socket.AF_INET
+    sock = socket.socket(family, socket.SOCK_STREAM)
     try:
-        with opener.open(request, timeout=timeout) as response:
-            return response.status, response.headers, response.read(MAX_BYTES + 1)
-    except urllib.error.HTTPError as exc:
-        body = exc.read(MAX_BYTES + 1) if exc.fp is not None else b""
-        return exc.code, exc.headers, body
+        if timeout is not None:
+            sock.settimeout(timeout)
+        try:
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        except OSError:
+            pass
+        sock.connect((str(ip), int(port)))
+    except BaseException:
+        sock.close()
+        raise
+    return sock
+
+
+def _default_open(url, timeout, addresses=None):
+    """GET ``url`` through a pinned socket.
+
+    ``addresses`` is the checked set for this hop. A name without that
+    set is not resolved here. An IP literal may be dialed when this
+    function is called directly, which is how the loopback test reads
+    a local page. Production fetches pass the screened addresses, and
+    those are checked again before the socket is created.
+    """
+    return _pinned_get(url, timeout, addresses)
+
+
+def _pinned_get(url, timeout, addresses):
+    scheme, host, port, path, pins = _request_target(url, addresses)
+    last_error = None
+    for pin in pins:
+        try:
+            return _one_pin(scheme, host, port, path, pin, timeout)
+        except TimeoutError:
+            raise
+        except ssl.SSLError:
+            raise
+        except http.client.HTTPException as exc:
+            raise OSError(_short(exc) or "The trust center response could not be read.") from exc
+        except OSError as exc:
+            last_error = exc
+    if last_error is not None:
+        raise last_error
+    raise OSError("The trust center host has no pinned address.")
+
+
+def _request_target(url, addresses):
+    parsed = urlparse(url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme not in {"http", "https"}:
+        raise OSError("The trust center URL must start with http:// or https://.")
+    if not parsed.hostname:
+        raise OSError("The trust center URL has an invalid host.")
+    host = parsed.hostname.rstrip(".").lower()
+    port = parsed.port or (443 if scheme == "https" else 80)
+    path = parsed.path or "/"
+    if parsed.query:
+        path = f"{path}?{parsed.query}"
+    pins = _pins_for_connect(host, addresses)
+    return scheme, host, port, path, pins
+
+
+def _pins_for_connect(host, addresses):
+    if addresses is None:
+        literal = _parse_ip(host)
+        if literal is None:
+            raise OSError("The trust center host has no pinned address.")
+        return [str(literal)]
+    pins = []
+    for address in addresses:
+        ip = _parse_ip(address)
+        if ip is None or not _public_ip(ip):
+            raise OSError(REFUSAL)
+        pins.append(str(ip))
+    if not pins:
+        raise OSError("The trust center host has no pinned address.")
+    return list(dict.fromkeys(pins))
+
+
+def _one_pin(scheme, host, port, path, pin, timeout):
+    connection_class = _PinnedHTTPSConnection if scheme == "https" else _PinnedHTTPConnection
+    connection = connection_class(host, port, pin, timeout)
+    try:
+        connection.request(
+            "GET",
+            path,
+            headers={
+                "User-Agent": USER_AGENT,
+                "Accept": "text/html, text/plain, application/json;q=0.8, */*;q=0.1",
+                "Accept-Encoding": "identity",
+                "Connection": "close",
+            },
+        )
+        response = connection.getresponse()
+        body = response.read(MAX_BYTES + 1)
+        headers = {key: value for key, value in response.getheaders()}
+        return int(response.status), headers, body
+    finally:
+        connection.close()
 
 
 def _opened(value):

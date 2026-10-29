@@ -814,17 +814,18 @@ Let a reviewer supply a trust-center URL and have the application GET that page 
 
 ### Behavior
 
-- The questionnaire field `fetch_trust_center` accepts `no` or `yes`. Omitted and `no` store the URL and do not open it. `yes` performs one HTTP GET with the standard library (`urllib`). There is no scraper, headless browser, or third-party trust-center API.
+- The questionnaire field `fetch_trust_center` accepts `no` or `yes`. Omitted and `no` store the URL and do not open it. `yes` performs one HTTP GET with the standard library (`http.client`). There is no scraper, headless browser, or third-party trust-center API.
 - A successful fetch stores the source URL, the fetch timestamp (the assessment date at 00:00 UTC), the HTTP status, a short summary, and an excerpt. The evidence validator statuses that record. The source is `vendor` and no review is recorded, so the status is `not_reviewed`. It cannot become `verified`.
 - The fetch artifact is not one of the scored claims. It does not change evidence confidence, the residual tier, or automatic approval. `automatic_approval` stays null.
 - An HTTP error, a timeout, a DNS failure, or too many redirects is a failed fetch. The result records the error, the validator status is `missing`, and the mock remediation ticket names the gap. It is not stored as a successful collection.
-- A URL that is not `http` or `https`, that includes a username or password, or that points at a private, loopback, link-local, or metadata address is rejected before a connection. The same check runs on each redirect. Name resolution uses an injectable resolver in tests. The check does not pin DNS against a later address change.
-- Tests inject the HTTP opener and the resolver. They do not use the live internet.
+- A URL that is not `http` or `https`, that includes a username or password, or that points at a private, loopback, link-local, multicast, reserved, unspecified, or metadata address is rejected before a connection. IPv4-mapped IPv6 forms of those addresses are rejected the same way. Other non-global addresses, including shared address space such as `100.64.0.0/10`, are rejected. A hostname is resolved once for that hop. Every returned address is checked. If any address is blocked, the hop does not connect. The TCP connection uses only an address from that lookup: the first one that accepts a connection. A timeout is not retried on another address. The name is not resolved again for that hop. The HTTP Host header is the original hostname. For HTTPS, TLS SNI and certificate verification use that hostname, so the certificate is checked against the name on the URL. Each redirect is resolved and pinned again, with the same redirect limit as before. The timeout, the response size cap, and the content-type handling are unchanged. Name resolution uses an injectable resolver in tests. Environment proxies are not used.
+- The pin closes the gap where a name could change address after the check and before the connection. A second lookup that would return a private address is not what the socket dials. It is not a full egress sandbox. Any public address that passes the blocklist can still be contacted. The process does not install a firewall. A host route or a transparent proxy can still move packets after the socket is connected. A host-level egress firewall that allows only the intended public destinations is still recommended.
+- Tests inject the HTTP opener and the resolver. Tests of the production opener mock the resolver and the socket. They do not use the live internet.
 - Pasted SOC, security, and privacy choices are unchanged. A URL with no artifact choice and no fetch still creates no scored evidence record.
 
 ### Out of scope for this increment
 
-Authenticated trust centers, PDF parsing, a headless browser, a paid trust API, and treating the fetched page as independent verification or certification. File import does not fetch. The hosted demo should stay on synthetic or fictional URLs.
+Authenticated trust centers, PDF parsing, a headless browser, a paid trust API, and treating the fetched page as independent verification or certification. File import does not fetch. The hosted demo should stay on synthetic or fictional URLs. DNS pinning is not a host egress firewall or a network namespace.
 
 ## 24. Tamper-evident workflow event chain
 

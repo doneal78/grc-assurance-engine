@@ -1,6 +1,8 @@
 """Trust-center fetch: offline stubs only. Nothing here contacts the public network."""
 
 import socket
+import ssl
+import subprocess
 import threading
 from datetime import date
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -15,7 +17,9 @@ from app.services.intake_builder import (
 )
 from app.services.intake_importer import questionnaire_columns
 from app.services.org_policy import load_org_policy
-from app.services.trust_center_fetch import _default_open, _header, fetch_trust_center, fetch_url_problems
+from app.services.trust_center_fetch import (
+    MAX_BYTES, _default_open, _header, fetch_trust_center, fetch_url_problems,
+)
 
 AS_OF = date(2026, 10, 14)
 SAME_ORIGIN = {"Origin": "http://localhost"}
@@ -394,7 +398,7 @@ class _LocalPage(BaseHTTPRequestHandler):
 
 
 def test_default_opener_reads_loopback_and_does_not_follow_redirects():
-    """The real urllib opener, pointed only at 127.0.0.1. Not a public fetch."""
+    """The real HTTP opener, pointed only at 127.0.0.1. Not a public fetch."""
     server = ThreadingHTTPServer(("127.0.0.1", 0), _LocalPage)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -488,3 +492,421 @@ def test_public_form_shows_the_fetch_and_keeps_paste(monkeypatch, tmp_path):
                          headers=SAME_ORIGIN)
     assert pasted.status_code == 200
     assert b"Fetched: no" in pasted.data
+
+
+PIN_URL = "http://trust.example.test:8080/northwind"
+BLOCKED_RESOLUTIONS = [
+    "10.1.2.3",
+    "172.16.0.4",
+    "192.168.1.20",
+    "127.0.0.1",
+    "169.254.169.254",
+    "0.0.0.0",
+    "::1",
+    "fe80::1",
+    "fc00::1",
+    "::ffff:127.0.0.1",
+    "::ffff:10.0.0.1",
+    "::ffff:169.254.169.254",
+    "::ffff:0.0.0.0",
+    "224.0.0.1",
+    "ff02::1",
+    "100.64.0.1",
+    "240.0.0.1",
+    "192.0.2.1",
+]
+
+
+class _ScriptedPage(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.server.seen.append({"host": self.headers.get("Host"), "path": self.path})
+        status, headers, body = self.server.script.pop(0)
+        self.send_response(status)
+        for key, value in headers.items():
+            self.send_header(key, value)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Connection", "close")
+        self.end_headers()
+        if body:
+            self.wfile.write(body)
+
+    def log_message(self, fmt, *args):
+        return
+
+
+def _start_page(script, *, certfile=None, keyfile=None):
+    server = ThreadingHTTPServer(("127.0.0.1", 0), _ScriptedPage)
+    server.script = list(script)
+    server.seen = []
+    if certfile is not None:
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(certfile, keyfile)
+        server.socket = context.wrap_socket(server.socket, server_side=True)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    return server, thread
+
+
+def _stop_page(server, thread):
+    server.shutdown()
+    thread.join(timeout=2)
+    server.server_close()
+
+
+def _script_dns(monkeypatch, plans):
+    """Replace getaddrinfo. ``plans[host]`` is a queue of answers, each a list of IPs."""
+    previous = socket.getaddrinfo
+    queued = {host: [list(answer) if isinstance(answer, (list, tuple)) else [answer]
+                     for answer in answers]
+              for host, answers in plans.items()}
+
+    def getaddrinfo(host, port, *args, **kwargs):
+        if host in {"127.0.0.1", "::1"}:
+            return previous(host, port, *args, **kwargs)
+        if host not in queued or not queued[host]:
+            raise AssertionError(f"unexpected DNS lookup for {host}")
+        ips = queued[host].pop(0)
+        return [
+            (
+                socket.AF_INET6 if ":" in ip else socket.AF_INET,
+                socket.SOCK_STREAM,
+                socket.IPPROTO_TCP,
+                "",
+                (ip, 0 if port is None else port),
+            )
+            for ip in ips
+        ]
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+    return queued
+
+
+def _redirect_pins(monkeypatch, allowed, local_port):
+    """Record socket.connect targets. Dial only loopback, and only for an allowed pin."""
+    recorded = []
+    original = socket.socket.connect
+
+    def connect(self, address):
+        recorded.append(address)
+        host = address[0]
+        if host in allowed:
+            return original(self, ("127.0.0.1", local_port))
+        if host in {"127.0.0.1", "::1"}:
+            return original(self, address)
+        raise AssertionError(f"blocked connect to {address!r}")
+
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    return recorded
+
+
+def _issue_cert(directory, hostname):
+    directory.mkdir(parents=True, exist_ok=True)
+    ca_key = directory / "ca.key"
+    ca_crt = directory / "ca.crt"
+    leaf_key = directory / "leaf.key"
+    leaf_csr = directory / "leaf.csr"
+    leaf_crt = directory / "leaf.crt"
+    subprocess.run(
+        ["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes",
+         "-keyout", str(ca_key), "-out", str(ca_crt), "-days", "2",
+         "-subj", "/CN=GRC Test CA",
+         "-addext", "basicConstraints=critical,CA:TRUE",
+         "-addext", "keyUsage=critical,keyCertSign,cRLSign"],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["openssl", "req", "-newkey", "rsa:2048", "-nodes",
+         "-keyout", str(leaf_key), "-out", str(leaf_csr),
+         "-subj", f"/CN={hostname}",
+         "-addext", f"subjectAltName=DNS:{hostname}",
+         "-addext", "basicConstraints=CA:FALSE",
+         "-addext", "keyUsage=digitalSignature,keyEncipherment",
+         "-addext", "extendedKeyUsage=serverAuth"],
+        check=True, capture_output=True,
+    )
+    subprocess.run(
+        ["openssl", "x509", "-req", "-in", str(leaf_csr),
+         "-CA", str(ca_crt), "-CAkey", str(ca_key), "-CAcreateserial",
+         "-out", str(leaf_crt), "-days", "2", "-copy_extensions", "copy"],
+        check=True, capture_output=True,
+    )
+    return ca_crt, leaf_crt, leaf_key
+
+
+def _trust_test_ca(monkeypatch, ca_crt):
+    real_context = ssl.create_default_context
+
+    def context(*args, **kwargs):
+        ctx = real_context(cafile=str(ca_crt))
+        # Python 3.14 turns this on inside create_default_context. Force it
+        # here so a certificate that would fail that default fails on 3.12 too.
+        if hasattr(ssl, "VERIFY_X509_STRICT"):
+            ctx.verify_flags |= ssl.VERIFY_X509_STRICT
+        return ctx
+
+    monkeypatch.setattr(ssl, "create_default_context", context)
+
+
+def _record_sni(monkeypatch):
+    names = []
+    real_wrap = ssl.SSLContext.wrap_socket
+
+    def wrap(self, sock, *args, server_hostname=None, **kwargs):
+        if server_hostname is not None:
+            names.append(server_hostname)
+            assert self.check_hostname is True
+            assert self.verify_mode == ssl.CERT_REQUIRED
+        return real_wrap(self, sock, *args, server_hostname=server_hostname, **kwargs)
+
+    monkeypatch.setattr(ssl.SSLContext, "wrap_socket", wrap)
+    return names
+
+
+def test_pinned_happy_path_keeps_the_host_header_and_the_timeout(monkeypatch):
+    script = [(200, {"Content-Type": "text/html; charset=utf-8"}, PAGE)]
+    server, thread = _start_page(script)
+    plans = _script_dns(monkeypatch, {"trust.example.test": [["8.8.8.8"]]})
+    connected = _redirect_pins(monkeypatch, {"8.8.8.8"}, server.server_address[1])
+    try:
+        result = fetch_trust_center(PIN_URL, clock=AS_OF_CLOCK())
+    finally:
+        _stop_page(server, thread)
+    assert plans["trust.example.test"] == []
+    assert connected == [("8.8.8.8", 8080)]
+    assert server.seen == [{"host": "trust.example.test:8080", "path": "/northwind"}]
+    assert result["ok"] is True
+    assert result["refused"] is False
+    assert result["http_status"] == 200
+    assert result["final_url"] == PIN_URL
+    assert "Northwind Trust" in result["summary"]
+    assert "SOC 2 report available" in result["excerpt"]
+    assert result["fetched_at"] == STAMP
+
+
+def test_dns_rebinding_second_private_answer_is_not_connected(monkeypatch):
+    """The check sees a public address. A later lookup would be private. The socket stays on the first."""
+    script = [(200, {"Content-Type": "text/plain"}, b"Pinned public page")]
+    server, thread = _start_page(script)
+    plans = _script_dns(monkeypatch, {
+        "trust.example.test": [["8.8.8.8"], ["169.254.169.254"]],
+    })
+    connected = _redirect_pins(monkeypatch, {"8.8.8.8"}, server.server_address[1])
+    try:
+        result = fetch_trust_center(PIN_URL, clock=AS_OF_CLOCK())
+    finally:
+        _stop_page(server, thread)
+    assert result["ok"] is True
+    assert result["summary"] == "Pinned public page"
+    assert connected == [("8.8.8.8", 8080)]
+    assert plans["trust.example.test"] == [["169.254.169.254"]]
+    assert all(address[0] != "169.254.169.254" for address in connected)
+
+
+def test_same_host_redirect_rebinds_to_a_private_address_and_is_blocked(monkeypatch):
+    script = [(302, {"Location": "/next"}, b"")]
+    server, thread = _start_page(script)
+    plans = _script_dns(monkeypatch, {
+        "trust.example.test": [["8.8.8.8"], ["10.0.0.9"]],
+    })
+    connected = _redirect_pins(monkeypatch, {"8.8.8.8"}, server.server_address[1])
+    try:
+        result = fetch_trust_center(PIN_URL, clock=AS_OF_CLOCK())
+    finally:
+        _stop_page(server, thread)
+    assert plans["trust.example.test"] == []
+    assert [address[0] for address in connected] == ["8.8.8.8"]
+    assert result["ok"] is False
+    assert result["refused"] is False
+    assert "redirect was refused" in result["error"]
+    assert "private, link-local, or metadata" in result["error"]
+
+
+def test_redirect_to_a_private_host_is_blocked(monkeypatch):
+    script = [(302, {"Location": "http://inside.example.test/latest"}, b"")]
+    server, thread = _start_page(script)
+    plans = _script_dns(monkeypatch, {
+        "trust.example.test": [["8.8.8.8"]],
+        "inside.example.test": [["169.254.169.254"]],
+    })
+    connected = _redirect_pins(monkeypatch, {"8.8.8.8"}, server.server_address[1])
+    try:
+        result = fetch_trust_center(PIN_URL, clock=AS_OF_CLOCK())
+    finally:
+        _stop_page(server, thread)
+    assert plans["inside.example.test"] == []
+    assert [address[0] for address in connected] == ["8.8.8.8"]
+    assert result["ok"] is False
+    assert result["refused"] is False
+    assert "redirect was refused" in result["error"]
+    assert server.seen == [{"host": "trust.example.test:8080", "path": "/northwind"}]
+
+
+@pytest.mark.parametrize("address", BLOCKED_RESOLUTIONS)
+def test_resolved_private_loopback_metadata_and_mapped_addresses_are_blocked(address, monkeypatch):
+    attempted = []
+
+    def connect(self, target):
+        attempted.append(target)
+        raise AssertionError(f"connected to {target!r}")
+
+    monkeypatch.setattr(socket.socket, "connect", connect)
+
+    def resolver(host):
+        assert host == "trust.example.test"
+        return [address]
+
+    result = fetch_trust_center(URL, resolver=resolver, clock=AS_OF_CLOCK())
+    assert attempted == []
+    assert result["ok"] is False
+    assert result["refused"] is True
+    assert "private, link-local, or metadata" in result["error"]
+
+
+def test_mixed_public_and_private_answers_do_not_connect(monkeypatch):
+    attempted = []
+
+    def connect(self, target):
+        attempted.append(target)
+        raise AssertionError(target)
+
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    result = fetch_trust_center(
+        URL,
+        resolver=lambda host: ["8.8.8.8", "::ffff:169.254.169.254"],
+        clock=AS_OF_CLOCK(),
+    )
+    assert attempted == []
+    assert result["refused"] is True
+    assert result["ok"] is False
+
+
+def test_ipv4_mapped_public_address_is_pinned_as_ipv4(monkeypatch):
+    script = [(200, {"Content-Type": "text/plain"}, b"Mapped public pin")]
+    server, thread = _start_page(script)
+    _script_dns(monkeypatch, {"trust.example.test": [["::ffff:8.8.8.8"]]})
+    connected = _redirect_pins(monkeypatch, {"8.8.8.8"}, server.server_address[1])
+    try:
+        result = fetch_trust_center(PIN_URL, clock=AS_OF_CLOCK())
+    finally:
+        _stop_page(server, thread)
+    assert connected == [("8.8.8.8", 8080)]
+    assert result["ok"] is True
+    assert result["summary"] == "Mapped public pin"
+    assert server.seen[0]["host"] == "trust.example.test:8080"
+
+
+def test_connection_failure_tries_the_next_pinned_address_only(monkeypatch):
+    script = [(200, {"Content-Type": "text/plain"}, b"Second pin")]
+    server, thread = _start_page(script)
+    _script_dns(monkeypatch, {"trust.example.test": [["8.8.8.8", "1.1.1.1"]]})
+    recorded = []
+    original = socket.socket.connect
+
+    def connect(self, address):
+        recorded.append(address[0])
+        if address[0] == "8.8.8.8":
+            raise ConnectionRefusedError("refused")
+        if address[0] == "1.1.1.1":
+            return original(self, ("127.0.0.1", server.server_address[1]))
+        raise AssertionError(address)
+
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    try:
+        result = fetch_trust_center(PIN_URL, clock=AS_OF_CLOCK())
+    finally:
+        _stop_page(server, thread)
+    assert recorded == ["8.8.8.8", "1.1.1.1"]
+    assert result["ok"] is True
+    assert result["summary"] == "Second pin"
+
+
+def test_timeout_does_not_move_on_to_another_pinned_address(monkeypatch):
+    _script_dns(monkeypatch, {"trust.example.test": [["8.8.8.8", "1.1.1.1"]]})
+    recorded = []
+
+    def connect(self, address):
+        recorded.append(address[0])
+        raise TimeoutError("timed out")
+
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    result = fetch_trust_center(PIN_URL, clock=AS_OF_CLOCK())
+    assert recorded == ["8.8.8.8"]
+    assert result["ok"] is False
+    assert "timed out" in result["error"]
+
+
+def test_opener_does_not_resolve_a_hostname_without_a_pin(monkeypatch):
+    def getaddrinfo(*args, **kwargs):
+        raise AssertionError("name lookup")
+
+    def connect(self, address):
+        raise AssertionError(address)
+
+    monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
+    monkeypatch.setattr(socket.socket, "connect", connect)
+    with pytest.raises(OSError, match="no pinned address"):
+        _default_open("http://trust.example.test/northwind", 1)
+
+
+def test_pinned_read_keeps_the_size_cap(monkeypatch):
+    script = [(200, {"Content-Type": "text/plain"}, b"A" * (MAX_BYTES + 25))]
+    server, thread = _start_page(script)
+    _script_dns(monkeypatch, {"trust.example.test": [["8.8.8.8"]]})
+    _redirect_pins(monkeypatch, {"8.8.8.8"}, server.server_address[1])
+    try:
+        result = fetch_trust_center(PIN_URL, clock=AS_OF_CLOCK())
+    finally:
+        _stop_page(server, thread)
+    assert result["ok"] is True
+    assert result["byte_length"] == MAX_BYTES
+    assert "truncated" in result["summary"]
+
+
+def test_tls_verifies_the_certificate_against_the_original_hostname(monkeypatch, tmp_path):
+    ca_crt, leaf_crt, leaf_key = _issue_cert(tmp_path / "match", "trust.example.test")
+    body = b"Certificate matched the original name"
+    server, thread = _start_page(
+        [(200, {"Content-Type": "text/plain"}, body)],
+        certfile=leaf_crt, keyfile=leaf_key,
+    )
+    plans = _script_dns(monkeypatch, {
+        "trust.example.test": [["8.8.8.8"], ["169.254.169.254"]],
+    })
+    connected = _redirect_pins(monkeypatch, {"8.8.8.8"}, server.server_address[1])
+    _trust_test_ca(monkeypatch, ca_crt)
+    sni = _record_sni(monkeypatch)
+    try:
+        result = fetch_trust_center("https://trust.example.test/northwind", clock=AS_OF_CLOCK())
+    finally:
+        _stop_page(server, thread)
+    assert result["ok"] is True
+    assert result["summary"] == body.decode()
+    assert connected == [("8.8.8.8", 443)]
+    assert sni == ["trust.example.test"]
+    assert plans["trust.example.test"] == [["169.254.169.254"]]
+    assert server.seen[0]["host"] == "trust.example.test"
+
+
+def test_tls_rejects_a_certificate_for_a_different_hostname(monkeypatch, tmp_path):
+    ca_crt, leaf_crt, leaf_key = _issue_cert(tmp_path / "wrong", "wrong.example.test")
+    server, thread = _start_page(
+        [(200, {"Content-Type": "text/plain"}, b"should-not-be-stored")],
+        certfile=leaf_crt, keyfile=leaf_key,
+    )
+    _script_dns(monkeypatch, {"trust.example.test": [["8.8.8.8", "1.1.1.1"]]})
+    connected = _redirect_pins(monkeypatch, {"8.8.8.8", "1.1.1.1"}, server.server_address[1])
+    _trust_test_ca(monkeypatch, ca_crt)
+    sni = _record_sni(monkeypatch)
+    try:
+        result = fetch_trust_center("https://trust.example.test/northwind", clock=AS_OF_CLOCK())
+    finally:
+        _stop_page(server, thread)
+    assert result["ok"] is False
+    assert result["refused"] is False
+    assert result["excerpt"] is None
+    assert "should-not-be-stored" not in (result["summary"] or "")
+    assert "should-not-be-stored" not in (result["error"] or "")
+    lowered = result["error"].lower()
+    assert "certificate" in lowered or "hostname" in lowered
+    assert sni == ["trust.example.test"]
+    assert [address[0] for address in connected] == ["8.8.8.8"]
