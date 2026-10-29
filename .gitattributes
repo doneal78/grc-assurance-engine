@@ -1,0 +1,2 @@
+# Deployed on a Linux host. A CRLF checkout would break the shebang.
+*.sh text eol=lf

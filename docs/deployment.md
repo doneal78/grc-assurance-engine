@@ -15,15 +15,29 @@ On that date the demo was live and open, with no login. The password gate was re
 These notes are the owner's record. This documentation change did not repeat them and did not SSH.
 
 - On 2026-10-27 a snapshot restore drill was run. The recorded result is under Snapshot restore drill. The copy's pin was `257a67e4f2e2245b6f15e9775fa6181d78f93e85`. The production static IP was left at `77.112.210.29`, and the copy was deleted. This file does not re-check that the origin is still that address.
-- The owner reports that the systemd unit was later switched to the `grc-assurance` account by re-running `infra/lightsail-bootstrap.sh`. The bootstrap in this repository creates that account when it is missing and sets `User=` to it. The app-revision script does not change `User=`. The live account was not re-checked for this note.
+- The owner reports that the systemd unit was later switched to the `grc-assurance` account by re-running `infra/lightsail-bootstrap.sh`. The bootstrap in this repository creates that account when it is missing and sets `User=` to it. The app-revision script does not change `User=`. The live account was not re-checked for this note. The 2026-10-29 audit recorded under Not re-checked from this repository compared the unit on the host with the unit in this repository.
 - The owner states that on 2026-10-28 the public demo was serving `da9329c2aed979fcf6465392b9b4393fa03e7421` (observed metrics definition 8). That is the owner's statement of the deployed commit on that date. It is not a pin read from the host during this documentation change.
 
 ### Not re-checked from this repository
 
-- Whether the Nginx file on the host matches `infra/nginx-site.conf`. The app-revision script copies that file only with `--update-nginx`.
-- Whether GitHub Actions has completed a deploy. The workflow still cannot SSH until the secrets exist and the administrator `/32` allows the runner.
+A read-only host audit on 2026-10-29 recorded the host whose pin was `4af28b7302340baec080c1f34156ef8b35b1f0b2`. This documentation change did not SSH, did not repeat that audit, and did not dispatch GitHub Actions. The audit recorded:
+
+- The Nginx site file matches `infra/nginx-site.conf` except for comments. The app-revision script copies that file only with `--update-nginx`.
+- The systemd unit matches the unit `infra/lightsail-bootstrap.sh` writes.
+- `/etc/grc-assurance-engine.env` is `root:root` mode `0600`.
+- The origin certificate is a Cloudflare Origin CA certificate valid until 2041. Certbot is not used, by design. Nginx uses that Origin CA certificate.
+- An `http://` request redirects to `https://`.
+- Unknown hostnames are closed.
+- The host firewall is off (`ufw` inactive). There is no swap. SSH is limited only by the Lightsail networking rule for the administrator `/32`. That Lightsail rule was not verified. The audit did not have AWS access, so the Lightsail `/32` is still the SSH control and it is unverified.
+- SQLite backups on the host were not pruned.
+
+These items are still unverified. Checking them needs AWS or GitHub access, which this repository does not have:
+
 - Whether a snapshot newer than the 2026-10-27 drill would restore. That drill covers the snapshot used that day.
-- The October 14 certificate, redirect, and HTTP 429 checks.
+- The live Lightsail firewall, including whether the SSH `/32` is still the administrator address in the stack.
+- Whether the GitHub Actions secrets exist, and whether a dispatch has completed. The workflow still cannot SSH until the secrets exist and the administrator `/32` allows the runner.
+
+The October 14 public certificate, redirect, and HTTP 429 checks were not repeated from outside the server. The 2026-10-29 redirect and unknown-host results are host-side observations, not a new public scan.
 
 ## Hosting design
 
@@ -76,14 +90,15 @@ Put these in `/etc/grc-assurance-engine.env` when you want a value other than th
 
 Routine updates use `infra/deploy-app-revision.sh`. It is the app-revision path for a host that already has the systemd unit, `/opt/grc-assurance-engine/.venv`, and `/var/lib/grc-assurance/grc_assurance.sqlite3`.
 
-`infra/lightsail-bootstrap.sh` remains the first-install path. A re-run of the bootstrap also runs `apt-get`, creates the `grc-assurance` account when it is missing, rewrites the systemd unit, and reloads Nginx without replacing an existing site file. It does not back up SQLite and it does not check `/health`. Use it when the unit or the service account still has to be created. Do not use it as the ordinary way to install a new commit on the host that is already serving the demo.
+`infra/lightsail-bootstrap.sh` remains the first-install path. A re-run of the bootstrap also runs `apt-get`, creates the `grc-assurance` account when it is missing, rewrites the systemd unit, applies the same root-owned app tree, and reloads Nginx without replacing an existing site file. It does not back up SQLite and it does not check `/health`. Use it when the unit or the service account still has to be created. Do not use it as the ordinary way to install a new commit on the host that is already serving the demo.
 
 The app-revision script:
 
 - Requires `--revision` or `GRC_REVISION` to be a full 40-character commit SHA. A branch name or a short SHA is refused. It does not read `/etc/grc-assurance-revision` to decide what to install. The bootstrap still does that on a re-run with no `GRC_REVISION`.
-- Backs up the live SQLite file with the `sqlite3` `.backup` command, which uses SQLite's online backup API, before it changes the app tree. The CLI has to be on `PATH`. The script does not install OS packages and does not skip the backup when `sqlite3` is missing. Each backup is a new file under `/var/lib/grc-assurance/backups/`. The script does not delete old backups, and it does not delete `/var/lib/grc-assurance/` or `grc_assurance.sqlite3`. Those files are on the same disk as the demo. They are not a substitute for the Lightsail snapshot. One restore drill is recorded below. A later snapshot stays untested until another drill is recorded.
+- Backs up the live SQLite file with the `sqlite3` `.backup` command, which uses SQLite's online backup API, before it changes the app tree. The CLI has to be on `PATH`. The script does not install OS packages and does not skip the backup when `sqlite3` is missing. Each new backup is created as root, mode `0600`, under `/var/lib/grc-assurance/backups/` (the directory is `root:root` mode `0700`). After that file exists, older files in that directory whose names match `grc_assurance-<UTC stamp>-<40-character SHA>.sqlite3` are removed until the newest `BACKUP_KEEP` remain. `BACKUP_KEEP` defaults to 14. Set it in the root shell that runs the script. The file just written is never deleted, even when that leaves one extra file. The script does not delete `/var/lib/grc-assurance/` or `grc_assurance.sqlite3`. It does not delete those loose copies that sit in the data directory outside `backups/`. Those files are on the same disk as the demo. They are not a substitute for the Lightsail snapshot. One restore drill is recorded below. A later snapshot stays untested until another drill is recorded. The 2026-10-29 audit found the backups unpruned. Retention runs only when a revision of this script that contains it is used.
 - Downloads `https://github.com/doneal78/grc-assurance-engine/archive/<sha>.tar.gz` and replaces `/opt/grc-assurance-engine` through the bootstrap's `replace_app_tree`. That keeps `.venv` and `instance/`.
 - Reinstalls Python dependencies with the existing `.venv`. It does not create the virtualenv.
+- Sets ownership with `apply_runtime_ownership`. `/opt/grc-assurance-engine`, including `.venv`, is `root:root` and is not writable by the unit's `User=`. The expected account is `grc-assurance`. That account can write `/var/lib/grc-assurance` (the SQLite file and its `-wal`, `-shm`, and `-journal` sidecars) and `/opt/grc-assurance-engine/instance` (for example `instance/sandbox_secret`). The data directory is owned by root and the service account's group, mode `1770`, so the account can create the database and the sticky bit stops it from removing the root-owned `backups` directory. `instance/` is mode `0750` and owned by that account. Re-running the bootstrap or this script applies the same ownership again. It does not rewrite the systemd unit. Python may be unable to write `__pycache__` under the app tree. Imports still run. This ownership is not what the 2026-10-29 host had until a later deploy or bootstrap re-run applies it.
 - Restarts `grc-assurance-engine` as the `User=` already set on the unit. It does not create an account and it does not rewrite the unit. If the unit still runs as `ubuntu`, it stays `ubuntu`.
 - Writes the SHA to `/etc/grc-assurance-revision`, the same file the bootstrap uses, only after `http://127.0.0.1:8000/health` returns `"status":"ok"` and `"database":"reachable"`. There is no `DEPLOYED_COMMIT` file. A failed health check leaves the previous pin in place even if the tree on disk already changed. Re-run the previous SHA to put that tree back. Do not delete the SQLite file.
 - Leaves Nginx alone unless `--update-nginx` is set. That flag installs `infra/nginx-site.conf` from the same tarball, runs `nginx -t`, and reloads. If `nginx -t` fails, the previous site file is restored and Nginx is not reloaded. The script does not create `/etc/nginx/sites-available/grc-assurance-engine` when it is missing.
@@ -113,6 +128,18 @@ sudo bash /opt/grc-assurance-engine/infra/deploy-app-revision.sh --revision repl
 The log is `/var/log/grc-assurance-deploy.log`. A second deploy waits on `/var/lock/grc-assurance-deploy.lock`. The log and the lock are local files. They are not an immutable audit trail. The online backup uses the `sqlite3` CLI. `lightsail-bootstrap.sh` installs that package with the other first-install packages. A host built before that package was on the install line needs `sudo apt-get install -y sqlite3` once. The app-revision script still stops, before it changes the app tree, if the CLI is not installed. It does not skip the backup. If the health check fails, the log names the backup path. Fix the unit or the env file and re-run the same SHA, or re-run the previous SHA. A code rollback does not reverse schema changes already applied to the SQLite file. Migrations in this application add columns and rebuild the decisions table in place; they do not drop saved rows. The workflow-event chain migration adds `prev_hash`, `hash`, and `chain_origin` when those columns are missing, hashes rows that already exist once, and marks those rows `chained_after_the_fact`. A later startup does not rehash them. Rolling back to a revision that inserts events without those hashes leaves the new rows unhashed, and the one-time backfill does not fill them in again. The chain check on a revision that has the check then reports the first unhashed row. A non-zero exit after the pin file is written can be the EXIT trap rather than a failed health check. The trap now stores the tarball path outside `main`, so a finished deploy can return 0.
 
 Check the public HTTPS URL after the local health check succeeds. Save nothing but synthetic data.
+
+### Loose copies in the data directory
+
+Deploys from before backup retention may have left extra SQLite files directly in `/var/lib/grc-assurance/`, beside `grc_assurance.sqlite3`, rather than under `backups/`. `deploy-app-revision.sh` does not delete those loose copies, and it does not move them. Remove them by hand, once, as root, after you have identified each file as a leftover copy.
+
+```bash
+sudo ls -l /var/lib/grc-assurance
+# For one name you have confirmed is a leftover copy, and not grc_assurance.sqlite3:
+sudo rm -f -- /var/lib/grc-assurance/NAME-OF-LEFTOVER-COPY
+```
+
+Do not delete `grc_assurance.sqlite3`. Do not point that `rm` at the live database. The script will not do this cleanup.
 
 ### GitHub Actions
 
@@ -157,7 +184,7 @@ SQLite supports this single instance only. There is no second host, no replica, 
 
 The app-revision script and the manual workflow are the update path for a host that is already bootstrapped. The workflow does not run on push. It cannot SSH until the secrets in Updating and rolling back exist, and the instance SSH rule is still the administrator `/32`. Nginx changes only when `--update-nginx` is passed. The bootstrap remains the first-install path and the path that rewrites the systemd unit.
 
-The owner reports a later bootstrap re-run that set the `grc-assurance` account. This file does not re-check `User=`. A dedicated account, the read-only health check, and the tighter `/api/` limit are ordinary host hygiene. They are not a production hardening claim.
+The owner reports a later bootstrap re-run that set the `grc-assurance` account. The 2026-10-29 read-only audit recorded that the systemd unit matched the unit in this repository, which sets `User=` to `grc-assurance`. A dedicated account, the read-only health check, and the tighter `/api/` limit are ordinary host hygiene. They are not a production hardening claim.
 
 ### Unchanged product behavior
 
@@ -194,9 +221,50 @@ That record shows the snapshot used that day could boot, serve `/health` with th
 3. On the copy, check `systemctl is-active grc-assurance-engine`, request `http://127.0.0.1:8000/health`, and confirm a known synthetic row is still in `/var/lib/grc-assurance/grc_assurance.sqlite3`. The health JSON includes `"database": "reachable"` when the file can be read. A copy made from an older snapshot still has the health JSON from that snapshot.
 4. Delete the copy when the check is finished. Record the date and the result somewhere outside this repository. Until that later record exists, treat snapshots taken after 2026-10-27 as untested recovery points.
 
+## Optional host hardening
+
+`infra/harden-lightsail-host.sh` is optional. Nothing in this repository runs it. The bootstrap, the app-revision script, systemd, CloudFormation user data, and GitHub Actions do not call it. An administrator runs it by hand, on the host, after reading the plan. This documentation change did not run it. The 2026-10-29 audit found `ufw` inactive and no swap. Those stay as they were until someone applies this script.
+
+The script refuses to run without one administrator IPv4 `/32`. It does not open SSH to the world. Dry-run still requires that `/32`. It fetches Cloudflare's current ranges and prints the plan. It does not change the host.
+
+```bash
+sudo bash infra/harden-lightsail-host.sh --dry-run 203.0.113.10/32
+sudo bash infra/harden-lightsail-host.sh 203.0.113.10/32
+```
+
+Replace `203.0.113.10/32` with the administrator address. Use the same `/32` as the Lightsail `AdminCidr` parameter unless that address has changed. Dry-run needs `curl` and network access because it lists the ranges it would allow. A failed fetch makes no firewall change.
+
+On apply, as root, the script:
+
+- Installs the `ufw` package only when it is missing.
+- Resets ufw, sets the default incoming policy to deny, and allows outgoing traffic so the host can still download a release tarball.
+- Allows TCP 22 only from the administrator `/32`.
+- Allows TCP 80 and 443 only from the Cloudflare ranges it just fetched from `https://www.cloudflare.com/ips-v4` and `https://www.cloudflare.com/ips-v6`.
+- Enables ufw.
+- Creates a 1 GiB `/swapfile` (mode `0600`) if that file is not already swap, and adds one `/etc/fstab` line if it is missing.
+- Writes `/etc/ssh/sshd_config.d/99-grc-no-root-login.conf` with `PermitRootLogin no`, runs `sshd -t`, and reloads ssh only when the effective value is `no`. sshd keeps the first `PermitRootLogin` it sees. If another file wins, the script removes the drop-in and does not reload.
+
+Cloudflare changes those IP ranges. The script does not store a copy and does not schedule a refresh. Re-run it to refresh. A stale allow-list can block Cloudflare or keep a retired range.
+
+A wrong `/32` locks out new SSH when ufw enables. An existing session can stay up. Recovery is the Lightsail console, then `ufw disable`. The Lightsail networking firewall is a separate control. This script does not change it, and the 2026-10-29 audit did not verify that firewall.
+
+Rollback, as root:
+
+```bash
+ufw disable
+rm -f /etc/ssh/sshd_config.d/99-grc-no-root-login.conf
+sshd -t && systemctl reload ssh
+swapoff /swapfile || true
+rm -f /swapfile
+```
+
+Then remove the `/swapfile` line from `/etc/fstab`. `ufw disable` leaves the Lightsail firewall as it was. Removing the drop-in does not by itself set `PermitRootLogin yes`; it removes this script's setting. Check `sshd -T` before reloading if another file also sets that option.
+
+This script is host hygiene for a single demo instance. It is not a production hardening claim.
+
 ## Operations and limitations
 
-The instance and its daily snapshots incur AWS charges, so set an account budget alert. A snapshot is a recovery point for this one disk. The 2026-10-27 drill is one recorded recovery of the snapshot used that day. A later snapshot is untested until another drill is recorded. SQLite supports this single instance only; do not scale the design horizontally or use it for real vendor records. There is no login. A browser's opt-in saves stay in that browser's sandbox cookie, which is not an account. Anyone holding the cookie can read that sandbox. The database must never hold real data. Nginx rate limits are whatever site file is installed on the host. The repository file limits `/try/` and `/api/` more tightly than other pages, and the live file matches that only after a person installs it. `deploy-app-revision.sh` does that only with `--update-nginx`. `/health` checks that the SQLite file can be read. That check is not a production readiness test. The demo is an illustrative portfolio prototype, not a production GRC service or certification tool.
+The instance and its daily snapshots incur AWS charges, so set an account budget alert. As of the 2026-10-29 read-only audit, the host firewall was off and there was no swap. `infra/harden-lightsail-host.sh` can change that when an administrator runs it. A deploy does not run it. A snapshot is a recovery point for this one disk. The 2026-10-27 drill is one recorded recovery of the snapshot used that day. A later snapshot is untested until another drill is recorded. SQLite supports this single instance only; do not scale the design horizontally or use it for real vendor records. There is no login. A browser's opt-in saves stay in that browser's sandbox cookie, which is not an account. Anyone holding the cookie can read that sandbox. The database must never hold real data. Nginx rate limits are whatever site file is installed on the host. The repository file limits `/try/` and `/api/` more tightly than other pages, and the live file matches that only after a person installs it. `deploy-app-revision.sh` does that only with `--update-nginx`. `/health` checks that the SQLite file can be read. That check is not a production readiness test. The demo is an illustrative portfolio prototype, not a production GRC service or certification tool.
 
 ## Workflow event chain
 
