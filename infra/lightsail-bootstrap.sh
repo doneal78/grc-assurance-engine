@@ -87,8 +87,9 @@ _replace_app_tree_apply() {
     tarball=$2
     staging=$(mktemp -d)
     keep=$(mktemp -d)
-    # Invoked by the EXIT trap below. Shellcheck does not treat that as a call.
-    # shellcheck disable=SC2317
+    # Invoked by the EXIT trap below. Shellcheck 0.9 reports SC2317 and
+    # 0.11 reports SC2329 because neither treats that trap as a call.
+    # shellcheck disable=SC2317,SC2329
     cleanup() {
       if [[ -d "$keep/.venv" ]]; then
         rm -rf -- "$app/.venv"
