@@ -32,6 +32,12 @@
 # change it. See docs/deployment.md.
 set -Eeuo pipefail
 
+# pipefail is on. Do not pipe into head, grep -q, or awk that exits early.
+# The reader closes the pipe, the writer gets SIGPIPE, and the script stops
+# with status 141. On 2026-10-29 that happened at `sshd -T | awk ... exit`
+# after ufw and swap were already applied, and ssh was not reloaded.
+# Read the whole command output, then match it.
+
 CLOUDFLARE_IPV4_URL=https://www.cloudflare.com/ips-v4
 CLOUDFLARE_IPV6_URL=https://www.cloudflare.com/ips-v6
 SWAP_FILE=/swapfile
@@ -147,7 +153,9 @@ fetch_cloudflare_ranges() {
     return 1
   fi
   combined=$(printf '%s\n%s\n' "$v4" "$v6")
-  if ! printf '%s\n' "$combined" | read_cloudflare_ranges; then
+  # A here-string, not a pipe. read_cloudflare_ranges returns on the first
+  # bad line, and a pipe would SIGPIPE printf under pipefail.
+  if ! read_cloudflare_ranges <<< "$combined"; then
     echo "Cloudflare range list was rejected. No firewall change was made." >&2
     return 1
   fi
@@ -263,8 +271,43 @@ apply_ufw() {
   fi
 }
 
+# True when one whole line of output equals needle. The caller passes text
+# it has already read. This does not run grep -q on a pipe.
+output_has_exact_line() {
+  local needle=$1
+  local output=$2
+  local line
+  while IFS= read -r line || [[ -n "${line-}" ]]; do
+    if [[ "$line" == "$needle" ]]; then
+      return 0
+    fi
+  done <<< "$output"
+  return 1
+}
+
+# Print the effective permitrootlogin value from a full `sshd -T` dump.
+# sshd -T keeps writing after that line. Parsing with `awk ... exit` closed
+# the pipe early and the 2026-10-29 run stopped with status 141.
+effective_permit_root_login() {
+  local output line
+  if ! output=$(sshd -T); then
+    echo "sshd -T failed. ssh was not reloaded." >&2
+    return 1
+  fi
+  while IFS= read -r line || [[ -n "${line-}" ]]; do
+    case "$line" in
+      "permitrootlogin "*)
+        printf '%s\n' "${line#"permitrootlogin "}"
+        return 0
+        ;;
+    esac
+  done <<< "$output"
+  echo "sshd -T did not report permitrootlogin. ssh was not reloaded." >&2
+  return 1
+}
+
 apply_swap() {
-  local active=0 kind
+  local active=0 kind swap_names
   if [[ -L "$SWAP_FILE" ]]; then
     echo "Refusing a symlink at ${SWAP_FILE}." >&2
     return 1
@@ -273,7 +316,10 @@ apply_swap() {
     echo "Refusing ${SWAP_FILE} because it is not a regular file." >&2
     return 1
   fi
-  if swapon --show=NAME --noheadings | grep -Fxq -- "$SWAP_FILE"; then
+  # swapon's whole listing is read before the match. grep -q on that pipe
+  # would exit at the first hit and could SIGPIPE swapon.
+  swap_names=$(swapon --show=NAME --noheadings || true)
+  if output_has_exact_line "$SWAP_FILE" "$swap_names"; then
     active=1
   fi
   if [[ "$active" -eq 0 ]]; then
@@ -331,7 +377,10 @@ apply_sshd_no_root() {
     echo "sshd -t failed. Removed ${SSHD_DROPIN} and did not reload ssh." >&2
     return 1
   fi
-  effective=$(sshd -T | awk '$1 == "permitrootlogin" { print $2; exit }')
+  if ! effective=$(effective_permit_root_login); then
+    echo "Could not read the effective PermitRootLogin value. ${SSHD_DROPIN} was left in place and ssh was not reloaded." >&2
+    return 1
+  fi
   if [[ "$effective" != "no" ]]; then
     rm -f -- "$SSHD_DROPIN"
     echo "Effective PermitRootLogin is '${effective:-unknown}', not no. sshd keeps the first value it sees, so this drop-in did not win. Removed it and did not reload ssh." >&2
