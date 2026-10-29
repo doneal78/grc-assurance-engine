@@ -3,9 +3,10 @@
 from flask import Blueprint, abort, redirect, render_template, request, url_for
 
 from app.db import get_db
+from app.services.sandbox_http import issue_sandbox, request_scope
 from app.services.scenario_runner import ScenarioNotFoundError, list_scenarios, run_scenario
 from app.services.walkthrough import carried_walk_step
-from app.services.workflow_service import register_scenario, risk_for_scenario
+from app.services.workflow_service import WorkflowInputError, register_scenario, risk_for_scenario
 
 bp = Blueprint("demos", __name__, url_prefix="/demo")
 
@@ -21,7 +22,7 @@ def detail(scenario_id):
         scenario = run_scenario(scenario_id)
     except ScenarioNotFoundError:
         abort(404)
-    saved = risk_for_scenario(get_db(), scenario_id)
+    saved = risk_for_scenario(get_db(), scenario_id, sandbox_id=request_scope())
     return render_template("demo_detail.html", scenario=scenario, saved_risk=saved)
 
 
@@ -31,7 +32,11 @@ def add_to_risk_register(scenario_id):
         result = run_scenario(scenario_id)
     except ScenarioNotFoundError:
         abort(404)
-    risk_id = register_scenario(get_db(), result)
+    try:
+        risk_id = register_scenario(get_db(), result, sandbox_id=issue_sandbox())
+    except WorkflowInputError as exc:
+        get_db().rollback()
+        return render_template("workflow_error.html", error=str(exc)), 400
     values = {"risk_id": risk_id}
     step = carried_walk_step(request.args.get("walk"), advance_from="save")
     if step:

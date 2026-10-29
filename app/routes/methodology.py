@@ -10,6 +10,7 @@ from app.services.intake_questionnaire import load_questionnaire
 from app.services.org_policy import load_org_policy
 from app.services.risk_engine import load_rules
 from app.services.event_chain import read_event_chain
+from app.services.sandbox_http import request_scope
 from app.services.workflow_metrics import observed_metrics
 
 bp = Blueprint("methodology", __name__)
@@ -21,7 +22,9 @@ def index():
     library = list_library()
     avoided = avoided_incident_value()
     return render_template("methodology.html", cost=calculate_cost(),
-                           observed=observed_metrics(get_db(), avoided_incident=avoided),
+                           observed=observed_metrics(
+                               get_db(), avoided_incident=avoided, sandbox_id=request_scope(),
+                           ),
                            avoided_incident=avoided,
                            event_chain=read_event_chain(get_db()),
                            mapping_set_version=library["mapping_set_version"],

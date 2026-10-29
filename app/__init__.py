@@ -7,6 +7,23 @@ from urllib.parse import urlparse
 
 from flask import Flask, Response, request
 
+from app.services.sandbox import DEFAULT_MAX_RISKS as _SANDBOX_MAX_RISKS
+from app.services.sandbox import DEFAULT_TTL_SECONDS as _SANDBOX_TTL_SECONDS
+
+
+def _env_int(name, default):
+    """Read a positive integer setting. A blank or invalid value keeps the default."""
+    raw = os.environ.get(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        value = int(str(raw).strip())
+    except ValueError:
+        return default
+    if value < 1:
+        return default
+    return value
+
 
 def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     """Create and configure the Flask application."""
@@ -20,6 +37,10 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
         REQUIRE_AUTH=os.environ.get("REQUIRE_AUTH", "false").lower() == "true",
         DEMO_USERNAME=os.environ.get("DEMO_USERNAME", ""),
         DEMO_PASSWORD=os.environ.get("DEMO_PASSWORD", ""),
+        SECRET_KEY=os.environ.get("SECRET_KEY", ""),
+        SANDBOX_TTL_SECONDS=_env_int("SANDBOX_TTL_SECONDS", _SANDBOX_TTL_SECONDS),
+        SANDBOX_MAX_RISKS=_env_int("SANDBOX_MAX_RISKS", _SANDBOX_MAX_RISKS),
+        SANDBOX_COOKIE_SECURE=os.environ.get("SANDBOX_COOKIE_SECURE", "false").lower() == "true",
         TESTING=False,
     )
 
@@ -41,6 +62,8 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     # Ensure the local runtime-data directory exists.
     # The instance directory is excluded from Git.
     os.makedirs(app.instance_path, exist_ok=True)
+    from app.services.sandbox import resolve_secret_key
+    resolve_secret_key(app)
 
     # Pages anyone may open without the demo password. The public "Try it"
     # pages run synthetic input through the real services. Assess and preview
@@ -50,6 +73,12 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     IMPORT_ENDPOINTS = {
         "try_demo.import_preview", "try_demo.import_confirm", "try_demo.import_save",
     }
+
+    @app.before_request
+    def bind_sandbox():
+        """Attach a valid sandbox cookie and drop sandboxes past their expiry."""
+        from app.services.sandbox_http import bind_visitor_sandbox
+        return bind_visitor_sandbox()
 
     @app.before_request
     def limit_request_body():
@@ -179,6 +208,12 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
                 httponly=True, samesite="Lax", path="/",
             )
         return response
+
+    @app.after_request
+    def remember_sandbox(response):
+        """Set the sandbox cookie when this request created one."""
+        from app.services.sandbox_http import attach_sandbox_cookie
+        return attach_sandbox_cookie(response)
 
     from app.db import init_app as init_db_app
     init_db_app(app)

@@ -124,7 +124,7 @@ Saving one row does not save the others in the file. Saving the same row again a
 - There is no live ServiceNow connection, OAuth client, or attachment download.
 - The importer does not accept an arbitrary spreadsheet, PDF, or email.
 - Preview and confirm do not save. Closing the result page without the save form drops the rows. A saved row stays in the local risk register until that database is removed.
-- The save form writes to the same shared register as a scenario. On the hosted demo that register is open to anyone with the link. Use synthetic names only.
+- The save form writes one synthetic vendor into this browser's sandbox, the same place a scenario save from the browser goes. The cookie is not a login. Another browser does not see that row. Use synthetic names only.
 - The confirmation step trusts the previewed field values after a second validation. It does not prove the bytes on disk were unchanged.
 - A file hash of an uploaded workbook is not stored. The evidence model still treats a hash as a change detector, not as proof of authenticity.
 - `openpyxl` reads `.xlsx` only. It is the only added dependency.

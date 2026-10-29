@@ -72,6 +72,7 @@ def migrate(connection):
     _add_cash_savings_dollars(connection)
     from app.services.event_chain import ensure_event_chain
     ensure_event_chain(connection)
+    _add_sandbox_scope(connection)
     connection.commit()
 
 
@@ -179,6 +180,90 @@ def _add_cash_savings_dollars(connection):
     figures.
     """
     _add_decision_minutes(connection, "cash_savings_dollars")
+
+
+def _add_sandbox_scope(connection):
+    """Scope saved risks by browser sandbox without dropping existing rows.
+
+    A table created with a unique ``scenario_id`` is rebuilt so two browsers
+    can save the same scenario. Rows already stored keep a null sandbox id,
+    which stays visible to every visitor. Workflow events gain ``sandbox_id``.
+    Existing event hashes are not rewritten.
+    """
+    tables = {
+        row[0] for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table'"
+        )
+    }
+    if "risks" in tables:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(risks)")}
+        if "sandbox_id" not in columns:
+            connection.execute("ALTER TABLE risks ADD COLUMN sandbox_id TEXT")
+        _replace_global_scenario_unique(connection)
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_risks_sandbox ON risks(sandbox_id)"
+        )
+        connection.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_risks_shared_scenario
+               ON risks(scenario_id) WHERE sandbox_id IS NULL"""
+        )
+        connection.execute(
+            """CREATE UNIQUE INDEX IF NOT EXISTS idx_risks_sandbox_scenario
+               ON risks(sandbox_id, scenario_id) WHERE sandbox_id IS NOT NULL"""
+        )
+    if "workflow_events" in tables:
+        columns = {row[1] for row in connection.execute("PRAGMA table_info(workflow_events)")}
+        if "sandbox_id" not in columns:
+            connection.execute("ALTER TABLE workflow_events ADD COLUMN sandbox_id TEXT")
+        connection.execute(
+            "CREATE INDEX IF NOT EXISTS idx_events_sandbox ON workflow_events(sandbox_id, event_id)"
+        )
+    connection.execute(
+        """CREATE TABLE IF NOT EXISTS sandboxes (
+            sandbox_id TEXT PRIMARY KEY,
+            created_at TEXT NOT NULL,
+            last_seen_at TEXT NOT NULL
+        )"""
+    )
+
+
+def _replace_global_scenario_unique(connection):
+    """Drop the original one-scenario-id unique constraint. Rows are copied."""
+    row = connection.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'risks'"
+    ).fetchone()
+    if row is None or "scenario_id TEXT NOT NULL UNIQUE" not in row[0]:
+        return
+    columns = [item[1] for item in connection.execute("PRAGMA table_info(risks)")]
+    quoted = ", ".join(columns)
+    # foreign_keys cannot change inside an open transaction.
+    connection.commit()
+    connection.execute("PRAGMA foreign_keys = OFF")
+    try:
+        connection.execute(
+            """CREATE TABLE risks_sandbox_scope (
+                risk_id TEXT PRIMARY KEY,
+                scenario_id TEXT NOT NULL,
+                scenario_name TEXT NOT NULL,
+                risk_statement TEXT NOT NULL,
+                inherent_tier TEXT NOT NULL,
+                residual_tier TEXT NOT NULL,
+                rationale_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                policy_id TEXT,
+                policy_version TEXT,
+                policy_outcome TEXT,
+                sandbox_id TEXT
+            )"""
+        )
+        connection.execute(
+            f"INSERT INTO risks_sandbox_scope ({quoted}) SELECT {quoted} FROM risks"
+        )
+        connection.execute("DROP TABLE risks")
+        connection.execute("ALTER TABLE risks_sandbox_scope RENAME TO risks")
+        connection.commit()
+    finally:
+        connection.execute("PRAGMA foreign_keys = ON")
 
 
 def _add_decision_minutes(connection, column):
