@@ -646,6 +646,9 @@ def test_deployment_doc_describes_the_script_and_the_remaining_gaps():
     assert "valid until 2041" in text
     assert "Certbot is not used, by design." in text
     assert "There is no swap" in text
+    assert "exited 141" in text
+    assert "administrator `/32`" in text
+    assert "Lightsail console" in text
     assert "BACKUP_KEEP" in text
     assert "defaults to 14" in text
     assert "does not delete those loose copies" in text

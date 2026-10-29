@@ -181,6 +181,75 @@ main --dry-run
     assert not log.exists()
 
 
+def test_permit_root_login_reads_the_full_sshd_dump(tmp_path):
+    """A reader that exits at the first match SIGPIPEs sshd -T under pipefail."""
+    marker = tmp_path / "writer.done"
+    marker_q = shlex.quote(str(marker))
+    result = _run(
+        f"""
+source infra/harden-lightsail-host.sh
+sshd() {{
+  [[ "$1" == "-T" ]] || return 2
+  printf '%s\\n' "port 22"
+  printf '%s\\n' "permitrootlogin no"
+  python3 -c 'import sys; sys.stdout.write("usepam yes\\n" * 200000)' || return 141
+  printf '%s\\n' done > {marker_q}
+}}
+effective_permit_root_login
+"""
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == "no"
+    assert "141" not in result.stderr
+    assert marker.read_text(encoding="utf-8").strip() == "done"
+
+
+def test_permit_root_login_uses_the_first_value_and_rejects_a_dump_without_one():
+    yes = _run(
+        """
+source infra/harden-lightsail-host.sh
+sshd() { printf '%s\\n' "permitrootlogin yes" "permitrootlogin no" "port 22"; }
+effective_permit_root_login
+"""
+    )
+    assert yes.returncode == 0, yes.stderr
+    assert yes.stdout.strip() == "yes"
+
+    missing = _run(
+        """
+source infra/harden-lightsail-host.sh
+sshd() { printf '%s\\n' "port 22" "usepam yes"; }
+effective_permit_root_login
+"""
+    )
+    assert missing.returncode != 0
+    assert missing.stdout.strip() == ""
+    assert "did not report permitrootlogin" in missing.stderr
+
+
+def test_output_has_exact_line_does_not_match_a_prefix():
+    found = _source(
+        "output_has_exact_line /swapfile \"$(printf '%s\\n' /swapfile.bak /swapfile /other)\""
+    )
+    assert found.returncode == 0, found.stderr
+
+    missed = _source(
+        "output_has_exact_line /swapfile \"$(printf '%s\\n' /swapfile.bak /swapfile-extra)\""
+    )
+    assert missed.returncode != 0
+
+
+def test_harden_script_does_not_exit_early_on_a_pipe():
+    for line in HARDEN.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            continue
+        assert "grep -q" not in line
+        assert "grep -Fxq" not in line
+        assert "| awk" not in line
+        assert "| head" not in line
+
+
 def test_hardening_is_not_invoked_by_bootstrap_deploy_or_actions():
     assert "harden-lightsail-host.sh" not in BOOTSTRAP.read_text(encoding="utf-8")
     assert "harden-lightsail-host.sh" not in DEPLOY.read_text(encoding="utf-8")
