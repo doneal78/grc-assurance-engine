@@ -9,7 +9,7 @@
   <ul class="escalation-list">
     {% for item in evaluation.policy_outcome.restrictions %}
     <li>
-      <p><code>{{ item.restriction_id }}</code> — {{ item.title }}</p>
+      <p><a href="{{ url_for('methodology.index', _anchor='glossary-hr') }}"><code>{{ item.restriction_id }}</code></a> — {{ item.title }}</p>
       <p>{{ item.reason }}</p>
       <p class="so-what">{{ restriction_so_what(item) }}</p>
       <dl class="meta-list">
@@ -33,7 +33,7 @@
   {% for clause in evaluation.policy.required_contract_clauses %}
   <article class="claim-card">
     <div class="claim-heading">
-      <h3><code>{{ clause.clause_id }}</code> — {{ clause.title }}</h3>
+      <h3><a href="{{ url_for('methodology.index', _anchor='glossary-cc') }}"><code>{{ clause.clause_id }}</code></a> — {{ clause.title }}</h3>
       {% if clause.evidence_status %}
       <span class="status status-{{ clause.evidence_status|replace('_', '-') }}">{{ clause.evidence_status|replace('_', ' ')|title }}</span>
       {% else %}

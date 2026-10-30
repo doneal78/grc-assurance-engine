@@ -1,8 +1,18 @@
 # AWS demo deployment
 
-## Current state
+## Current live pin
 
-The demo is open at `https://grc-assurance.davidoneal.dev`, with no login, when the host is up. A push to `main` does not install a commit. The pin is the SHA last written to `/etc/grc-assurance-revision` after local `/health` passes. This documentation change did not SSH to the instance, did not read that file, and did not dispatch GitHub Actions. Cloudflare proxies the hostname, so a public DNS lookup does not show the origin address.
+`ddb1a3f` (`ddb1a3f0e001cb8cf6556af8d80956f3067b18dc`) · observed metrics definition 9 · as of 2026-10-30.
+
+The demo is open at `https://grc-assurance.davidoneal.dev`, with no login, when the host is up. A push to `main` does not install a commit. The short pin above is the owner's report of the commit installed on that date. The full SHA is the same commit. This documentation change did not SSH to the instance, did not read `/etc/grc-assurance-revision`, and did not dispatch GitHub Actions. Cloudflare proxies the hostname, so a public DNS lookup does not show the origin address. The origin address is written here as `<origin-ip>`. The administrator address is written as `<admin-ip>` when a note needs one. Neither address is stored as a literal in this repository.
+
+Nightly off-box SQLite copies of the demo database are pulled to an admin workstation. Fourteen copies are kept. Those copies are not in this repository. On-host backup retention is separate: `BACKUP_KEEP` in `infra/deploy-app-revision.sh` defaults to 14.
+
+A restore drill from the October 30 automatic Lightsail snapshot passed on 2026-10-30. The temporary instance came up, `grc-assurance-engine` was active, `/health` was ok, the database and ufw were intact, and the temporary instance was then deleted. The production DNS name was not moved. The recorded checks are under Snapshot restore drill.
+
+## Pin and operations log
+
+Older pins and checks. They are not the current live pin.
 
 ### Checks recorded on October 14, 2026
 
@@ -14,7 +24,7 @@ On that date the demo was live and open, with no login. The password gate was re
 
 These notes are the owner's record. This documentation change did not repeat them and did not SSH.
 
-- On 2026-10-27 a snapshot restore drill was run. The recorded result is under Snapshot restore drill. The copy's pin was `257a67e4f2e2245b6f15e9775fa6181d78f93e85`. The production static IP was left at `77.112.210.29`, and the copy was deleted. This file does not re-check that the origin is still that address.
+- On 2026-10-27 a snapshot restore drill was run. The recorded result is under Snapshot restore drill. The copy's pin was `257a67e4f2e2245b6f15e9775fa6181d78f93e85`. The production static IP was left at `<origin-ip>`, and the copy was deleted. This file does not re-check that the origin is still that address.
 - The owner reports that the systemd unit was later switched to the `grc-assurance` account by re-running `infra/lightsail-bootstrap.sh`. The bootstrap in this repository creates that account when it is missing and sets `User=` to it. The app-revision script does not change `User=`. The live account was not re-checked for this note. The 2026-10-29 audit recorded under Not re-checked from this repository compared the unit on the host with the unit in this repository.
 - The owner states that on 2026-10-28 the public demo was serving `da9329c2aed979fcf6465392b9b4393fa03e7421` (observed metrics definition 8). That is the owner's statement of the deployed commit on that date. It is not a pin read from the host during this documentation change.
 
@@ -95,7 +105,7 @@ Routine updates use `infra/deploy-app-revision.sh`. It is the app-revision path 
 The app-revision script:
 
 - Requires `--revision` or `GRC_REVISION` to be a full 40-character commit SHA. A branch name or a short SHA is refused. It does not read `/etc/grc-assurance-revision` to decide what to install. The bootstrap still does that on a re-run with no `GRC_REVISION`.
-- Backs up the live SQLite file with the `sqlite3` `.backup` command, which uses SQLite's online backup API, before it changes the app tree. The CLI has to be on `PATH`. The script does not install OS packages and does not skip the backup when `sqlite3` is missing. Each new backup is created as root, mode `0600`, under `/var/lib/grc-assurance/backups/` (the directory is `root:root` mode `0700`). After that file exists, older files in that directory whose names match `grc_assurance-<UTC stamp>-<40-character SHA>.sqlite3` are removed until the newest `BACKUP_KEEP` remain. `BACKUP_KEEP` defaults to 14. Set it in the root shell that runs the script. The file just written is never deleted, even when that leaves one extra file. The script does not delete `/var/lib/grc-assurance/` or `grc_assurance.sqlite3`. It does not delete those loose copies that sit in the data directory outside `backups/`. Those files are on the same disk as the demo. They are not a substitute for the Lightsail snapshot. One restore drill is recorded below. A later snapshot stays untested until another drill is recorded. The 2026-10-29 audit found the backups unpruned. Retention runs only when a revision of this script that contains it is used.
+- Backs up the live SQLite file with the `sqlite3` `.backup` command, which uses SQLite's online backup API, before it changes the app tree. The CLI has to be on `PATH`. The script does not install OS packages and does not skip the backup when `sqlite3` is missing. Each new backup is created as root, mode `0600`, under `/var/lib/grc-assurance/backups/` (the directory is `root:root` mode `0700`). After that file exists, older files in that directory whose names match `grc_assurance-<UTC stamp>-<40-character SHA>.sqlite3` are removed until the newest `BACKUP_KEEP` remain. `BACKUP_KEEP` defaults to 14. Set it in the root shell that runs the script. The file just written is never deleted, even when that leaves one extra file. The script does not delete `/var/lib/grc-assurance/` or `grc_assurance.sqlite3`. It does not delete those loose copies that sit in the data directory outside `backups/`. Those files are on the same disk as the demo. They are not a substitute for the Lightsail snapshot. Two restore drills are recorded below: 2026-10-27, and the October 30 automatic snapshot on 2026-10-30. A snapshot taken after 2026-10-30 has no restore record in this file. The 2026-10-29 audit found the backups unpruned. Retention runs only when a revision of this script that contains it is used.
 - Downloads `https://github.com/doneal78/grc-assurance-engine/archive/<sha>.tar.gz` and replaces `/opt/grc-assurance-engine` through the bootstrap's `replace_app_tree`. That keeps `.venv` and `instance/`.
 - Reinstalls Python dependencies with the existing `.venv`. It does not create the virtualenv.
 - Sets ownership with `apply_runtime_ownership`. `/opt/grc-assurance-engine`, including `.venv`, is `root:root` and is not writable by the unit's `User=`. The expected account is `grc-assurance`. That account can write `/var/lib/grc-assurance` (the SQLite file and its `-wal`, `-shm`, and `-journal` sidecars) and `/opt/grc-assurance-engine/instance` (for example `instance/sandbox_secret`). The data directory is owned by root and the service account's group, mode `1770`, so the account can create the database and the sticky bit stops it from removing the root-owned `backups` directory. `instance/` is mode `0750` and owned by that account. Re-running the bootstrap or this script applies the same ownership again. It does not rewrite the systemd unit. Python may be unable to write `__pycache__` under the app tree. Imports still run. This ownership is not what the 2026-10-29 host had until a later deploy or bootstrap re-run applies it.
@@ -176,7 +186,7 @@ A database result of `reachable` means the file opened read-only and its catalog
 
 ### Still open
 
-One snapshot restore drill is recorded below, for the snapshot used on 2026-10-27. A later snapshot is untested until another drill is recorded. This documentation change did not run a drill.
+Two snapshot restore drills are recorded below. The first used the snapshot from 2026-10-27. The second used the October 30 automatic snapshot and was recorded on 2026-10-30. A snapshot taken after 2026-10-30 has no restore record in this file. This documentation change did not SSH and did not repeat either drill.
 
 There is no login. `REQUIRE_AUTH` stays false on purpose for the open demo. A browser's opt-in saves stay in that browser's sandbox. The cookie is not a login. Anyone holding it can read that sandbox, and clearing it drops the link. Seeded scenario pages stay visible to every visitor. Rows with no sandbox id stay visible to every visitor. The database must never hold real data.
 
@@ -210,16 +220,32 @@ The owner recorded one drill outside this repository, at `C:\Users\oneal\grc-ass
 | Health on the copy | `http://127.0.0.1:8000/health` reported the database reachable |
 | Data on the copy | A synthetic row in `risks` was still present in `/var/lib/grc-assurance/grc_assurance.sqlite3` |
 | Pin on the copy | `257a67e4f2e2245b6f15e9775fa6181d78f93e85` |
-| Production address | Left on the original instance at `77.112.210.29`. The DNS name was not moved. |
+| Production address | Left on the original instance at `<origin-ip>`. The DNS name was not moved. |
 
-That record shows the snapshot used that day could boot, serve `/health` with the database reachable, and keep a synthetic row. It does not show that a later snapshot would restore, that the current disk matches that snapshot, or that the demo is production-ready. The address in the table is the address the drill left in place. This change did not re-resolve it.
+That record shows the snapshot used that day could boot, serve `/health` with the database reachable, and keep a synthetic row. It does not show that every later snapshot would restore, that the current disk matches that snapshot, or that the demo is production-ready. The address in the table is the address the drill left in place. This change did not re-resolve it.
+
+### Recorded result, 2026-10-30
+
+The owner recorded a second drill on 2026-10-30, from that day's automatic Lightsail snapshot of `grc-assurance-engine-demo`. This documentation change did not repeat the drill, did not SSH, and did not copy a transcript into git.
+
+| Check | Recorded result |
+| --- | --- |
+| Source | October 30 automatic snapshot of `grc-assurance-engine-demo` |
+| Temporary copy | Came up, then deleted. The production DNS name was not moved. |
+| Unit on the copy | `grc-assurance-engine` was active |
+| Health on the copy | `/health` was ok |
+| Data on the copy | The database was intact |
+| Host firewall on the copy | ufw was intact |
+| Production address | Left on the original instance at `<origin-ip>` |
+
+That record shows the October 30 automatic snapshot could boot, serve `/health`, keep the database, and keep ufw. It does not show that a snapshot taken after 2026-10-30 would restore, or that the demo is production-ready.
 
 ### Procedure for a later drill
 
 1. In Lightsail for `us-east-2`, open instance `grc-assurance-engine-demo` and note the latest automatic snapshot. The template requests a daily snapshot at 08:00 UTC.
 2. Create a new instance from that snapshot. Leave the production static IP and the DNS name on the original instance.
 3. On the copy, check `systemctl is-active grc-assurance-engine`, request `http://127.0.0.1:8000/health`, and confirm a known synthetic row is still in `/var/lib/grc-assurance/grc_assurance.sqlite3`. The health JSON includes `"database": "reachable"` when the file can be read. A copy made from an older snapshot still has the health JSON from that snapshot.
-4. Delete the copy when the check is finished. Record the date and the result somewhere outside this repository. Until that later record exists, treat snapshots taken after 2026-10-27 as untested recovery points.
+4. Delete the copy when the check is finished. Record the date and the result. The drills recorded in this file cover the snapshot used on 2026-10-27 and the October 30 automatic snapshot. A snapshot taken after 2026-10-30 has no restore record here until another drill is written down.
 
 ## Optional host hardening
 
@@ -266,7 +292,7 @@ This script is host hygiene for a single demo instance. It is not a production h
 
 ## Operations and limitations
 
-The instance and its daily snapshots incur AWS charges, so set an account budget alert. The read-only audit on 2026-10-29 found the host firewall off and no swap. Later that day an administrator applied `infra/harden-lightsail-host.sh`: ufw on, a 1 GiB swapfile, and `PermitRootLogin no`, limited to the administrator `/32`. The script exited 141 before reloading ssh. If SSH is locked out, the recovery path is the Lightsail console and `ufw disable`. A deploy does not run the script. A snapshot is a recovery point for this one disk. The 2026-10-27 drill is one recorded recovery of the snapshot used that day. A later snapshot is untested until another drill is recorded. SQLite supports this single instance only; do not scale the design horizontally or use it for real vendor records. There is no login. A browser's opt-in saves stay in that browser's sandbox cookie, which is not an account. Anyone holding the cookie can read that sandbox. The database must never hold real data. Nginx rate limits are whatever site file is installed on the host. The repository file limits `/try/` and `/api/` more tightly than other pages, and the live file matches that only after a person installs it. `deploy-app-revision.sh` does that only with `--update-nginx`. `/health` checks that the SQLite file can be read. That check is not a production readiness test. The demo is an illustrative portfolio prototype, not a production GRC service or certification tool.
+The instance and its daily snapshots incur AWS charges, so set an account budget alert. The read-only audit on 2026-10-29 found the host firewall off and no swap. Later that day an administrator applied `infra/harden-lightsail-host.sh`: ufw on, a 1 GiB swapfile, and `PermitRootLogin no`, limited to the administrator `/32`. The script exited 141 before reloading ssh. If SSH is locked out, the recovery path is the Lightsail console and `ufw disable`. A deploy does not run the script. A snapshot is a recovery point for this one disk. The 2026-10-27 drill and the 2026-10-30 drill are the recorded recoveries. A snapshot taken after 2026-10-30 has no restore record in this file. SQLite supports this single instance only; do not scale the design horizontally or use it for real vendor records. There is no login. A browser's opt-in saves stay in that browser's sandbox cookie, which is not an account. Anyone holding the cookie can read that sandbox. The database must never hold real data. Nginx rate limits are whatever site file is installed on the host. The repository file limits `/try/` and `/api/` more tightly than other pages, and the live file matches that only after a person installs it. `deploy-app-revision.sh` does that only with `--update-nginx`. `/health` checks that the SQLite file can be read. That check is not a production readiness test. The demo is an illustrative portfolio prototype, not a production GRC service or certification tool.
 
 ## Workflow event chain
 

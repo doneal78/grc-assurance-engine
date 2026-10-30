@@ -11,6 +11,7 @@ from app.services.intake_questionnaire import load_questionnaire
 from app.services.org_policy import load_org_policy
 
 EXPORT_VERSION = "1.0.0"
+SCENARIO_FIXTURE_QUESTIONNAIRE_NOTE = "N/A (scenario fixture)"
 AUTOMATIC_APPROVAL_NOTE = (
     "Nothing in this package approves the vendor. A trust-center URL cannot approve it. "
     "The decision, when present, was recorded by a person."
@@ -298,6 +299,31 @@ def _finding_view(finding):
     }
 
 
+def _questionnaire_note(result, source):
+    """Note a null questionnaire on a scenario fixture.
+
+    JSON keeps ``versions.questionnaire`` null. The note is extra context and
+    does not change ``export_version``. An older saved intake that is not a
+    scenario fixture keeps a null note, and the Markdown summary still says
+    the version is not on that result.
+    """
+    if result.get("questionnaire_version"):
+        return None
+    if source == "scenario":
+        return SCENARIO_FIXTURE_QUESTIONNAIRE_NOTE
+    if source == "saved_risk" and result.get("scenario_id") and result.get("scenario_set_version"):
+        return SCENARIO_FIXTURE_QUESTIONNAIRE_NOTE
+    return None
+
+
+def _questionnaire_label(versions):
+    if versions.get("questionnaire"):
+        return versions["questionnaire"]
+    if versions.get("questionnaire_note"):
+        return versions["questionnaire_note"]
+    return "not on this result"
+
+
 def build_package(result, decision=None, saved_risk_id=None, findings=None):
     """Copy one assessment into a stable handoff document."""
     risk = result["risk"]
@@ -325,6 +351,7 @@ def build_package(result, decision=None, saved_risk_id=None, findings=None):
         "as_of": result.get("as_of"),
         "versions": {
             "questionnaire": result.get("questionnaire_version"),
+            "questionnaire_note": _questionnaire_note(result, source),
             "rule_set": risk.get("rule_set_version"),
             "evidence_policy": result.get("evidence_policy_version") or policy.get("clause_evidence_policy_version"),
             "org_policy": f"{policy.get('policy_id')} {policy.get('policy_version')}".strip(),
@@ -427,7 +454,7 @@ def render_markdown(package):
         "",
         "## Versions",
         "",
-        f"- Questionnaire: {versions['questionnaire'] or 'not on this result'}",
+        f"- Questionnaire: {_questionnaire_label(versions)}",
         f"- Rule set: {versions['rule_set']}",
         f"- Evidence policy: {versions['evidence_policy']}",
         f"- Org policy: {versions['org_policy']}",

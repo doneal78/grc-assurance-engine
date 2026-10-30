@@ -13,7 +13,7 @@
 </div>
 </section>
 <section class="content-section action-panel"><h2>Record this review</h2>
-{% if saved_risk %}<p>This scenario is already in the local risk register as <a href="{% if walkthrough and walkthrough.on_page and walkthrough.next_href %}{{ walkthrough.next_href }}{% else %}{{ url_for('risks.detail', risk_id=saved_risk.risk_id) }}{% endif %}">{{ saved_risk.risk_id }}</a>.</p>
+{% if saved_risk %}<p>This scenario is already in this browser's risk register as <a href="{% if walkthrough and walkthrough.on_page and walkthrough.next_href %}{{ walkthrough.next_href }}{% else %}{{ url_for('risks.detail', risk_id=saved_risk.risk_id) }}{% endif %}">{{ saved_risk.risk_id }}</a>.</p>
 {% else %}<p>This seeded example is shared and read-only. Every visitor can open it. Saving stores a synthetic copy in this browser's sandbox only. Use synthetic data only. The app will create a follow-up action for an escalation, a matched policy restriction, or an unresolved evidence gap. The human decision is recorded on the saved copy. The cookie is not a login. Anyone holding it can see that sandbox, and clearing cookies drops the link.</p><form method="post" action="{{ url_for('demos.add_to_risk_register', scenario_id=scenario.scenario_id, walk=walkthrough.step_id) if walkthrough and walkthrough.on_page else url_for('demos.add_to_risk_register', scenario_id=scenario.scenario_id) }}"><button class="button-link" type="submit">Add to risk register</button></form>{% endif %}
 </section>
 {% endblock %}
