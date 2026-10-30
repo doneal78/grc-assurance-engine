@@ -47,8 +47,9 @@ def test_provisional_scenario_names_the_unknown_answer_count(client):
     body = client.get("/demo/high-risk-ai").get_data(as_text=True)
     noun = "answer" if len(unknown) == 1 else "answers"
     verb = "is" if len(unknown) == 1 else "are"
-    assert f"Tier withheld because {len(unknown)} required {noun} {verb} unknown" in body
-    assert "score shown for transparency." in body
+    assert f"Risk level not set yet: {len(unknown)} required {noun} {verb} unknown" in body
+    assert "Answer them to get a tier." in body or "Answer it to get a tier." in body
+    assert body.index("Risk level not set yet:") < body.index("INHERENT RISK")
     assert 'href="/methodology#glossary-inh"' in body or "glossary-inh" in body
 
 

@@ -11,6 +11,7 @@ from app.services.findings import (
     parse_finding_update, parse_new_finding, update_finding,
 )
 from app.services.intake_export import package_from_saved_risk, render_export
+from app.services.sample_register import seed_sample_risks, visitor_has_risks
 from app.services.sandbox_http import issue_sandbox, request_scope
 from app.services.walkthrough import carried_walk_step
 from app.services.workflow_service import (
@@ -22,7 +23,34 @@ bp = Blueprint("risks", __name__)
 
 @bp.get("/risks")
 def index():
-    return render_template("risks.html", risks=list_risks(get_db(), sandbox_id=request_scope()))
+    scope = request_scope()
+    return render_template(
+        "risks.html",
+        risks=list_risks(get_db(), sandbox_id=scope),
+        show_sample_load=not visitor_has_risks(get_db(), scope),
+        sample_notice=request.args.get("sample"),
+    )
+
+
+@bp.get("/risks/sample-data")
+def load_samples_get():
+    """The sample load is a POST. A GET is not a saved-risk id."""
+    abort(405)
+
+
+@bp.post("/risks/sample-data")
+def load_samples():
+    """Seed labeled synthetic samples into this browser's sandbox only."""
+    target = request.form.get("next", "risks")
+    if target not in {"dashboard", "risks"}:
+        target = "risks"
+    endpoint = "dashboard.index" if target == "dashboard" else "risks.index"
+    try:
+        seed_sample_risks(get_db(), issue_sandbox())
+    except WorkflowInputError:
+        get_db().rollback()
+        return redirect(url_for(endpoint, sample="cap"))
+    return redirect(url_for(endpoint))
 
 
 @bp.get("/risks/<risk_id>")

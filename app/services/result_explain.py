@@ -353,6 +353,153 @@ def mapping_so_what(mapping):
     )
 
 
+def _subject_view(subject):
+    """Normalize a scenario result or a saved risk into (view, name, risk)."""
+    if not isinstance(subject, dict):
+        return {}, "This vendor", {}
+    rationale = subject.get("rationale")
+    if isinstance(rationale, dict) and isinstance(rationale.get("risk"), dict):
+        name = subject.get("scenario_name") or rationale.get("vendor_name") or "This vendor"
+        return rationale, name, rationale["risk"]
+    if isinstance(subject.get("risk"), dict):
+        name = subject.get("name") or subject.get("vendor_name") or "This vendor"
+        return subject, name, subject["risk"]
+    return {}, "This vendor", {}
+
+
+def _question_catalog():
+    """Prompt text for scoring questions, without trailing question marks."""
+    from app.services.intake_questionnaire import load_questionnaire
+    from app.services.org_policy import load_org_policy
+
+    catalog = {}
+    for spec in load_questionnaire()["context_questions"]:
+        catalog[spec["field"]] = spec["prompt"].strip().rstrip("?").strip()
+    for spec in load_org_policy()["intake_fields"]:
+        catalog[spec["field"]] = spec["prompt"].strip().rstrip("?").strip()
+    return catalog
+
+
+def _unknown_fields(risk):
+    fields = []
+    for field in (risk or {}).get("missing_information") or []:
+        if isinstance(field, str) and field not in fields:
+            fields.append(field)
+    return fields
+
+
+def withheld_tier_line(risk):
+    """One plain line when the tier is withheld. Empty when a tier was set.
+
+    The line names the questions. It does not use rule codes, and it does
+    not treat an unknown answer as a safe default or a verified safeguard.
+    """
+    if not isinstance(risk, dict):
+        return ""
+    residual = risk.get("residual") or {}
+    inherent = risk.get("inherent") or {}
+    if residual.get("tier") != "undetermined" and not inherent.get("provisional"):
+        return ""
+    names = [_question_catalog().get(field) or _label(field) for field in _unknown_fields(risk)]
+    count = len(names)
+    if count == 0:
+        return "Risk level not set yet: a required answer is unknown. Answer it to get a tier."
+    listed = ", ".join(names)
+    if count == 1:
+        return (
+            f"Risk level not set yet: 1 required answer is unknown ({listed}). "
+            "Answer it to get a tier."
+        )
+    return (
+        f"Risk level not set yet: {count} required answers are unknown ({listed}). "
+        "Answer them to get a tier."
+    )
+
+
+def owner_summary(subject):
+    """Two or three sentences for a non-specialist. No rule codes.
+
+    Covers what was assessed, the overall outcome, and the next step.
+    The sentences restate the engine result. They do not rescore it.
+    """
+    view, name, risk = _subject_view(subject)
+    assessment = view.get("assessment_inputs") if isinstance(view.get("assessment_inputs"), dict) else {}
+    if assessment:
+        data = _words(assessment.get("data_sensitivity") or "unspecified")
+        access = _words(assessment.get("integration_permissions") or "unspecified")
+        ai = _words(assessment.get("ai_use") or "unspecified")
+        first = (
+            f"{name} is a synthetic review of a service that would handle {data} data, "
+            f"with {access} access, and {ai} AI use."
+        )
+    else:
+        first = (
+            f"{name} is a synthetic vendor review. It looks at the data the service would handle, "
+            "the access it would have, and whether it uses AI."
+        )
+    confidence = _words((risk.get("evidence_confidence") or {}).get("level") or "unrecorded")
+    outcome = (risk.get("policy_outcome") or {}).get("status")
+    provisional = bool((risk.get("inherent") or {}).get("provisional")) or (
+        (risk.get("residual") or {}).get("tier") == "undetermined"
+    )
+    if outcome == "prohibited":
+        policy_bit = "and the sample organization rules do not allow this use"
+    elif outcome == "not_prohibited":
+        policy_bit = "and no hard restriction matched, which is not an approval"
+    else:
+        policy_bit = "and a policy outcome was not stored on this record"
+    if provisional:
+        count = len(_unknown_fields(risk))
+        if count == 1:
+            unknown = "1 required answer is still unknown"
+        elif count:
+            unknown = f"{count} required answers are still unknown"
+        else:
+            unknown = "a required answer is still unknown"
+        second = (
+            f"The risk level is not set yet because {unknown}, with {confidence} evidence confidence, "
+            f"{policy_bit}."
+        )
+        third = (
+            "Answer the unknown questions to get a tier, then have a person record the decision, "
+            "because the score is not an approval."
+        )
+    else:
+        inherent = _words((risk.get("inherent") or {}).get("tier") or "unrecorded")
+        residual = _words((risk.get("residual") or {}).get("tier") or "unrecorded")
+        second = (
+            f"Inherent risk is {inherent} and residual risk is {residual}, "
+            f"with {confidence} evidence confidence, {policy_bit}."
+        )
+        claims = view.get("claims") if isinstance(view.get("claims"), list) else []
+        gap = any(
+            isinstance(claim, dict)
+            and claim.get("evidence_status") in {"missing", "expired", "not_reviewed", "conflicting"}
+            for claim in claims
+        )
+        if outcome == "prohibited":
+            third = (
+                "A person records the decision, and approving this use needs a written exception, "
+                "because a low score does not clear the restriction."
+            )
+        elif gap:
+            third = (
+                "Collect or resolve the evidence gaps, then have a person record the decision, "
+                "because the score is not an approval."
+            )
+        elif risk.get("review_path") == "escalated_review":
+            third = (
+                "A person completes the escalated review and records a decision, "
+                "because the score cannot skip that review."
+            )
+        else:
+            third = (
+                "A person reviews this result and records a decision, "
+                "because a low residual tier is not an approval."
+            )
+    return [first, second, third]
+
+
 def clause_so_what(clause):
     """What a required-clause status means. Clause status is not a score."""
     if not isinstance(clause, dict):

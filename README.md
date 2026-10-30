@@ -47,7 +47,7 @@ The longer distinctions among these figures are in [docs/cost-model.md](docs/cos
 
 | Version | Current | What it governs |
 | --- | --- | --- |
-| Walkthrough | 1.2.5 | The guided stop list and coaching copy in `app/services/walkthrough.py`. It does not score or save on its own. |
+| Walkthrough | 1.2.6 | The guided stop list and coaching copy in `app/services/walkthrough.py`. It does not score or save on its own. |
 | Observed metrics | Definition 9 | Counts, clock spans, and medians in `app/services/workflow_metrics.py`. Separate from `calculate_cost()`. |
 | Risk rules | 0.3.0 | Inherent score, residual tier, escalation rules, and missing-information handling in `app/data/risk_rules.json`. Illustrative. |
 | Scenario set | 0.3.0 | The synthetic scenarios in `app/data/demo_scenarios.json`. |
@@ -88,17 +88,17 @@ Then open <http://127.0.0.1:5000/>. The app listens on 127.0.0.1 only, with debu
 Open **Walkthrough** in the header, or go to `/walkthrough`, and choose **Start at intake**. The guide is thirteen stops on the live pages. A cookie in this browser remembers the last stop for 12 hours. Start over clears that cookie and does not delete saved risks. Pages without `?walk=` stay free-form. The pages do the scoring. The notes only say what to notice.
 
 1. **Intake** on `/try/`. Running a ready-made vendor does not save it.
-2. **Your own vendor.** Use a made-up name. Run assessment does not save. **Change these answers** reopens the form.
+2. **Your own vendor.** Use a made-up name. Evidence choices start at Nothing provided. Leaving them there is missing evidence, not a reviewed safeguard. Run assessment does not save. **Change these answers** reopens the form.
 3. **Trust center is optional.** Leave fetch at no and the URL is stored without being opened. Choosing fetch stores an excerpt for review. That excerpt is not verified evidence and does not approve the vendor.
 4. **Evidence-supported vendor.** Inherent risk, evidence confidence, residual risk, and the policy outcome are separate. A low residual tier is not an approval.
 5. **Contract clause contradicted.** CC-001 is conflicting. That status does not change the score, the residual tier, or the review path.
 6. **Conflicting permissions claim.** The claim is conflicting, the residual tier stays high, and ESC-003 escalates the review.
-7. **High-risk AI.** The score is provisional, the tier is undetermined, and the review route is escalated. Missing evidence is a gap, not a confirmed control failure.
+7. **High-risk AI.** The line above the scores names each unknown question. The score is provisional, the tier is undetermined, and the review route is escalated. Missing evidence is a gap, not a confirmed control failure.
 8. **AI tool that decides eligibility.** The policy outcome is prohibited under HR-001 while residual risk can stay low. The low tier does not clear the restriction.
 9. **Save is opt-in.** Saving writes a synthetic row in this browser's sandbox. Saving is not an approval.
 10. **Decision and export.** Escalate or reject without an exception rationale, or approve a prohibited result only with one. Download the JSON or the summary. Nothing is sent to ServiceNow.
 11. **File import** on `/try/import`. Preview has no score. Confirm runs the same engine and does not save. ServiceNow is not called.
-12. **Dashboard.** Definition 9 figures for this browser's saved rows. The modeled cost panel stays on its assumptions. See the metrics table above and [docs/cost-model.md](docs/cost-model.md).
+12. **Dashboard.** Definition 9 figures for this browser's saved rows. The modeled cost panel stays on its assumptions. See the metrics table above and [docs/cost-model.md](docs/cost-model.md). An empty register can load a few labeled synthetic samples into this browser's sandbox only. That load does not write the shared register and does not change `calculate_cost()`.
 13. **Methods.** Rule set, org policy, clause check, formula, and glossary. Mappings stay draft.
 
 The local demo does not require credentials. The hosted demo is open with no login. An optional HTTP Basic gate stays off unless `REQUIRE_AUTH` is true. The hosted site does not set that variable. See [docs/deployment.md](docs/deployment.md).

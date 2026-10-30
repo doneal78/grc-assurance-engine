@@ -67,7 +67,7 @@
   <fieldset class="evidence-fieldset">
     <legend>{{ access_evidence.prompt }}</legend>
     <label class="wide">{{ access_evidence.statement }}
-      <select name="{{ access_evidence.field }}">{% for key, text in evidence_options.items() %}<option value="{{ key }}"{% if form.get(access_evidence.field) == key %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>
+      <select name="{{ access_evidence.field }}">{% for key, text in evidence_options.items() %}<option value="{{ key }}"{% if selected_evidence(form, access_evidence.field, evidence_options) == key %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>
       <span class="muted">{{ access_evidence.help }}</span>
     </label>
   </fieldset>
@@ -83,7 +83,7 @@
     </label>
     {% for pointer in trust_center.pointers %}
     <label>{{ pointer.prompt }}
-      <select name="{{ pointer.field }}">{% for key, text in trust_center.evidence_options.items() %}<option value="{{ key }}"{% if form.get(pointer.field) == key %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>
+      <select name="{{ pointer.field }}">{% for key, text in trust_center.evidence_options.items() %}<option value="{{ key }}"{% if selected_evidence(form, pointer.field, trust_center.evidence_options) == key %} selected{% endif %}>{{ text }}</option>{% endfor %}</select>
       <span class="muted">{{ pointer.help }}</span>
     </label>
     {% endfor %}
@@ -91,12 +91,12 @@
   <fieldset class="evidence-fieldset">
     <legend>What evidence supports each required contract clause?</legend>
     {% for clause in contract_clauses %}
-    <label>{{ clause.clause_id }} — {{ clause.text }}<select name="{{ clause_evidence_field(clause.clause_id) }}">{% for key, text in clause_evidence_options.items() %}<option value="{{ key }}"{% if form.get(clause_evidence_field(clause.clause_id)) == key %} selected{% endif %}>{{ text }}</option>{% endfor %}</select></label>
+    <label>{{ clause.clause_id }} — {{ clause.text }}<select name="{{ clause_evidence_field(clause.clause_id) }}">{% for key, text in clause_evidence_options.items() %}<option value="{{ key }}"{% if selected_evidence(form, clause_evidence_field(clause.clause_id), clause_evidence_options) == key %} selected{% endif %}>{{ text }}</option>{% endfor %}</select></label>
     {% endfor %}
   </fieldset>
   <button class="button-link" type="submit">Run assessment</button>
 </form>
-<p class="muted">Evidence dates are set relative to today, so "older than its freshness limit" really is expired under the evidence policy. A trust-center choice becomes an evidence record. Leave fetch at no and the URL is not opened. Choosing fetch stores an excerpt for review and does not verify a control. Try contradicting evidence, unknown answers, or high risk with a complete trust center, and see which rules respond.</p>
+<p class="muted">Evidence choices start at Nothing provided. Leaving them there is missing evidence, not a reviewed safeguard, and it is not a confirmed control failure. Evidence dates are set relative to today, so "older than its freshness limit" really is expired under the evidence policy. A trust-center choice becomes an evidence record. Leave fetch at no and the URL is not opened. Choosing fetch stores an excerpt for review and does not verify a control. Try contradicting evidence, unknown answers, or high risk with a complete trust center, and see which rules respond.</p>
 <script>
 (function () {
   var ai = document.querySelector("[name=ai_use]");

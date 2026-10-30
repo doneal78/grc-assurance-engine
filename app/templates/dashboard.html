@@ -36,6 +36,24 @@
 {% endfor %}
 </div>
 <section class="section-heading"><div><p class="eyebrow">FOLLOW-UP</p><h2>Risk register and remediation</h2></div><a class="text-link" href="{{ url_for('risks.index') }}">Open register →</a></section>
+{% if sample_notice == 'cap' %}<p class="inline-warning">This browser already holds as many saved assessments as it can. Nothing new was saved. The shared register was not changed.</p>{% endif %}
+{% if saved_risks %}
+<ul class="saved-risk-list">
+  {% for risk in saved_risks %}
+  <li><a href="{{ url_for('risks.detail', risk_id=risk.risk_id) }}">{{ risk.scenario_name }}</a> · residual {{ risk.residual_tier }}</li>
+  {% endfor %}
+</ul>
+{% endif %}
+{% if show_sample_load %}
+<section class="empty-state" id="load-samples">
+  <h2>This browser has no saved risks yet.</h2>
+  <p>Load a few synthetic samples into this browser only. Each row is labeled sample data. They are not added to the shared register, and they do not change the modeled cost panel.</p>
+  <form method="post" action="{{ url_for('risks.load_samples') }}">
+    <input type="hidden" name="next" value="dashboard">
+    <button class="button-link" type="submit">Load sample data</button>
+  </form>
+</section>
+{% endif %}
 <section class="content-section observed-panel" aria-labelledby="observed-heading">
   <p class="eyebrow">OBSERVED · THIS VIEW · DEFINITION {{ observed.definition_version }}</p>
   <h2 id="observed-heading">Measured from saved records</h2>

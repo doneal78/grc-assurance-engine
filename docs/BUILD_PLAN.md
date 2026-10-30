@@ -12,7 +12,7 @@
 - Opt-in save of one synthetic vendor with a disposition and rationale. See section 21.
 - Observed metrics definition 9 on the dashboard and the methods page, kept separate from the illustrative cost formula. See section 22 and `docs/cost-model.md`.
 - Mapping set 0.2.0 at `/mappings`, including draft ISO/IEC 27001 and ISO/IEC 42001 review prompts. Those entries remain draft.
-- `/walkthrough` version 1.2.5, a guided path over the existing pages. A browser cookie remembers the last stop for 12 hours. The guide does not score or save on its own.
+- `/walkthrough` version 1.2.6, a guided path over the existing pages. A browser cookie remembers the last stop for 12 hours. The guide does not score or save on its own. The custom-vendor stop says evidence choices start at Nothing provided. The high-risk stop points at the line that names the unknown questions.
 - SHA-256 hash chain on workflow events. Rows that already existed are marked chained after the fact. The chain is tamper-evident (SHA-256 hash chain), not tamper-proof. See section 24.
 - Per-visitor sandbox for opt-in saves. The cookie is not a login. Seeded scenario pages stay shared. Rows with no sandbox id stay visible to every visitor. See section 25.
 - Reviewer-authored findings on a saved assessment. A finding does not change the residual tier. See section 26.

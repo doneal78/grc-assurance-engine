@@ -47,6 +47,8 @@ CLAUSE_EVIDENCE_OPTIONS = {
     "none": "Nothing provided",
 }
 
+UNPROVIDED_EVIDENCE = "none"
+
 GAP_STATUSES = {"missing", "expired", "not_reviewed", "conflicting"}
 FETCH_CLAIM_ID = "C-TRUST-CENTER-PAGE"
 FETCH_EVIDENCE_ID = "E-TRUST-CENTER-PAGE"
@@ -88,6 +90,44 @@ def field_choices():
 
 def clause_evidence_field(clause_id):
     return f"evidence_clause_{clause_id}"
+
+
+def selected_evidence(form, field, options):
+    """The evidence choice to show as selected. A blank form starts at nothing provided.
+
+    The first listed option is a reviewed artifact. A select with no selected
+    option would submit that reviewed choice. An empty or unknown value stays
+    on nothing provided instead, which the builder records as missing.
+    """
+    options = options or {}
+    raw = ""
+    if form is not None and hasattr(form, "get"):
+        value = form.get(field, "")
+        if isinstance(value, str):
+            raw = value
+    if raw in options:
+        return raw
+    return UNPROVIDED_EVIDENCE
+
+
+def _posted_evidence_option(form, field, options, label, problems):
+    """Read one evidence choice. Omitted and blank mean nothing provided.
+
+    An unrecognized non-blank value is rejected. It is not rewritten to the
+    first option, and it is not treated as verified.
+    """
+    if form is None or not hasattr(form, "get"):
+        return UNPROVIDED_EVIDENCE
+    present = field in form if hasattr(form, "__contains__") else True
+    if not present:
+        return UNPROVIDED_EVIDENCE
+    raw = form.get(field, "")
+    if raw is None or (isinstance(raw, str) and raw.strip() == ""):
+        return UNPROVIDED_EVIDENCE
+    if isinstance(raw, str) and raw in options:
+        return raw
+    problems.append(f"{label}: choose one of the listed options.")
+    return None
 
 
 def direction_spec():
@@ -449,10 +489,10 @@ def build_intake(form, as_of, *, open_url=None, resolver=None):
 
     claims, evidence = [], []
     access = questionnaire["access_evidence"]
-    access_option = form.get(access["field"], "")
-    if access_option not in EVIDENCE_OPTIONS:
-        problems.append("Evidence for the access claim: choose one of the listed options.")
-    else:
+    access_option = _posted_evidence_option(
+        form, access["field"], EVIDENCE_OPTIONS, "Evidence for the access claim", problems,
+    )
+    if access_option is not None:
         claim_id, _ = _ids(access["topic"])
         claims.append({"claim_id": claim_id, "topic": access["topic"],
                        "statement": access["statement"]})
@@ -466,9 +506,10 @@ def build_intake(form, as_of, *, open_url=None, resolver=None):
     fetch_requested = _fetch_choice(form, trust, problems)
     pointers = []
     for pointer in trust["pointers"]:
-        option = form.get(pointer["field"], "")
-        if option not in trust["evidence_options"]:
-            problems.append(f"{pointer['prompt']}: choose one of the listed options.")
+        option = _posted_evidence_option(
+            form, pointer["field"], trust["evidence_options"], pointer["prompt"], problems,
+        )
+        if option is None:
             continue
         evidence_ids = []
         for topic_spec in pointer["topics"]:
@@ -490,9 +531,10 @@ def build_intake(form, as_of, *, open_url=None, resolver=None):
 
     for clause in load_org_policy()["required_contract_clauses"]:
         field = clause_evidence_field(clause["clause_id"])
-        option = form.get(field, "")
-        if option not in CLAUSE_EVIDENCE_OPTIONS:
-            problems.append(f"Evidence for {clause['clause_id']}: choose one of the listed options.")
+        option = _posted_evidence_option(
+            form, field, CLAUSE_EVIDENCE_OPTIONS, f"Evidence for {clause['clause_id']}", problems,
+        )
+        if option is None:
             continue
         record = _clause_evidence_record(clause, option, as_of)
         if record is not None:

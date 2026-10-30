@@ -15,7 +15,7 @@ The decision stop succeeds when that saved risk has a recorded decision.
 
 from copy import deepcopy
 
-WALKTHROUGH_VERSION = "1.2.5"
+WALKTHROUGH_VERSION = "1.2.6"
 WALK_COOKIE = "walk_step"
 WALK_QUERY = "walk"
 COOKIE_MAX_AGE = 12 * 60 * 60
@@ -48,10 +48,12 @@ _STEPS = (
         "title": "Your own vendor",
         "summary": "Fill the form with a made-up name. Run assessment does not save.",
         "notice": (
-            "Use a made-up vendor name. Model training is asked only when AI use "
-            "is not none. Run assessment uses the same engine as the ready-made "
-            "vendors and does not save. The four results stay separate. A low "
-            "residual tier is not an approval."
+            "Use a made-up vendor name. Evidence choices start at Nothing provided. "
+            "Leaving them there is missing evidence, not a reviewed safeguard. "
+            "Model training is asked only when AI use is not none. Run assessment "
+            "uses the same engine as the ready-made vendors and does not save. "
+            "A short summary sits above the four results. The four results stay "
+            "separate. A low residual tier is not an approval."
         ),
         "endpoint": "try_demo.index",
         "endpoints": ("try_demo.index", "try_demo.assess"),
@@ -85,10 +87,11 @@ _STEPS = (
         "title": "Four separate results",
         "summary": "Inherent risk, evidence confidence, residual risk, and policy stay apart.",
         "notice": (
-            "The four cards are separate facts: inherent risk low, evidence "
-            "confidence high, residual risk low, and a policy outcome that is not "
-            "prohibited. CC-001 is verified. Neither the low residual tier nor "
-            "not prohibited is an approval."
+            "A short summary in plain language sits above the four cards. The four "
+            "cards are separate facts: inherent risk low, evidence confidence high, "
+            "residual risk low, and a policy outcome that is not prohibited. Open "
+            "Technical detail. CC-001 is verified on this vendor. Neither the low "
+            "residual tier nor not prohibited is an approval."
         ),
         "endpoint": "try_demo.scenario",
         "view_args": {"scenario_id": "evidence-supported"},
@@ -125,10 +128,11 @@ _STEPS = (
         "title": "Review a score cannot skip",
         "summary": "Escalation fires. Missing evidence is not a failed control.",
         "notice": (
-            "The score is provisional, the tier is undetermined, and the review "
-            "route is escalated. Missing evidence is a gap, not a confirmed "
-            "control failure. A residual tier does not turn these rules off or "
-            "approve the vendor."
+            "The line above the scores names each unknown question. The score is "
+            "provisional, the tier is undetermined, and the review route is "
+            "escalated. Missing evidence is a gap, not a confirmed control "
+            "failure. A residual tier does not turn these rules off or approve "
+            "the vendor."
         ),
         "endpoint": "try_demo.scenario",
         "view_args": {"scenario_id": "high-risk-ai"},

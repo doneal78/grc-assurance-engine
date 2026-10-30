@@ -48,6 +48,8 @@ The first rule that matches wins.
 | Situation | Claim status | Why |
 | --- | --- | --- |
 | No evidence records | missing, reason "no evidence provided" | Not demonstrated, which is different from a confirmed failure |
+
+The public form, the JSON API, and a blank cell in a questionnaire file treat an omitted or blank evidence choice as no evidence record. That status is missing. It is not verified. A value that is not one of the six choices is rejected. It is not rewritten to the first choice.
 | Any record is conflicting | conflicting | One verified document cannot outweigh an unresolved contradiction |
 | Records exist but all are unusable | missing, reason "no evidence supports the claim" | Kept distinguishable from having no records at all |
 | Otherwise | the best usable status: verified, then self_attested, then expired, then not_reviewed | An extra weak document should not drag down a strong one |

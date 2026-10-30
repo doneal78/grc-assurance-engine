@@ -6,16 +6,18 @@
 <p class="lead">{{ scenario.summary }}</p>
 {% include "_assessment_result.html" %}
 
-<section class="content-section"><h2>Workflow event log</h2>
-<ol class="event-list">{% for event in events %}<li><strong>{{ event.title }}</strong> · {{ event.detail }}</li>{% endfor %}</ol>
-<p class="muted">These steps run in this order for every assessment. This log was generated for this page view and is not stored.</p>
-</section>
-
-<section class="content-section"><h2>Remediation ticket</h2>
-{% if payload %}<p>In production, this payload would open a remediation ticket in a system such as ServiceNow. Here it is only displayed. Nothing is sent.</p>
-<pre class="payload"><code>{{ payload|tojson(indent=2) }}</code></pre>
-{% else %}<p>No ticket needed: no escalation rule fired, no hard restriction matched, and no evidence gap needs follow-up. A person still reviews the result.</p>{% endif %}
-</section>
+<details class="technical-detail">
+  <summary>Technical detail</summary>
+  <section class="content-section"><h2>Workflow event log</h2>
+  <ol class="event-list">{% for event in events %}<li><strong>{{ event.title }}</strong> · {{ event.detail }}</li>{% endfor %}</ol>
+  <p class="muted">These steps run in this order for every assessment. This log was generated for this page view and is not stored.</p>
+  </section>
+  <section class="content-section"><h2>Remediation ticket</h2>
+  {% if payload %}<p>In production, this payload would open a remediation ticket in a system such as ServiceNow. Here it is only displayed. Nothing is sent.</p>
+  <pre class="payload"><code>{{ payload|tojson(indent=2) }}</code></pre>
+  {% else %}<p>No ticket needed: no escalation rule fired, no hard restriction matched, and no evidence gap needs follow-up. A person still reviews the result.</p>{% endif %}
+  </section>
+</details>
 
 <section class="content-section"><h2>Reviewer package</h2>
 <p>Download the intake answers, the evaluation, the policy outcome, the required-clause statuses, and the evidence summary. JSON suits a ticket. The text summary can be read or printed. Neither one is an approval, and neither one is saved.</p>
