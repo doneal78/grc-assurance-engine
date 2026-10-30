@@ -1,7 +1,7 @@
 <ul class="escalation-list">
 {% for item in escalations %}
 <li>
-  <p><code>{{ item.rule_id }}</code> — {{ item.reason }}</p>
+  <p><a href="{{ url_for('methodology.index', _anchor='glossary-' + (item.rule_id.split('-')[0]|lower)) }}"><code>{{ item.rule_id }}</code></a> — {{ item.reason }}</p>
   <p class="so-what">{{ escalation_rationale(item, assessment if assessment is defined else none, claims if claims is defined else none) }}</p>
   {% if item.assessment_type %}
   <dl class="meta-list">

@@ -280,7 +280,7 @@ def register_scenario(db, result, sandbox_id=None):
     _enforce_sandbox_cap(db, sandbox_id)
     risk_id = _persist_assessment(
         db, result, scenario_id, result["summary"],
-        "Synthetic scenario result added to the local risk register.",
+        "Synthetic scenario result saved to the risk register.",
         sandbox_id=sandbox_id,
     )
     db.commit()
@@ -321,7 +321,7 @@ def register_intake(db, result, decision, *, commit=True, sandbox_id=None):
     _enforce_sandbox_cap(db, sandbox_id)
     risk_id = _persist_assessment(
         db, result, f"intake-{uuid4().hex[:12]}", _intake_statement(result),
-        "Synthetic general intake added to the local risk register. Demonstration data.",
+        "Synthetic general intake saved to the risk register. Demonstration data.",
         opening_event=(
             "intake_received",
             "Synthetic general intake confirmed for save. Demonstration data. "

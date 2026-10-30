@@ -7,6 +7,10 @@
   <article class="result-card"><p class="eyebrow">RESIDUAL RISK</p><strong class="tier tier-{{ scenario.risk.residual.tier }}">{{ scenario.risk.residual.tier|title }}</strong><p>{{ scenario.risk.residual.reason }}</p><p class="so-what">What remains after the safeguards the evidence supports. This tier is not an approval.</p></article>
   <article class="result-card"><p class="eyebrow">POLICY OUTCOME</p><strong class="status status-{{ scenario.risk.policy_outcome.status|replace('_', '-') }}">{{ scenario.risk.policy_outcome.status|replace('_', ' ')|title }}</strong><p>{{ scenario.risk.policy.policy_id }} {{ scenario.risk.policy.policy_version }}</p><p class="so-what">Separate from the score. Not prohibited is not an approval.</p></article>
 </section>
+{% if scenario.risk.inherent.provisional %}
+{% set unknown_answers = scenario.risk.missing_information|unique|list %}
+<p class="muted">Tier withheld because {{ unknown_answers|length }} required answer{{ 's' if unknown_answers|length != 1 else '' }} {{ 'are' if unknown_answers|length != 1 else 'is' }} unknown; score shown for transparency.</p>
+{% endif %}
 {% with direction=scenario.direction_context %}{% include "_direction_context.html" %}{% endwith %}
 {% set step_id = walkthrough.step_id if walkthrough and walkthrough.on_page else none %}
 {% set plan = replay_plan(scenario, posted_form if posted_form is defined else none) %}
@@ -22,7 +26,7 @@
 <p>{{ confidence_plain(scenario.risk.evidence_confidence) }}</p>
 <h3>Inherent score</h3>
 <p class="muted">Each line is one scoring rule, the answer it used, and what that answer means before safeguards. The points are the illustrative rule set. They are not an approval.</p>
-{% if scenario.risk.inherent.factors %}<ul class="factor-list">{% for factor in factor_lines(scenario.risk, scenario.assessment_inputs) %}<li><div><span><code>{{ factor.rule_id }}</code> · {{ factor.label }} = {{ factor.value|replace('_', ' ') }}</span><p class="so-what">{{ factor.rationale }}</p></div><strong>+{{ factor.points }}</strong></li>{% endfor %}</ul>{% else %}<p>No known-value factors contributed to the score.</p>{% endif %}
+{% if scenario.risk.inherent.factors %}<ul class="factor-list">{% for factor in factor_lines(scenario.risk, scenario.assessment_inputs) %}<li><div><span><a href="{{ url_for('methodology.index', _anchor='glossary-' + (factor.rule_id.split('-')[0]|lower)) }}"><code>{{ factor.rule_id }}</code></a> · {{ factor.label }} = {{ factor.value|replace('_', ' ') }}</span><p class="so-what">{{ factor.rationale }}</p></div><strong>+{{ factor.points }}</strong></li>{% endfor %}</ul>{% else %}<p>No known-value factors contributed to the score.</p>{% endif %}
 {% if scenario.risk.missing_information %}<p class="inline-warning">{{ missing_plain(scenario.risk) }}</p>{% endif %}
 <p><strong>Review route:</strong> {{ scenario.risk.review_path|replace('_', ' ')|title }}. {{ review_path_plain(scenario.risk) }}</p>
 {% if scenario.risk.escalations %}{% with escalations=scenario.risk.escalations, assessment=scenario.assessment_inputs, claims=scenario.claims %}{% include "_escalation_list.html" %}{% endwith %}{% else %}<p>No configured escalation rule fired. Human review is still required. A quiet rule list is not an approval.</p>{% endif %}

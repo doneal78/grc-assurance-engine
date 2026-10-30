@@ -3,9 +3,18 @@
 {% block title %}Dashboard | GRC Assurance Engine{% endblock %}
 
 {% block content %}
-<p class="eyebrow">LOCAL PORTFOLIO PROTOTYPE</p>
+<p class="eyebrow">PORTFOLIO PROTOTYPE · HOSTED DEMO · SYNTHETIC DATA</p>
 <h1>Vendor and AI risk, with a visible evidence trail.</h1>
 <p class="lead">A small, rules-based workflow for turning assessment inputs and evidence into reviewable results.</p>
+<section class="demonstrates" aria-labelledby="demonstrates-heading">
+  <h2 id="demonstrates-heading">What this demonstrates</h2>
+  <ul>
+    <li>Evidence-first third-party and AI vendor risk review.</li>
+    <li>Explainable, versioned rules. The same inputs and the same rule-set version produce the same result.</li>
+    <li>Draft NIST, ISO/IEC 27001, and ISO/IEC 42001 control mapping. The ISO entries stay draft.</li>
+    <li>Human-in-the-loop decisions with a tamper-evident (SHA-256 hash chain) audit trail.</li>
+  </ul>
+</section>
 <section class="notice">
   <strong>Illustrative model · Synthetic scenarios · Human review required</strong>
   <p>Risk rules and mappings are draft portfolio examples. Results are not approvals, certifications, or proof of control effectiveness.</p>
@@ -28,9 +37,9 @@
 </div>
 <section class="section-heading"><div><p class="eyebrow">FOLLOW-UP</p><h2>Risk register and remediation</h2></div><a class="text-link" href="{{ url_for('risks.index') }}">Open register →</a></section>
 <section class="content-section observed-panel" aria-labelledby="observed-heading">
-  <p class="eyebrow">OBSERVED · LOCAL REGISTER · DEFINITION {{ observed.definition_version }}</p>
+  <p class="eyebrow">OBSERVED · THIS VIEW · DEFINITION {{ observed.definition_version }}</p>
   <h2 id="observed-heading">Measured from saved records</h2>
-  <p class="muted">These counts come from the local SQLite register. <strong>Assessment volume</strong> is how many assessments are saved. <strong>Persisted dispositions</strong> are the human decisions saved on those assessments (approve, approve with conditions, escalate, or reject). A public <code>/try/</code> run that is not saved is in neither number, and it is not a register disposition. <strong>Self-reported human handling time</strong> is optional minutes entered on a decision. <strong>Self-reported rework time</strong> is a separate optional number for time spent redoing work after a first pass. <strong>Self-reported manual touches</strong> are a separate optional count of human touchpoints on that assessment. <strong>Self-reported handoffs</strong> are a separate optional count of times the assessment was handed between people or queues before disposition. Each is shown when at least one decision has that number. <strong>Monthly assessment rate</strong> is a separate count of current decisions whose timestamp falls in the 30 days ending at the latest readable decision. It is shown only when those timestamps cover at least 30 days. A shorter history says Not measured. <strong>Authenticated effort</strong> is a separate optional number of minutes a signed-in reviewer entered on a disposition. It is shown when at least one decision has that number. A public <code>/try/</code> save does not collect it. It is not a session timer. <strong>Cash savings</strong> are a separate optional number of whole dollars a signed-in reviewer entered when a spending reduction was known. The card shows the median when at least one decision has that number, and Not measured when none do. A public <code>/try/</code> save does not collect them. They are not a wage times the other figures. <strong>Avoided-incident value</strong> is a separate modeled-assumption card. It says Not measured while <code>incident_cost</code> and <code>avoided_incident_count</code> are null. It is not an observed register figure, not cash savings, and not the labor-capacity panel. None of these figures is the modeled panel below. An empty register shows zeros for the counts that are counts. These counts are definition {{ observed.definition_version }} applied to this browser's sandbox plus any saved row that has no sandbox id. Another browser's sandbox is not included. They are not <code>calculate_cost()</code>. A scope with no saved decision still says Not measured. <a href="{{ url_for('methodology.index') }}">Definitions, rounding, and unmeasured quantities</a>.</p>
+  <p class="muted">Definition {{ observed.definition_version }} counts this browser's saved rows, plus any saved row with no sandbox id. Another browser's rows are not included. These figures are not <code>calculate_cost()</code>. Open Definitions (v{{ observed.definition_version }}) for the full wording. <a href="{{ url_for('methodology.index') }}">Methods page</a>.</p>
   {% include "_observed_metrics.html" %}
 </section>
 {% include "_avoided_incident.html" %}

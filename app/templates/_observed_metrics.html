@@ -1,30 +1,33 @@
 <!-- observed-metrics-start -->
-<p>{{ observed.cycle_time.definition }}</p>
-<p>{{ observed.monthly_assessment_rate.definition }}</p>
 <p class="muted">Assessment volume counts saved assessments. Persisted dispositions count saved human decisions on those assessments. A public <code>/try/</code> run that is not saved is in neither count. The monthly assessment rate counts current decisions in a covered 30-day window. It is not that volume, and a public <code>/try/</code> run that is not saved is not in it.</p>
 <div class="result-grid">
   <article class="result-card">
     <p class="eyebrow">SAVED ASSESSMENT VOLUME</p>
     <strong>{{ observed.assessment_volume.total }}</strong>
+    <p class="metric-caption">Saved rows · this view</p>
     <p>Saved assessments: {{ observed.assessment_volume.total }}. This is the register, not the public demo. A <code>/try/</code> run that is not saved is excluded. General intake: {{ observed.assessment_volume.general_intake }}. Scenario fixtures: {{ observed.assessment_volume.scenario_fixture }}. This count is this browser's sandbox plus rows with no sandbox id. Another browser's saved rows are not included.</p>
   </article>
   <article class="result-card">
     <p class="eyebrow">OPEN REMEDIATION</p>
     <strong>{{ observed.remediation.not_completed }}</strong>
+    <p class="metric-caption">Open follow-up actions</p>
     <p>Open remediation: {{ observed.remediation.not_completed }}. Follow-up actions on saved assessments that are not completed. {% for row in observed.remediation.by_status %}{{ row.count }} {{ row.name|replace('_', ' ') }}{% if not loop.last %} · {% endif %}{% endfor %}.</p>
   </article>
   <article class="result-card">
     <p class="eyebrow">SAVED DECISIONS</p>
     <strong>{{ observed.dispositions.recorded }}</strong>
+    <p class="metric-caption">Human decisions · separate from the score</p>
     <p>Persisted dispositions: {{ observed.dispositions.recorded }}. A disposition is a person's saved decision: approve, approve with conditions, escalate, or reject. It is not the assessment volume, and it is not a public <code>/try/</code> run. Saved assessments with no decision row: {{ observed.dispositions.risks_without_decision }}.</p>
   </article>
   <article class="result-card">
     <p class="eyebrow">ELAPSED CYCLE TIME</p>
     {% if observed.cycle_time.measured_count %}
     <strong>{{ observed.cycle_time.median_label }}</strong>
+    <p class="metric-caption">Clock span · median · saved rows only</p>
     <p>Median {{ observed.cycle_time.median_label }} across {{ observed.cycle_time.measured_count }} saved intake{% if observed.cycle_time.measured_count != 1 %}s{% endif %}. This clock span is only for saved records that have both events. A public <code>/try/</code> run that is not saved has no cycle time here. Total {{ observed.cycle_time.total_label }}. Mean {{ observed.cycle_time.mean_label }}. Shortest {{ observed.cycle_time.minimum_label }}. Longest {{ observed.cycle_time.maximum_label }}.</p>
     {% else %}
     <strong>Not measured</strong>
+    <p class="metric-caption">Clock span · needs both events</p>
     <p>No saved row has both an intake event and a usable disposition event. A public <code>/try/</code> run that is not saved is not in this count.</p>
     {% endif %}
   </article>
@@ -35,70 +38,138 @@
     {% else %}
     <strong>Not measured</strong>
     {% endif %}
-    <p>{{ observed.monthly_assessment_rate.detail }}</p>
+    <p class="metric-caption">Decision count · 30-day window</p>
   </article>
   <article class="result-card">
     <p class="eyebrow">SELF-REPORTED HANDLING TIME</p>
     {% if observed.handling_time.recorded_count %}
     <strong>{{ observed.handling_time.median_label }}</strong>
-    <p>Median {{ observed.handling_time.median_label }} across {{ observed.handling_time.recorded_count }} decision{% if observed.handling_time.recorded_count != 1 %}s{% endif %} with minutes recorded.{% if observed.handling_time.unmeasured_decisions == 1 %} 1 saved decision has no minutes.{% elif observed.handling_time.unmeasured_decisions %} {{ observed.handling_time.unmeasured_decisions }} saved decisions have no minutes.{% endif %} Mean {{ observed.handling_time.mean_label }}. Shortest {{ observed.handling_time.minimum_label }}. Longest {{ observed.handling_time.maximum_label }}. Total {{ observed.handling_time.total_label }}. Self-reported human handling time. Not authenticated effort tracking. Not cash savings. Not elapsed cycle time. Not rework time. Not used by the cost model.</p>
+    <p class="metric-caption">Self-reported · median · optional</p>
+    <p>Median {{ observed.handling_time.median_label }} across {{ observed.handling_time.recorded_count }} decision{% if observed.handling_time.recorded_count != 1 %}s{% endif %} with minutes recorded.{% if observed.handling_time.unmeasured_decisions == 1 %} 1 saved decision has no minutes.{% elif observed.handling_time.unmeasured_decisions %} {{ observed.handling_time.unmeasured_decisions }} saved decisions have no minutes.{% endif %} Mean {{ observed.handling_time.mean_label }}. Shortest {{ observed.handling_time.minimum_label }}. Longest {{ observed.handling_time.maximum_label }}. Total {{ observed.handling_time.total_label }}.</p>
     {% else %}
     <strong>Not measured</strong>
-    <p>No saved decision includes self-reported minutes. The field is optional. Blank means unmeasured. Saved decisions without minutes: {{ observed.handling_time.unmeasured_decisions }}. This is not elapsed cycle time, not rework time, and it is not an input to the cost model.</p>
+    <p class="metric-caption">Self-reported · median · optional</p>
+    <p>No saved decision includes self-reported minutes. The field is optional. Blank means unmeasured. Saved decisions without minutes: {{ observed.handling_time.unmeasured_decisions }}.</p>
     {% endif %}
   </article>
   <article class="result-card">
     <p class="eyebrow">SELF-REPORTED REWORK TIME</p>
     {% if observed.rework_time.recorded_count %}
     <strong>{{ observed.rework_time.median_label }}</strong>
-    <p>Median {{ observed.rework_time.median_label }} across {{ observed.rework_time.recorded_count }} decision{% if observed.rework_time.recorded_count != 1 %}s{% endif %} with rework minutes recorded.{% if observed.rework_time.unmeasured_decisions == 1 %} 1 saved decision has no rework minutes.{% elif observed.rework_time.unmeasured_decisions %} {{ observed.rework_time.unmeasured_decisions }} saved decisions have no rework minutes.{% endif %} Mean {{ observed.rework_time.mean_label }}. Shortest {{ observed.rework_time.minimum_label }}. Longest {{ observed.rework_time.maximum_label }}. Total {{ observed.rework_time.total_label }}. Self-reported rework time. Not authenticated. Not cash savings. Not elapsed cycle time. Not handling minutes. Not used by the cost model.</p>
+    <p class="metric-caption">Self-reported · median · optional</p>
+    <p>Median {{ observed.rework_time.median_label }} across {{ observed.rework_time.recorded_count }} decision{% if observed.rework_time.recorded_count != 1 %}s{% endif %} with rework minutes recorded.{% if observed.rework_time.unmeasured_decisions == 1 %} 1 saved decision has no rework minutes.{% elif observed.rework_time.unmeasured_decisions %} {{ observed.rework_time.unmeasured_decisions }} saved decisions have no rework minutes.{% endif %} Mean {{ observed.rework_time.mean_label }}. Shortest {{ observed.rework_time.minimum_label }}. Longest {{ observed.rework_time.maximum_label }}. Total {{ observed.rework_time.total_label }}.</p>
     {% else %}
     <strong>Not measured</strong>
-    <p>No saved decision includes self-reported rework minutes. The field is optional. Blank means unmeasured. Saved decisions without rework minutes: {{ observed.rework_time.unmeasured_decisions }}. This is not elapsed cycle time, not handling minutes, and not an input to the cost model.</p>
+    <p class="metric-caption">Self-reported · median · optional</p>
+    <p>No saved decision includes self-reported rework minutes. The field is optional. Blank means unmeasured. Saved decisions without rework minutes: {{ observed.rework_time.unmeasured_decisions }}.</p>
     {% endif %}
   </article>
   <article class="result-card">
     <p class="eyebrow">SELF-REPORTED MANUAL TOUCHES</p>
     {% if observed.manual_touches.recorded_count %}
     <strong>{{ observed.manual_touches.median_label }}</strong>
-    <p>Median {{ observed.manual_touches.median_label }} across {{ observed.manual_touches.recorded_count }} decision{% if observed.manual_touches.recorded_count != 1 %}s{% endif %} with manual touches recorded.{% if observed.manual_touches.unmeasured_decisions == 1 %} 1 saved decision has no manual touches.{% elif observed.manual_touches.unmeasured_decisions %} {{ observed.manual_touches.unmeasured_decisions }} saved decisions have no manual touches.{% endif %} Mean {{ observed.manual_touches.mean_label }}. Lowest {{ observed.manual_touches.minimum_label }}. Highest {{ observed.manual_touches.maximum_label }}. Total {{ observed.manual_touches.total_label }}. Self-reported manual touches. Not authenticated. Not cash savings. Not elapsed cycle time. Not handling minutes. Not rework minutes. Not used by the cost model.</p>
+    <p class="metric-caption">Self-reported · median · optional</p>
+    <p>Median {{ observed.manual_touches.median_label }} across {{ observed.manual_touches.recorded_count }} decision{% if observed.manual_touches.recorded_count != 1 %}s{% endif %} with manual touches recorded.{% if observed.manual_touches.unmeasured_decisions == 1 %} 1 saved decision has no manual touches.{% elif observed.manual_touches.unmeasured_decisions %} {{ observed.manual_touches.unmeasured_decisions }} saved decisions have no manual touches.{% endif %} Mean {{ observed.manual_touches.mean_label }}. Lowest {{ observed.manual_touches.minimum_label }}. Highest {{ observed.manual_touches.maximum_label }}. Total {{ observed.manual_touches.total_label }}.</p>
     {% else %}
     <strong>Not measured</strong>
-    <p>No saved decision includes self-reported manual touches. The field is optional. Blank means unmeasured. Saved decisions without a manual-touch count: {{ observed.manual_touches.unmeasured_decisions }}. This is not elapsed cycle time, not handling minutes, not rework minutes, and not an input to the cost model.</p>
+    <p class="metric-caption">Self-reported · median · optional</p>
+    <p>No saved decision includes self-reported manual touches. The field is optional. Blank means unmeasured. Saved decisions without a manual-touch count: {{ observed.manual_touches.unmeasured_decisions }}.</p>
     {% endif %}
   </article>
   <article class="result-card">
     <p class="eyebrow">SELF-REPORTED HANDOFFS</p>
     {% if observed.handoffs.recorded_count %}
     <strong>{{ observed.handoffs.median_label }}</strong>
-    <p>Median {{ observed.handoffs.median_label }} across {{ observed.handoffs.recorded_count }} decision{% if observed.handoffs.recorded_count != 1 %}s{% endif %} with handoffs recorded.{% if observed.handoffs.unmeasured_decisions == 1 %} 1 saved decision has no handoffs.{% elif observed.handoffs.unmeasured_decisions %} {{ observed.handoffs.unmeasured_decisions }} saved decisions have no handoffs.{% endif %} Mean {{ observed.handoffs.mean_label }}. Lowest {{ observed.handoffs.minimum_label }}. Highest {{ observed.handoffs.maximum_label }}. Total {{ observed.handoffs.total_label }}. Self-reported handoffs. Not authenticated. Not cash savings. Not elapsed cycle time. Not handling minutes. Not rework minutes. Not manual touches. Not used by the cost model.</p>
+    <p class="metric-caption">Self-reported · median · optional</p>
+    <p>Median {{ observed.handoffs.median_label }} across {{ observed.handoffs.recorded_count }} decision{% if observed.handoffs.recorded_count != 1 %}s{% endif %} with handoffs recorded.{% if observed.handoffs.unmeasured_decisions == 1 %} 1 saved decision has no handoffs.{% elif observed.handoffs.unmeasured_decisions %} {{ observed.handoffs.unmeasured_decisions }} saved decisions have no handoffs.{% endif %} Mean {{ observed.handoffs.mean_label }}. Lowest {{ observed.handoffs.minimum_label }}. Highest {{ observed.handoffs.maximum_label }}. Total {{ observed.handoffs.total_label }}.</p>
     {% else %}
     <strong>Not measured</strong>
-    <p>No saved decision includes self-reported handoffs. The field is optional. Blank means unmeasured. Saved decisions without a handoff count: {{ observed.handoffs.unmeasured_decisions }}. This is not elapsed cycle time, not handling minutes, not rework minutes, not manual touches, and not an input to the cost model.</p>
+    <p class="metric-caption">Self-reported · median · optional</p>
+    <p>No saved decision includes self-reported handoffs. The field is optional. Blank means unmeasured. Saved decisions without a handoff count: {{ observed.handoffs.unmeasured_decisions }}.</p>
     {% endif %}
   </article>
   <article class="result-card">
     <p class="eyebrow">AUTHENTICATED EFFORT</p>
     {% if observed.authenticated_effort.recorded_count %}
     <strong>{{ observed.authenticated_effort.median_label }}</strong>
-    <p>Median {{ observed.authenticated_effort.median_label }} across {{ observed.authenticated_effort.recorded_count }} decision{% if observed.authenticated_effort.recorded_count != 1 %}s{% endif %} with authenticated effort recorded.{% if observed.authenticated_effort.unmeasured_decisions == 1 %} 1 saved decision has no authenticated effort.{% elif observed.authenticated_effort.unmeasured_decisions %} {{ observed.authenticated_effort.unmeasured_decisions }} saved decisions have no authenticated effort.{% endif %} Mean {{ observed.authenticated_effort.mean_label }}. Shortest {{ observed.authenticated_effort.minimum_label }}. Longest {{ observed.authenticated_effort.maximum_label }}. Total {{ observed.authenticated_effort.total_label }}. Authenticated effort. Minutes a signed-in reviewer entered. Not a session timer. Not self-reported handling time. Not rework time. Not manual touches. Not handoffs. Not the monthly assessment rate. Not cash savings. Not elapsed cycle time. Not used by the cost model.</p>
+    <p class="metric-caption">Signed-in reviewer · median · optional</p>
+    <p>Median {{ observed.authenticated_effort.median_label }} across {{ observed.authenticated_effort.recorded_count }} decision{% if observed.authenticated_effort.recorded_count != 1 %}s{% endif %} with authenticated effort recorded.{% if observed.authenticated_effort.unmeasured_decisions == 1 %} 1 saved decision has no authenticated effort.{% elif observed.authenticated_effort.unmeasured_decisions %} {{ observed.authenticated_effort.unmeasured_decisions }} saved decisions have no authenticated effort.{% endif %} Mean {{ observed.authenticated_effort.mean_label }}. Shortest {{ observed.authenticated_effort.minimum_label }}. Longest {{ observed.authenticated_effort.maximum_label }}. Total {{ observed.authenticated_effort.total_label }}.</p>
     {% else %}
     <strong>Not measured</strong>
-    <p>No saved decision includes authenticated effort. The field is optional and is collected only from a signed-in reviewer. Blank means unmeasured. Saved decisions without authenticated effort: {{ observed.authenticated_effort.unmeasured_decisions }}. This is not self-reported handling time, not cash savings, not elapsed cycle time, and not an input to the cost model.</p>
+    <p class="metric-caption">Signed-in reviewer · median · optional</p>
+    <p>No saved decision includes authenticated effort. The field is optional and is collected only from a signed-in reviewer. Blank means unmeasured. Saved decisions without authenticated effort: {{ observed.authenticated_effort.unmeasured_decisions }}.</p>
     {% endif %}
   </article>
   <article class="result-card">
     <p class="eyebrow">CASH SAVINGS</p>
     {% if observed.cash_savings.recorded_count %}
     <strong>{{ observed.cash_savings.median_label }}</strong>
-    <p>Median {{ observed.cash_savings.median_label }} across {{ observed.cash_savings.recorded_count }} decision{% if observed.cash_savings.recorded_count != 1 %}s{% endif %} with cash savings recorded.{% if observed.cash_savings.unmeasured_decisions == 1 %} 1 saved decision has no cash savings.{% elif observed.cash_savings.unmeasured_decisions %} {{ observed.cash_savings.unmeasured_decisions }} saved decisions have no cash savings.{% endif %} Mean {{ observed.cash_savings.mean_label }}. Lowest {{ observed.cash_savings.minimum_label }}. Highest {{ observed.cash_savings.maximum_label }}. Total {{ observed.cash_savings.total_label }}. Cash savings. Whole dollars a signed-in reviewer entered. Not a wage times handling minutes. Not a wage times rework minutes. Not a wage times manual touches. Not a wage times handoffs. Not a wage times authenticated effort. Not the monthly assessment rate. Not the modeled labor rate. Not used by the cost model.</p>
+    <p class="metric-caption">Signed-in reviewer · median · optional</p>
+    <p>Median {{ observed.cash_savings.median_label }} across {{ observed.cash_savings.recorded_count }} decision{% if observed.cash_savings.recorded_count != 1 %}s{% endif %} with cash savings recorded.{% if observed.cash_savings.unmeasured_decisions == 1 %} 1 saved decision has no cash savings.{% elif observed.cash_savings.unmeasured_decisions %} {{ observed.cash_savings.unmeasured_decisions }} saved decisions have no cash savings.{% endif %} Mean {{ observed.cash_savings.mean_label }}. Lowest {{ observed.cash_savings.minimum_label }}. Highest {{ observed.cash_savings.maximum_label }}. Total {{ observed.cash_savings.total_label }}.</p>
     {% else %}
     <strong>Not measured</strong>
-    <p>No saved decision includes cash savings. The field is optional and is collected only from a signed-in reviewer. Blank means unmeasured. Saved decisions without cash savings: {{ observed.cash_savings.unmeasured_decisions }}. These dollars are not calculated from handling time, rework time, manual touches, handoffs, authenticated effort, or the illustrative cost model.</p>
+    <p class="metric-caption">Signed-in reviewer · median · optional</p>
+    <p>No saved decision includes cash savings. The field is optional and is collected only from a signed-in reviewer. Blank means unmeasured. Saved decisions without cash savings: {{ observed.cash_savings.unmeasured_decisions }}.</p>
     {% endif %}
   </article>
 </div>
-<p class="muted">Self-reported handling minutes are the numbers a person typed for review time. Self-reported rework minutes are the numbers a person typed for time spent redoing work after a first pass. Self-reported manual touches are the whole-number count a person typed for human touchpoints on that assessment. Self-reported handoffs are the whole-number count a person typed for times the assessment was handed between people or queues before disposition. Authenticated effort is a separate optional number of minutes a signed-in reviewer entered on a disposition. The application does not time the session. Cash savings are a separate optional number of whole dollars a signed-in reviewer entered when a spending reduction was known. The application does not multiply the other figures by a wage. Elapsed cycle time is the clock span between two workflow events. None of these numbers is an input to the modeled cost panel. The four self-reported figures have no identity check and no timesheet. Authenticated effort and cash savings are collected only after the demo password gate. Neither is a per-person identity system, and the dollars are not checked against a ledger.</p>
+<details class="definitions">
+  <summary>Definitions (v{{ observed.definition_version }})</summary>
+  <div class="table-wrap">
+    <table class="metric-table">
+      <caption>Full wording for definition {{ observed.definition_version }}. The numbers above use these rules. They are not <code>calculate_cost()</code>.</caption>
+      <thead>
+        <tr><th scope="col">Figure</th><th scope="col">Wording</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th scope="row">What the cards count</th>
+          <td>These counts come from the SQLite register on this host. <strong>Assessment volume</strong> is how many assessments are saved. <strong>Persisted dispositions</strong> are the human decisions saved on those assessments (approve, approve with conditions, escalate, or reject). A public <code>/try/</code> run that is not saved is in neither number, and it is not a register disposition. <strong>Self-reported human handling time</strong> is optional minutes entered on a decision. <strong>Self-reported rework time</strong> is a separate optional number for time spent redoing work after a first pass. <strong>Self-reported manual touches</strong> are a separate optional count of human touchpoints on that assessment. <strong>Self-reported handoffs</strong> are a separate optional count of times the assessment was handed between people or queues before disposition. Each is shown when at least one decision has that number. <strong>Monthly assessment rate</strong> is a separate count of current decisions whose timestamp falls in the 30 days ending at the latest readable decision. It is shown only when those timestamps cover at least 30 days. A shorter history says Not measured. <strong>Authenticated effort</strong> is a separate optional number of minutes a signed-in reviewer entered on a disposition. It is shown when at least one decision has that number. A public <code>/try/</code> save does not collect it. It is not a session timer. <strong>Cash savings</strong> are a separate optional number of whole dollars a signed-in reviewer entered when a spending reduction was known. The card shows the median when at least one decision has that number, and Not measured when none do. A public <code>/try/</code> save does not collect them. They are not a wage times the other figures. <strong>Avoided-incident value</strong> is a separate modeled-assumption card. It says Not measured while <code>incident_cost</code> and <code>avoided_incident_count</code> are null. It is not an observed register figure, not cash savings, and not the labor-capacity panel. None of these figures is the modeled panel below. An empty register shows zeros for the counts that are counts. These counts are definition {{ observed.definition_version }} applied to this browser's sandbox plus any saved row that has no sandbox id. Another browser's sandbox is not included. They are not <code>calculate_cost()</code>. A scope with no saved decision still says Not measured.</td>
+        </tr>
+        <tr>
+          <th scope="row">Elapsed cycle time</th>
+          <td>{{ observed.cycle_time.definition }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Monthly assessment rate</th>
+          <td>{{ observed.monthly_assessment_rate.definition }} {{ observed.monthly_assessment_rate.detail }}</td>
+        </tr>
+        <tr>
+          <th scope="row">Self-reported handling time</th>
+          <td>{{ observed.handling_time.definition }} Self-reported human handling time. Not authenticated effort tracking. Not cash savings. Not elapsed cycle time. Not rework time. Not used by the cost model. This is not elapsed cycle time, not rework time, and it is not an input to the cost model.</td>
+        </tr>
+        <tr>
+          <th scope="row">Self-reported rework time</th>
+          <td>{{ observed.rework_time.definition }} Self-reported rework time. Not authenticated. Not cash savings. Not elapsed cycle time. Not handling minutes. Not used by the cost model. This is not elapsed cycle time, not handling minutes, and not an input to the cost model.</td>
+        </tr>
+        <tr>
+          <th scope="row">Self-reported manual touches</th>
+          <td>{{ observed.manual_touches.definition }} Self-reported manual touches. Not authenticated. Not cash savings. Not elapsed cycle time. Not handling minutes. Not rework minutes. Not used by the cost model. This is not elapsed cycle time, not handling minutes, not rework minutes, and not an input to the cost model.</td>
+        </tr>
+        <tr>
+          <th scope="row">Self-reported handoffs</th>
+          <td>{{ observed.handoffs.definition }} Self-reported handoffs. Not authenticated. Not cash savings. Not elapsed cycle time. Not handling minutes. Not rework minutes. Not manual touches. Not used by the cost model. This is not elapsed cycle time, not handling minutes, not rework minutes, not manual touches, and not an input to the cost model.</td>
+        </tr>
+        <tr>
+          <th scope="row">Authenticated effort</th>
+          <td>{{ observed.authenticated_effort.definition }} Authenticated effort. Minutes a signed-in reviewer entered. Not a session timer. Not self-reported handling time. Not rework time. Not manual touches. Not handoffs. Not the monthly assessment rate. Not cash savings. Not elapsed cycle time. Not used by the cost model. This is not self-reported handling time, not cash savings, not elapsed cycle time, and not an input to the cost model.</td>
+        </tr>
+        <tr>
+          <th scope="row">Cash savings</th>
+          <td>{{ observed.cash_savings.definition }} Cash savings. Whole dollars a signed-in reviewer entered. Not a wage times handling minutes. Not a wage times rework minutes. Not a wage times manual touches. Not a wage times handoffs. Not a wage times authenticated effort. Not the monthly assessment rate. Not the modeled labor rate. Not used by the cost model. These dollars are not calculated from handling time, rework time, manual touches, handoffs, authenticated effort, or the illustrative cost model.</td>
+        </tr>
+        <tr>
+          <th scope="row">How the typed numbers differ</th>
+          <td>Self-reported handling minutes are the numbers a person typed for review time. Self-reported rework minutes are the numbers a person typed for time spent redoing work after a first pass. Self-reported manual touches are the whole-number count a person typed for human touchpoints on that assessment. Self-reported handoffs are the whole-number count a person typed for times the assessment was handed between people or queues before disposition. Authenticated effort is a separate optional number of minutes a signed-in reviewer entered on a disposition. The application does not time the session. Cash savings are a separate optional number of whole dollars a signed-in reviewer entered when a spending reduction was known. The application does not multiply the other figures by a wage. Elapsed cycle time is the clock span between two workflow events. None of these numbers is an input to the modeled cost panel. The four self-reported figures have no identity check and no timesheet. Authenticated effort and cash savings are collected only after the demo password gate. Neither is a per-person identity system, and the dollars are not checked against a ledger.</td>
+        </tr>
+        <tr>
+          <th scope="row">Kept out of the cost formula</th>
+          <td>{{ observed.cost_mapping }} {{ observed.unmeasured_summary }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</details>
 <p class="muted">Excluded from the cycle-time series: {{ observed.cycle_time.excluded.no_intake_event }} without an intake event, {{ observed.cycle_time.excluded.no_disposition_event }} without a disposition event, {{ observed.cycle_time.excluded.unusable_timestamps }} with an unusable timestamp.</p>
 {% if observed.cycle_time.zero_span_count %}
 <p class="muted">{{ observed.cycle_time.zero_span_count }} measured span{% if observed.cycle_time.zero_span_count != 1 %}s{% endif %} share a timestamp, so the elapsed time is 0 seconds. That clock record is a 0-second elapsed span. It is not self-reported handling time.</p>
@@ -156,5 +227,5 @@
 {% if observed.clause_records_absent or observed.clause_records_unreadable or observed.clause_status_missing %}
 <p class="muted">{{ observed.clause_records_absent }} saved assessments have no stored clause list. {{ observed.clause_records_unreadable }} have a clause list that could not be read. {{ observed.clause_status_missing }} clauses have no evidence status.</p>
 {% endif %}
-<p class="inline-warning">{{ observed.cost_mapping }} {{ observed.unmeasured_summary }}</p>
+<p class="inline-warning">The illustrative formula is unchanged. {{ observed.cost_mapping }}</p>
 <!-- observed-metrics-end -->
