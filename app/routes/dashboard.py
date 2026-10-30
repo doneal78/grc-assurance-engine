@@ -1,13 +1,15 @@
 """Dashboard routes."""
 
-from flask import Blueprint, redirect, render_template, url_for
+from flask import Blueprint, redirect, render_template, request, url_for
 
 from app.db import get_db
 from app.services.cost_model import avoided_incident_value, calculate_cost
 from app.services.event_chain import read_event_chain
+from app.services.sample_register import visitor_has_risks
 from app.services.sandbox_http import request_scope
 from app.services.scenario_runner import list_scenarios
 from app.services.workflow_metrics import observed_metrics
+from app.services.workflow_service import list_risks
 
 bp = Blueprint("dashboard", __name__)
 
@@ -23,11 +25,15 @@ def home_alias():
 def index():
     """Render the local portfolio demo landing page."""
     avoided = avoided_incident_value()
+    scope = request_scope()
     return render_template(
         "dashboard.html",
         scenarios=list_scenarios(),
         cost=calculate_cost(),
-        observed=observed_metrics(get_db(), avoided_incident=avoided, sandbox_id=request_scope()),
+        observed=observed_metrics(get_db(), avoided_incident=avoided, sandbox_id=scope),
         avoided_incident=avoided,
         event_chain=read_event_chain(get_db()),
+        show_sample_load=not visitor_has_risks(get_db(), scope),
+        saved_risks=list_risks(get_db(), sandbox_id=scope),
+        sample_notice=request.args.get("sample"),
     )

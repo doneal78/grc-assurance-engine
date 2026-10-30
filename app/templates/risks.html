@@ -4,9 +4,20 @@
 <p class="eyebrow">RISK REGISTER · SYNTHETIC RECORDS</p><h1>Risk register</h1>
 <p class="lead">Risks saved from a scenario or from a confirmed synthetic intake. Inherent risk, residual risk, and the human decision stay separate. A low residual tier is not an approval.</p>
 <p class="muted">Rows saved in this browser stay in a sandbox cookie named <code>grc_sandbox</code>. This is not a login and not a tenant. Anyone who has the cookie can open that sandbox. Clearing cookies drops the link to it. The seeded demo scenarios stay on Demo scenarios for every visitor, and those pages are shared read-only examples. A row with no sandbox id, including a command-line save and anything stored before sandboxes, stays visible here to every visitor. This page does not delete those rows.</p>
+{% if sample_notice == 'cap' %}<p class="inline-warning">This browser already holds as many saved assessments as it can. Nothing new was saved. The shared register was not changed.</p>{% endif %}
+{% if show_sample_load %}
+<section class="empty-state" id="load-samples">
+  <h2>{% if risks %}This browser has no saved risks yet.{% else %}Save a scenario to see it here.{% endif %}</h2>
+  <p>Load a few synthetic samples into this browser only, or open a <a href="{{ url_for('demos.index') }}">demo scenario</a> and choose “Add to risk register”. Samples are labeled sample data. They are not added to the shared register.</p>
+  <form method="post" action="{{ url_for('risks.load_samples') }}">
+    <input type="hidden" name="next" value="risks">
+    <button class="button-link" type="submit">Load sample data</button>
+  </form>
+</section>
+{% endif %}
 {% if risks %}<div class="table-wrap"><table><thead><tr><th>Risk</th><th>Inherent</th><th>Residual</th><th>Policy</th><th>Decision</th><th>Actions</th><th>Created (UTC)</th></tr></thead><tbody>
 {% for risk in risks %}<tr><td><a href="{{ url_for('risks.detail', risk_id=risk.risk_id) }}"><strong>{{ risk.risk_id }} · {{ risk.scenario_name }}</strong></a><br><span class="muted">{{ risk.risk_statement }}</span></td><td><span class="tier tier-{{ risk.inherent_tier }}">{{ risk.inherent_tier|title }}</span></td><td><span class="tier tier-{{ risk.residual_tier }}">{{ risk.residual_tier|title }}</span></td><td>{% if risk.policy_outcome %}<span class="status status-{{ risk.policy_outcome|replace('_', '-') }}">{{ risk.policy_outcome|replace('_', ' ')|title }}</span>{% else %}<span class="muted">Not on this record</span>{% endif %}</td><td>{% if risk.decision_disposition %}{{ risk.decision_disposition|replace('_', ' ')|title }}{% else %}Not recorded{% endif %}</td><td>{{ risk.open_action_count or 0 }} open / {{ risk.action_count }} total</td><td>{{ risk.created_at }}</td></tr>{% endfor %}
 </tbody></table></div>
-{% else %}<section class="empty-state"><h2>Save a scenario to see it here.</h2><p>Open a <a href="{{ url_for('demos.index') }}">demo scenario</a> and choose “Add to risk register”, or confirm an import and save that synthetic vendor.</p></section>{% endif %}
+{% else %}{% if not show_sample_load %}<section class="empty-state"><h2>Save a scenario to see it here.</h2><p>Open a <a href="{{ url_for('demos.index') }}">demo scenario</a> and choose “Add to risk register”, or confirm an import and save that synthetic vendor.</p></section>{% endif %}{% endif %}
 <p class="muted">The workflow log is tamper-evident (SHA-256 hash chain), not tamper-proof. Anyone who can rewrite the database can rebuild the chain. It is not immutable storage.</p>
 {% endblock %}

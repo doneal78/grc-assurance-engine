@@ -109,7 +109,10 @@ def column_guide():
             if column == "model_training_on_customer_data":
                 accepted += ". May be blank only when ai_use is none."
         else:
-            accepted = evidence
+            accepted = (
+                evidence
+                + ". Blank means nothing provided (missing evidence), not verified."
+            )
         guide.append({"column": column, "accepted": accepted})
     return guide
 
@@ -845,7 +848,11 @@ def _preview_from_confirmation(document, as_of):
         if unknown_fields:
             row["problems"].append(
                 f"Row {row['row_number']}: unrecognized fields {', '.join(unknown_fields)}. They were not dropped.")
-        missing_fields = [column for column in columns if column not in form_in]
+        evidence_fields = set(evidence_column_names())
+        missing_fields = [
+            column for column in columns
+            if column not in form_in and column not in evidence_fields
+        ]
         if missing_fields:
             row["problems"].append(f"Row {row['row_number']}: missing {', '.join(missing_fields)}.")
         shape = list(row["problems"])

@@ -17,7 +17,8 @@ from datetime import date
 
 from app.services.intake_builder import IntakeError, build_intake, direction_column_names, run_intake
 from app.services.intake_importer import (
-    can_import, column_guide, confirmation_document, parse_upload, questionnaire_columns,
+    can_import, column_guide, confirmation_document, evidence_column_names, parse_upload,
+    questionnaire_columns,
 )
 from app.services.intake_questionnaire import load_questionnaire
 from app.services.org_policy import load_org_policy
@@ -59,6 +60,7 @@ LIMITATIONS = (
     "A trust-center URL is stored as pasted text unless fetch_trust_center is yes. A fetch is one HTTP GET of vendor-published material for human review. It is not verified evidence and it does not approve the vendor. File import does not fetch.",
     "A ServiceNow-shaped file is simulated input. This contract does not call ServiceNow.",
     "No external AI model scores or approves the vendor.",
+    "An omitted or blank evidence choice is nothing provided. The evidence validator records that as missing. It is not verified, and it is not a safeguard.",
     "vendor_direction, residual_direction, and direction_note are optional intake context for a person. They are not scored. They do not change inherent risk, residual risk, evidence confidence, escalations, the policy outcome, dispositions, or control mappings.",
 )
 
@@ -135,7 +137,8 @@ def contract_document():
             "form": (
                 "Required object. Keys are the intake fields listed below. "
                 "fetch_trust_center is optional: omitted or no does not fetch; yes performs one HTTP GET. "
-                "Direction context fields are optional and are not scored. Omitting one means not provided."
+                "Direction context fields are optional and are not scored. Omitting one means not provided. "
+                "Evidence choices may be omitted or blank. That means nothing provided, which is missing evidence, not verified."
             ),
             "persist": "Optional boolean. Omitted or false assesses only. True saves a synthetic risk and requires decision.",
             "decision": (
@@ -712,17 +715,21 @@ def _optional_form_fields():
 
 
 def _required_fields(form):
-    """Columns the public form submits. Model training is omitted when AI use is none."""
+    """Columns the public form must send. Evidence choices and some conditionals may be omitted.
+
+    An omitted evidence choice is nothing provided. It is not filled with the
+    first listed option, and it is not treated as verified. Model training is
+    omitted only when AI use is none, because the public form disables that field.
+    """
     questionnaire = load_questionnaire()
-    optional = {
-        spec["field"]
-        for spec in questionnaire["context_questions"]
-        if spec.get("ask") == "when_ai_use_is_not_none"
-    }
-    columns = questionnaire_columns()
+    skip = set(evidence_column_names())
     if form.get("ai_use") == "none":
-        return [column for column in columns if column not in optional]
-    return list(columns)
+        skip.update(
+            spec["field"]
+            for spec in questionnaire["context_questions"]
+            if spec.get("ask") == "when_ai_use_is_not_none"
+        )
+    return [column for column in questionnaire_columns() if column not in skip]
 
 
 def _preview_problems(preview):

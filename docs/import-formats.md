@@ -35,10 +35,10 @@ The current columns, in the order the sample writes them, come from intake quest
 | `external_exposure` | `internal_only`, `customer_facing`, or `unknown` |
 | `retention_deletion` | `documented`, `undocumented`, or `unknown` |
 | `decisions_affecting_people` | `no`, `yes`, or `unknown` |
-| `evidence_integration_permissions` | One evidence key |
+| `evidence_integration_permissions` | One evidence key, or blank. Blank means nothing provided (missing), not verified. |
 | `trust_center_url` | Blank, or one `http://` or `https://` URL. File import does not fetch it |
-| `trust_soc2`, `trust_security`, `trust_privacy` | One evidence key each |
-| `evidence_clause_CC-001` | One evidence key for the required contract clause |
+| `trust_soc2`, `trust_security`, `trust_privacy` | One evidence key each, or blank. Blank means nothing provided (missing), not verified. |
+| `evidence_clause_CC-001` | One evidence key for the required contract clause, or blank. Blank means nothing provided (missing), not verified. |
 | `vendor_direction` | Optional. Context only. Not scored. Blank, or `new`, `expanding`, `stable`, `reducing`, `exiting`, or `unknown` |
 | `residual_direction` | Optional. Context only. Not scored. Blank, or `improving`, `unchanged`, `worsening`, or `unknown` |
 | `direction_note` | Optional. Context only. Not scored. Blank, or one line of text of 300 characters or fewer |
@@ -95,7 +95,7 @@ Evidence choices are not ticket columns in the JSON. Each required evidence fiel
 | `sys_id`, `content_type`, `table_name`, `table_sys_id` | no | Text, shown or stored only as metadata |
 | `size_bytes` | no | A non-negative integer. A string is a type error |
 
-An assessment answer or the trust-center URL on an attachment is an error. Those belong on the ticket. Two attachments for the same `u_intake_field` are an error, including when the options match. The extra record is reported and is not dropped. Missing attachment metadata for a required evidence field is an error. It is not treated as `none`.
+An assessment answer or the trust-center URL on an attachment is an error. Those belong on the ticket. Two attachments for the same `u_intake_field` are an error, including when the options match. The extra record is reported and is not dropped. Missing attachment metadata for a required evidence field is an error. It is not treated as `none`, and it is not treated as verified. A present attachment whose `u_evidence_option` is blank is nothing provided (missing), not verified.
 
 `table_name` in the sample is `incident`. That label is not checked. The category on the ticket is what must be `vendor_risk`.
 
