@@ -154,6 +154,7 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     from app.routes.walkthrough import bp as walkthrough_bp
     from app.routes.walkthrough import coach_for_request, import_page_href, scenario_card_href
     from app.services.intake_builder import selected_evidence
+    from app.services.intake_questionnaire import hint_parts
     from app.services.intake_replay import replay_plan
     from app.services.result_explain import (
         claim_so_what, clause_so_what, confidence_plain, escalation_rationale,
@@ -187,6 +188,7 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
         mapping_so_what=mapping_so_what,
         clause_so_what=clause_so_what,
         selected_evidence=selected_evidence,
+        hint_parts=hint_parts,
         owner_summary=owner_summary,
         withheld_tier_line=withheld_tier_line,
     )
