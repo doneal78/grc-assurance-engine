@@ -48,6 +48,7 @@ code { background:var(--surface); padding:.1rem .25rem; border-radius:4px; overf
 .empty-state { border:1px dashed var(--line); background:var(--surface); padding:1.5rem; border-radius:8px; }
 .sample-callout { margin:0 0 1.5rem; border-style:solid; border-color:var(--accent); background:var(--accent-soft); }
 .sample-callout h2 { margin:.1rem 0 .4rem; }
+button.button-link:disabled { opacity:.55; cursor:default; }
 details.field-technical { margin:.15rem 0 .2rem; }
 details.field-technical summary { cursor:pointer; font-size:.85rem; font-weight:650; }
 details.field-technical p { margin:.35rem 0 0; }
