@@ -16,7 +16,9 @@
   {% for sentence in owner_summary(risk) %}
   <p>{{ sentence }}</p>
   {% endfor %}
-  <p class="lead">{{ risk.risk_statement }}</p>
+  {% for extra in summary_extras(risk) %}
+  <p>{{ extra }}</p>
+  {% endfor %}
   {% set plan = replay_plan(risk.rationale) %}
   <div class="rerun-panel" id="change-answers">
     <h2>Change answers and re-run</h2>

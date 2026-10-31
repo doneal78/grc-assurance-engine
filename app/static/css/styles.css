@@ -19,6 +19,7 @@ a { color:var(--accent); }
 .demonstrates h2 { margin:.1rem 0 .4rem; font-size:1.15rem; }
 .demonstrates ul { margin:.2rem 0 0; padding-left:1.2rem; }
 .metric-caption { margin:.2rem 0 .35rem; color:var(--muted); font-size:.82rem; }
+.metric-note { margin:.35rem 0 .2rem; font-size:.9rem; }
 details.definitions { margin:1rem 0 1.25rem; }
 details.definitions summary { cursor:pointer; font-weight:650; }
 .glossary-list { grid-template-columns:minmax(0,14rem) minmax(0,1fr); }

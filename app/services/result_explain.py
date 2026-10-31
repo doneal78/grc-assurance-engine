@@ -500,6 +500,30 @@ def owner_summary(subject):
     return [first, second, third]
 
 
+def summary_extras(subject):
+    """Facts from the stored statement that the plain sentences do not already say.
+
+    The scenario blurb repeats the same assessment in different words. This
+    keeps a sample label, a confirmed save, and an approval reminder when
+    those words are not already in the plain sentences.
+    """
+    if not isinstance(subject, dict):
+        return []
+    statement = subject.get("risk_statement") or ""
+    if not isinstance(statement, str) or not statement.strip():
+        return []
+    joined = " ".join(owner_summary(subject)).lower()
+    lowered = statement.lower()
+    extras = []
+    if "sample data" in lowered and "sample data" not in joined:
+        extras.append("This saved row is labeled sample data. It is synthetic.")
+    if "saved after a person confirmed" in lowered and "confirmed" not in joined:
+        extras.append("It was saved after a person confirmed.")
+    if "residual tier is not an approval" in lowered and "not an approval" not in joined:
+        extras.append("The residual tier is not an approval.")
+    return extras
+
+
 def clause_so_what(clause):
     """What a required-clause status means. Clause status is not a score."""
     if not isinstance(clause, dict):

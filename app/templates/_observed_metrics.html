@@ -28,6 +28,7 @@
     {% else %}
     <strong>Not measured</strong>
     <p class="metric-caption">Clock span · needs both events</p>
+    <p class="metric-note">Save an intake and record a decision on it to see this.</p>
     <p>No saved row has both an intake event and a usable disposition event. A public <code>/try/</code> run that is not saved is not in this count.</p>
     {% endif %}
   </article>
@@ -39,6 +40,9 @@
     <strong>Not measured</strong>
     {% endif %}
     <p class="metric-caption">Decision count · 30-day window</p>
+    {% if not observed.monthly_assessment_rate.measured %}
+    <p class="metric-note">Record decisions dated at least 30 days apart to see this.</p>
+    {% endif %}
   </article>
   <article class="result-card">
     <p class="eyebrow">SELF-REPORTED HANDLING TIME</p>
@@ -49,6 +53,7 @@
     {% else %}
     <strong>Not measured</strong>
     <p class="metric-caption">Self-reported · median · optional</p>
+    <p class="metric-note">Record review minutes on a decision to see this.</p>
     <p>No saved decision includes self-reported minutes. The field is optional. Blank means unmeasured. Saved decisions without minutes: {{ observed.handling_time.unmeasured_decisions }}.</p>
     {% endif %}
   </article>
@@ -61,6 +66,7 @@
     {% else %}
     <strong>Not measured</strong>
     <p class="metric-caption">Self-reported · median · optional</p>
+    <p class="metric-note">Record rework minutes on a decision to see this.</p>
     <p>No saved decision includes self-reported rework minutes. The field is optional. Blank means unmeasured. Saved decisions without rework minutes: {{ observed.rework_time.unmeasured_decisions }}.</p>
     {% endif %}
   </article>
@@ -73,6 +79,7 @@
     {% else %}
     <strong>Not measured</strong>
     <p class="metric-caption">Self-reported · median · optional</p>
+    <p class="metric-note">Record a manual-touch count on a decision to see this.</p>
     <p>No saved decision includes self-reported manual touches. The field is optional. Blank means unmeasured. Saved decisions without a manual-touch count: {{ observed.manual_touches.unmeasured_decisions }}.</p>
     {% endif %}
   </article>
@@ -85,6 +92,7 @@
     {% else %}
     <strong>Not measured</strong>
     <p class="metric-caption">Self-reported · median · optional</p>
+    <p class="metric-note">Record a handoff count on a decision to see this.</p>
     <p>No saved decision includes self-reported handoffs. The field is optional. Blank means unmeasured. Saved decisions without a handoff count: {{ observed.handoffs.unmeasured_decisions }}.</p>
     {% endif %}
   </article>
@@ -97,6 +105,7 @@
     {% else %}
     <strong>Not measured</strong>
     <p class="metric-caption">Signed-in reviewer · median · optional</p>
+    <p class="metric-note">A signed-in reviewer records minutes on a decision to see this.</p>
     <p>No saved decision includes authenticated effort. The field is optional and is collected only from a signed-in reviewer. Blank means unmeasured. Saved decisions without authenticated effort: {{ observed.authenticated_effort.unmeasured_decisions }}.</p>
     {% endif %}
   </article>
@@ -109,6 +118,7 @@
     {% else %}
     <strong>Not measured</strong>
     <p class="metric-caption">Signed-in reviewer · median · optional</p>
+    <p class="metric-note">A signed-in reviewer records whole dollars on a decision to see this.</p>
     <p>No saved decision includes cash savings. The field is optional and is collected only from a signed-in reviewer. Blank means unmeasured. Saved decisions without cash savings: {{ observed.cash_savings.unmeasured_decisions }}.</p>
     {% endif %}
   </article>
