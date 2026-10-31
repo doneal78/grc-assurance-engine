@@ -58,7 +58,10 @@
   <p class="eyebrow">OBSERVED · THIS VIEW · DEFINITION {{ observed.definition_version }}</p>
   <h2 id="observed-heading">Measured from saved records</h2>
   <p id="dashboard-plain">This dashboard shows how the risks you have assessed break down, and how long those reviews took. The numbers are measured from your own activity in this demo.</p>
-  <p class="muted">Definition {{ observed.definition_version }} counts this browser's saved rows, plus any saved row with no sandbox id. Another browser's rows are not included. These figures are not <code>calculate_cost()</code>. Open Definitions (v{{ observed.definition_version }}) for the full wording. <a href="{{ url_for('methodology.index') }}">Methods page</a>.</p>
+  <details class="technical-detail" id="metrics-technical">
+    <summary>Technical detail</summary>
+    <p class="muted">Definition {{ observed.definition_version }} counts this browser's saved rows, plus any saved row with no sandbox id. Another browser's rows are not included. These figures are not <code>calculate_cost()</code>. Open Definitions (v{{ observed.definition_version }}) for the full wording. <a href="{{ url_for('methodology.index') }}">Methods page</a>.</p>
+  </details>
   {% include "_observed_metrics.html" %}
 </section>
 {% include "_avoided_incident.html" %}

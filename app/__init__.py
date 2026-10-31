@@ -159,7 +159,7 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
     from app.services.result_explain import (
         claim_so_what, clause_so_what, confidence_plain, escalation_rationale,
         factor_lines, mapping_so_what, missing_plain, owner_summary, residual_plain,
-        restriction_so_what, review_path_plain, withheld_tier_line,
+        restriction_so_what, review_path_plain, summary_extras, withheld_tier_line,
     )
 
     app.register_blueprint(api_bp)
@@ -190,6 +190,7 @@ def create_app(test_config: Mapping[str, object] | None = None) -> Flask:
         selected_evidence=selected_evidence,
         hint_parts=hint_parts,
         owner_summary=owner_summary,
+        summary_extras=summary_extras,
         withheld_tier_line=withheld_tier_line,
     )
 

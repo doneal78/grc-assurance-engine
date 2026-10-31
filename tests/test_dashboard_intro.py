@@ -71,3 +71,63 @@ def test_metrics_panel_leads_with_a_plain_sentence(client):
     assert "how long those reviews took" in body
     assert body.index(plain) < body.index(definition)
     assert "Definition 9" in body
+    visible, technical = body.split('id="metrics-technical"', 1)
+    assert "how the risks you have assessed break down" in visible
+    assert definition not in visible
+    assert technical.startswith('>') or 'class="technical-detail"' in body[body.index('id="metrics-technical"') - 40:]
+    assert not technical.lstrip().startswith("open")
+    assert definition in technical
+
+
+UNMEASURED_NOTES = (
+    "Save an intake and record a decision on it to see this.",
+    "Record decisions dated at least 30 days apart to see this.",
+    "Record review minutes on a decision to see this.",
+    "Record rework minutes on a decision to see this.",
+    "Record a manual-touch count on a decision to see this.",
+    "Record a handoff count on a decision to see this.",
+    "A signed-in reviewer records minutes on a decision to see this.",
+    "A signed-in reviewer records whole dollars on a decision to see this.",
+    "Needs an incident cost and an avoided-incident count in the cost assumptions.",
+)
+
+
+def test_not_measured_tiles_say_what_would_fill_them(client):
+    body = client.get("/").get_data(as_text=True)
+    for note in UNMEASURED_NOTES:
+        assert note in body
+    assert body.count("<strong>Not measured</strong>") >= len(UNMEASURED_NOTES)
+
+
+def test_sample_rows_do_not_invent_unmeasured_figures(client):
+    response = client.post("/risks/sample-data", data={"next": "dashboard"}, headers={"Origin": "http://localhost"})
+    assert response.status_code == 302
+    body = client.get("/").get_data(as_text=True)
+    assert "Saved assessments: 3." in body
+    for note in (
+        "Record review minutes on a decision to see this.",
+        "Save an intake and record a decision on it to see this.",
+        "Needs an incident cost and an avoided-incident count in the cost assumptions.",
+    ):
+        assert note in body
+
+
+def test_saved_risk_keeps_one_summary_and_a_sample_label(client):
+    from tests.test_visitor_sandbox import SAME_ORIGIN
+
+    saved = client.post("/demo/evidence-supported/register", headers=SAME_ORIGIN)
+    assert saved.status_code == 302
+    detail = client.get(saved.headers["Location"]).get_data(as_text=True)
+    summary = detail.split('id="summary"', 1)[1].split('id="scores"', 1)[0]
+    assert "In plain language" in summary
+    assert "reviewed contract excerpt for the no-training clause" not in summary
+    assert "not an approval" in summary
+    loaded = client.post("/risks/sample-data", data={"next": "risks"}, headers=SAME_ORIGIN)
+    assert loaded.status_code == 302
+    register = client.get("/risks").get_data(as_text=True)
+    assert "Sample:" in register
+    sample_href = register.split("Sample:", 1)[0].rsplit('href="', 1)[-1].split('"', 1)[0]
+    sample = client.get(sample_href).get_data(as_text=True)
+    sample_summary = sample.split('id="summary"', 1)[1].split('id="scores"', 1)[0]
+    assert "labeled sample data" in sample_summary
+    assert "reviewed contract excerpt for the no-training clause" not in sample_summary

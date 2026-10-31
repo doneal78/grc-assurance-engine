@@ -10,6 +10,9 @@
       {% else %}
       <strong>Not measured</strong>
       {% endif %}
+      {% if not avoided_incident.measured %}
+      <p class="metric-note">Needs an incident cost and an avoided-incident count in the cost assumptions.</p>
+      {% endif %}
       <p>{{ avoided_incident.detail }}</p>
     </article>
   </div>
