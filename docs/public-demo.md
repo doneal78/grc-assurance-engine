@@ -31,6 +31,10 @@ Each claim topic offers six choices, each producing a real evidence record that 
 | Configuration export that contradicts the claim | Configuration export, 7 days old, reviewer marked it contradicting | conflicting |
 | Nothing provided | No record | missing |
 
+On an empty dashboard, Load sample data is near the top of the page, before the scenario cards. It is the same action as on an empty risk register. It writes into this browser's sandbox only.
+
+Field hints on `/try/` that name a rule keep that code inside a collapsed Show technical details control. The control is a `details` element. The code stays in the page. The questions and the plain hint stay visible.
+
 The public form selects Nothing provided, or Not listed for a trust-center artifact, until the visitor chooses something else. An omitted or blank evidence field is the same state. It is missing evidence. It is not verified, and it is not a safeguard. The API and a file import use that same rule for a blank value. A ServiceNow ticket that omits an evidence attachment is still rejected. It is not filled in as verified.
 
 Each required contract clause has the same six choices. Those records use artifact type `contract_clause`. A reviewed excerpt that is not from the vendor is an internal observation and can be verified. The vendor's own contract statement stays self-attested. The clause status is shown with the policy outcome. It does not change the score.

@@ -6,6 +6,7 @@ risk rule set and the org policy. This module does not score or approve.
 """
 
 import json
+import re
 from pathlib import Path
 
 from app.services.evidence_validator import load_policy
@@ -203,6 +204,45 @@ def _validate_direction_context(spec, reserved):
                 raise QuestionnaireError(f"{field}: option {key} must be blank or words")
         if "unknown" not in options:
             raise QuestionnaireError(f"{field}: unknown must stay available and must not be scored")
+
+
+_RULE_CODE = re.compile(r"\b(?:INH|ESC|HR|CC)-[A-Z0-9]+\b")
+
+
+def hint_parts(text):
+    """Split a field hint into plain words and the sentences that name a rule.
+
+    The plain part is shown next to the question. The technical part is the
+    original sentence, including the rule code, so the code stays on the page.
+    A hint with no rule code is entirely plain. This function does not score.
+    """
+    if not isinstance(text, str) or not text.strip():
+        return {"plain": "", "technical": ""}
+    if not _RULE_CODE.search(text):
+        return {"plain": text.strip(), "technical": ""}
+    plain_bits = []
+    technical_bits = []
+    for sentence in re.split(r"(?<=\.)\s+", text.strip()):
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        if not _RULE_CODE.search(sentence):
+            plain_bits.append(sentence if sentence.endswith(".") else sentence + ".")
+            continue
+        technical_bits.append(sentence if sentence.endswith(".") else sentence + ".")
+        readable = sentence
+        if re.search(r"\bHR-[A-Z0-9]+\b", sentence) and "hard restriction" not in sentence.lower():
+            readable = re.sub(r"\bHR-[A-Z0-9]+\b", "a hard restriction", sentence)
+        stripped = _RULE_CODE.sub("", readable)
+        stripped = re.sub(r"\(\s*\)", "", stripped)
+        stripped = re.sub(r"\bFeeds\b", "", stripped)
+        stripped = re.sub(r"\band opens\s*\.", ".", stripped)
+        stripped = re.sub(r"\bopens\s*\.", ".", stripped)
+        stripped = re.sub(r"\s+([,.])", r"\1", stripped)
+        stripped = re.sub(r"\s{2,}", " ", stripped).strip(" .")
+        if stripped:
+            plain_bits.append(stripped + ".")
+    return {"plain": " ".join(plain_bits), "technical": " ".join(technical_bits)}
 
 
 def load_questionnaire(path=DEFAULT_QUESTIONNAIRE_PATH):
