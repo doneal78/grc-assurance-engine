@@ -155,7 +155,7 @@ def test_event_log_lists_steps_in_order():
 
 
 @pytest.mark.parametrize("overrides, expected", [
-    ({"vendor_name": ""}, "name is required"),
+    ({"vendor_name": ""}, "Enter a vendor name."),
     ({"vendor_name": "x" * 81}, "80 characters"),
     ({"data_sensitivity": "secret"}, "most sensitive data"),
     ({"trust_soc2": "trust_me"}, "SOC 2"),

@@ -11,7 +11,7 @@ from app.services.findings import (
     parse_finding_update, parse_new_finding, update_finding,
 )
 from app.services.intake_export import package_from_saved_risk, render_export
-from app.services.sample_register import seed_sample_risks, visitor_has_risks
+from app.services.sample_register import samples_loaded, seed_sample_risks
 from app.services.sandbox_http import issue_sandbox, request_scope
 from app.services.walkthrough import carried_walk_step
 from app.services.workflow_service import (
@@ -27,7 +27,7 @@ def index():
     return render_template(
         "risks.html",
         risks=list_risks(get_db(), sandbox_id=scope),
-        show_sample_load=not visitor_has_risks(get_db(), scope),
+        samples_loaded=samples_loaded(get_db(), scope),
         sample_notice=request.args.get("sample"),
     )
 

@@ -227,6 +227,7 @@ def test_sample_load_is_idempotent_scoped_and_keeps_the_chain(client, app):
     assert first.headers["Location"].endswith("/")
     home = client.get("/").get_data(as_text=True)
     assert "Sample:" in home
+    assert "Sample data loaded" in home
     assert "Load sample data" not in home
     assert "Saved assessments: 3." in _observed_section(home.encode())
     assert "MODELED EXAMPLE" in home

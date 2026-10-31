@@ -7,16 +7,20 @@
 <h1>Vendor and AI risk, with a visible evidence trail.</h1>
 <p class="lead">A small, rules-based workflow for turning assessment inputs and evidence into reviewable results.</p>
 {% if sample_notice == 'cap' %}<p class="inline-warning">This browser already holds as many saved assessments as it can. Nothing new was saved. The shared register was not changed.</p>{% endif %}
-{% if show_sample_load %}
 <section class="empty-state sample-callout" id="load-samples">
-  <h2>This browser has no saved risks yet.</h2>
+  {% if samples_loaded %}
+  <h2>Sample data loaded</h2>
+  <p>The labeled samples are already in this browser. Loading again does not add rows. They stay out of the shared register.</p>
+  <button class="button-link" type="button" disabled>Sample data loaded</button>
+  {% else %}
+  <h2>Load sample data</h2>
   <p>Load a few synthetic samples into this browser only. Each row is labeled sample data. They are not added to the shared register, and they do not change the modeled cost panel.</p>
   <form method="post" action="{{ url_for('risks.load_samples') }}">
     <input type="hidden" name="next" value="dashboard">
     <button class="button-link" type="submit">Load sample data</button>
   </form>
+  {% endif %}
 </section>
-{% endif %}
 <section class="demonstrates" aria-labelledby="demonstrates-heading">
   <h2 id="demonstrates-heading">What this demonstrates</h2>
   <ul>
@@ -65,10 +69,10 @@
   {% include "_observed_metrics.html" %}
 </section>
 {% include "_avoided_incident.html" %}
-<section class="content-section cost-panel" aria-labelledby="modeled-cost">
+<section class="content-section cost-panel" id="cost-of-assurance" aria-labelledby="modeled-cost">
   <p class="eyebrow">MODELED EXAMPLE · VERSION {{ cost.model_version }}</p>
   <h2 id="modeled-cost">Cost of assurance</h2>
-  <p>These hours and dollars are the versioned example in <code>app/data/cost_assumptions.json</code>. They stay the same when the register above changes. The modeled assessments-per-month figure is an assumption. It is not the saved assessment volume, it is not the observed monthly assessment rate, it is not authenticated effort, it is not observed cash savings, and it is not the avoided-incident card.</p>
+  <p>These hours and dollars are a modeled example. They stay the same when the saved risks change, and they are not measured cash savings.</p>
   <div class="result-grid">
     <article class="result-card">
       <p class="eyebrow">GROSS CAPACITY</p>
@@ -81,7 +85,11 @@
       <p>${{ '%.2f'|format(cost.net_capacity_value) }} modeled value / month</p>
     </article>
   </div>
-  <p class="muted">Assumptions: {{ cost.assumptions.assessments_per_month|int }} modeled assessments/month (an assumption, not the saved assessment volume above and not the observed monthly assessment rate), {{ cost.assumptions.baseline_handling_hours_per_assessment }} baseline hours, {{ cost.assumptions.assisted_handling_hours_per_assessment }} assisted hours, {{ cost.assumptions.review_hours_per_assessment }} review hours per assessment, {{ cost.assumptions.monthly_maintenance_hours }} monthly maintenance hours, and ${{ cost.assumptions.loaded_hourly_labor_rate }}/hour. This estimates labor capacity only. These modeled dollars are not observed cash savings. Observed cash savings stay on their own card above, and only when a signed-in reviewer entered whole dollars. They are not the avoided-incident card. One-time development cost is unknown and excluded. <a href="{{ url_for('methodology.index') }}">See formulas and limitations</a>.</p>
+  <details class="technical-detail">
+    <summary>Technical detail</summary>
+    <p class="muted">These hours and dollars are the versioned example in <code>app/data/cost_assumptions.json</code>. They stay the same when the register above changes. The modeled assessments-per-month figure is an assumption. It is not the saved assessment volume, it is not the observed monthly assessment rate, it is not authenticated effort, it is not observed cash savings, and it is not the avoided-incident card. They are not <code>calculate_cost()</code> reading the register. <code>calculate_cost()</code> uses only that assumptions file.</p>
+    <p class="muted">Assumptions: {{ cost.assumptions.assessments_per_month|int }} modeled assessments/month (an assumption, not the saved assessment volume above and not the observed monthly assessment rate), {{ cost.assumptions.baseline_handling_hours_per_assessment }} baseline hours, {{ cost.assumptions.assisted_handling_hours_per_assessment }} assisted hours, {{ cost.assumptions.review_hours_per_assessment }} review hours per assessment, {{ cost.assumptions.monthly_maintenance_hours }} monthly maintenance hours, and ${{ cost.assumptions.loaded_hourly_labor_rate }}/hour. This estimates labor capacity only. These modeled dollars are not observed cash savings. Observed cash savings stay on their own card above, and only when a signed-in reviewer entered whole dollars. They are not the avoided-incident card. One-time development cost is unknown and excluded. <a href="{{ url_for('methodology.index') }}">See formulas and limitations</a>.</p>
+  </details>
 </section>
 {% include "_event_chain.html" %}
 {% endblock %}

@@ -112,6 +112,59 @@ def test_sample_rows_do_not_invent_unmeasured_figures(client):
         assert note in body
 
 
+def test_sample_button_stays_after_another_risk_is_saved(client):
+    from tests.test_visitor_sandbox import SAME_ORIGIN
+
+    saved = client.post("/demo/high-risk-ai/register", headers=SAME_ORIGIN)
+    assert saved.status_code == 302
+    home = client.get("/").get_data(as_text=True)
+    register = client.get("/risks").get_data(as_text=True)
+    assert "Load sample data" in home
+    assert "Load sample data" in register
+    assert home.index("Load sample data") < home.index("What this demonstrates")
+    assert 'id="load-samples"' in register
+
+
+def test_loaded_samples_show_a_disabled_control(client):
+    from tests.test_visitor_sandbox import SAME_ORIGIN
+
+    loaded = client.post("/risks/sample-data", data={"next": "risks"}, headers=SAME_ORIGIN)
+    assert loaded.status_code == 302
+    home = client.get("/").get_data(as_text=True)
+    register = client.get("/risks").get_data(as_text=True)
+    for body in (home, register):
+        assert "Sample data loaded" in body
+        assert "Load sample data" not in body
+        assert 'disabled' in body
+
+
+def test_cost_cards_keep_code_names_inside_technical_detail(client):
+    body = client.get("/").get_data(as_text=True)
+    avoided = body.split("avoided-incident-start", 1)[1].split("avoided-incident-end", 1)[0]
+    visible = re.sub(r"<details\b.*?</details>", "", avoided, flags=re.S)
+    assert "modeled example" in visible.lower()
+    assert "calculate_cost()" not in visible
+    assert "cost_assumptions.json" not in visible
+    assert "calculate_cost()" in avoided
+    cost = body.split('id="cost-of-assurance"', 1)[1]
+    cost_visible = re.sub(r"<details\b.*?</details>", "", cost, flags=re.S)
+    assert "modeled example" in cost_visible.lower()
+    assert "calculate_cost()" not in cost_visible
+    assert "cost_assumptions.json" not in cost_visible
+    assert "calculate_cost()" in cost
+    assert "cost_assumptions.json" in cost
+
+
+def test_blank_vendor_name_shows_enter_a_vendor_name(client):
+    page = client.get("/try/").get_data(as_text=True)
+    assert 'name="vendor_name" maxlength="80" required' in page
+    response = client.post("/try/assess", data={"vendor_name": "   "}, headers={"Origin": "http://localhost"})
+    assert response.status_code == 400
+    body = response.get_data(as_text=True)
+    assert "Enter a vendor name." in body
+    assert 'role="alert"' in body
+
+
 def test_saved_risk_keeps_one_summary_and_a_sample_label(client):
     from tests.test_visitor_sandbox import SAME_ORIGIN
 

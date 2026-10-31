@@ -599,7 +599,7 @@ def test_form_stops_hold_next_until_the_assessment_succeeds(client):
         refused_body = refused.get_data(as_text=True)
         assert f'data-step="{step_id}"' in refused_body
         assert "This note is on another page" not in refused_body
-        assert "Vendor or tool name is required." in refused_body
+        assert "Enter a vendor name." in refused_body
         assert refused_body.count('class="button-link walk-next"') == 0
         assert f'action="/try/assess?walk={step_id}"' in refused_body
         assert "walk_step" not in refused.headers.get("Set-Cookie", "")

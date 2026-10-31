@@ -43,6 +43,19 @@ def visitor_has_risks(db, sandbox_id):
     return _sandbox_count(db, sandbox_id) > 0
 
 
+def samples_loaded(db, sandbox_id):
+    """True when this sandbox already holds every sample scenario.
+
+    A missing sandbox id is not loaded. A partial set stays loadable.
+    """
+    if not isinstance(sandbox_id, str) or not SANDBOX_ID_RE.fullmatch(sandbox_id):
+        return False
+    return all(
+        risk_for_scenario(db, scenario_id, sandbox_id=sandbox_id)
+        for scenario_id in SAMPLE_SCENARIO_IDS
+    )
+
+
 def seed_sample_risks(db, sandbox_id):
     """Insert any missing sample scenarios into ``sandbox_id``.
 

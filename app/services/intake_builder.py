@@ -471,7 +471,7 @@ def build_intake(form, as_of, *, open_url=None, resolver=None):
     problems = []
     vendor_name = (form.get("vendor_name") or "").strip()
     if not vendor_name:
-        problems.append("Vendor or tool name is required.")
+        problems.append("Enter a vendor name.")
     elif len(vendor_name) > MAX_VENDOR_NAME:
         problems.append(f"Vendor or tool name must be {MAX_VENDOR_NAME} characters or fewer.")
     elif not vendor_name.isprintable():
