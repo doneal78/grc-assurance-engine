@@ -24,7 +24,7 @@
     {% if walkthrough.prev_href %}<a class="text-link walk-back" href="{{ walkthrough.prev_href }}">Back</a>{% endif %}
     <a class="text-link" href="{{ url_for('walkthrough.index') }}">All steps</a>
     {% if not walkthrough.on_page %}
-    <a class="button-link walk-next" href="{{ walkthrough.target_href }}">{% if walkthrough.blocked %}{{ walkthrough.blocked }}{% else %}Go to this step{% endif %}</a>
+    <a class="button-link walk-next" href="{{ walkthrough.target_href }}">{% if walkthrough.blocked %}{{ walkthrough.blocked }}{% else %}Back to this step{% endif %}</a>
     {% elif walkthrough.next_href %}
     <a class="button-link walk-next" href="{{ walkthrough.next_href }}">{% if walkthrough.finish %}Finish{% else %}Next{% if walkthrough.next_title %} · {{ walkthrough.next_title }}{% endif %}{% endif %}</a>
     {% endif %}
