@@ -47,7 +47,7 @@ The longer distinctions among these figures are in [docs/cost-model.md](docs/cos
 
 | Version | Current | What it governs |
 | --- | --- | --- |
-| Walkthrough | 1.2.6 | The guided stop list and coaching copy in `app/services/walkthrough.py`. It does not score or save on its own. |
+| Walkthrough | 1.2.7 | The guided stop list and coaching copy in `app/services/walkthrough.py`. It does not score or save on its own. |
 | Observed metrics | Definition 9 | Counts, clock spans, and medians in `app/services/workflow_metrics.py`. Separate from `calculate_cost()`. |
 | Risk rules | 0.3.0 | Inherent score, residual tier, escalation rules, and missing-information handling in `app/data/risk_rules.json`. Illustrative. |
 | Scenario set | 0.3.0 | The synthetic scenarios in `app/data/demo_scenarios.json`. |
@@ -87,7 +87,7 @@ Then open <http://127.0.0.1:5000/>. The app listens on 127.0.0.1 only, with debu
 
 Open **Walkthrough** in the header, or go to `/walkthrough`, and choose **Start at intake**. The guide is thirteen stops on the live pages. A cookie in this browser remembers the last stop for 12 hours. Start over clears that cookie and does not delete saved risks. Pages without `?walk=` stay free-form. The pages do the scoring. The notes only say what to notice.
 
-1. **Intake** on `/try/`. Running a ready-made vendor does not save it.
+1. **Intake** on `/try/`. Opening a ready-made vendor completes this stop, so Next continues to Your own vendor. Running a ready-made vendor does not save it.
 2. **Your own vendor.** Use a made-up name. Evidence choices start at Nothing provided. Leaving them there is missing evidence, not a reviewed safeguard. Rule codes in the hints stay under Show technical details. Run assessment does not save. **Change these answers** reopens the form.
 3. **Trust center is optional.** Leave fetch at no and the URL is stored without being opened. Choosing fetch stores an excerpt for review. That excerpt is not verified evidence and does not approve the vendor.
 4. **Evidence-supported vendor.** Inherent risk, evidence confidence, residual risk, and the policy outcome are separate. A low residual tier is not an approval.

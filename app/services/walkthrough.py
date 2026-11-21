@@ -6,22 +6,27 @@ results stay in the existing services. Progress is a step id in a browser
 cookie, not a database row.
 
 Stops that set ``await_submission`` withhold Next until that stop's action
-has succeeded. Intake, custom vendor, trust center, and file import succeed
-only when the current response is a successful assessment. The cookie does
-not store that assessment, so a later visit to the form holds Next again.
+has succeeded. Intake succeeds when this response is a successful form
+assessment or a ready-made scenario card, because that stop lists the
+scenario page. Custom vendor and trust center succeed only on the form
+assessment. A card leaves those two stops waiting. File import succeeds
+when this response is a confirmed assessment. The cookie does not store
+that assessment, so a later visit to the form holds Next again.
 The save stop succeeds when the eligibility case is already in the register.
 The decision stop succeeds when that saved risk has a recorded decision.
 """
 
 from copy import deepcopy
 
-WALKTHROUGH_VERSION = "1.2.6"
+WALKTHROUGH_VERSION = "1.2.7"
 WALK_COOKIE = "walk_step"
 WALK_QUERY = "walk"
 COOKIE_MAX_AGE = 12 * 60 * 60
 PROHIBITED_SCENARIO_ID = "prohibited-ai-decisions"
 # Set on the request context only for a successful public assessment page.
-# A validation error and the form itself leave it unset.
+# A validation error and the form itself leave it unset. A ready-made
+# scenario page sets it when the active stop lists that page. Intake does.
+# Custom vendor and trust center do not.
 SUBMISSION_COMPLETE_ATTR = "walk_submission_complete"
 
 # Static coaching. Tests lock the scenario facts these sentences rely on.
@@ -37,7 +42,7 @@ _STEPS = (
             "optional trust-center choice."
         ),
         "endpoint": "try_demo.index",
-        "endpoints": ("try_demo.index", "try_demo.assess"),
+        "endpoints": ("try_demo.index", "try_demo.assess", "try_demo.scenario"),
         "view_args": {},
         "await_submission": True,
         "await_kind": "assessment",
@@ -370,9 +375,11 @@ def scenario_stop_id(scenario_id, surface_endpoint):
 def scenario_card_step(scenario_id, surface_endpoint, active_walk, on_active_page):
     """Walk query for one ready-made card, or None on a free-form page.
 
-    A stop that is waiting on its own page keeps that id, so opening the
-    card does not advance Next. Any other known stop uses the guide stop
-    for this scenario. Unknown walk values stay coach-free.
+    A stop that is waiting on its own page keeps that id. Intake then
+    treats the opened card as its completed assessment. Custom vendor and
+    trust center keep the id and still wait for the form. Any other known
+    stop uses the guide stop for this scenario. Unknown walk values stay
+    coach-free.
     """
     if known_step_id(active_walk) is None:
         return None

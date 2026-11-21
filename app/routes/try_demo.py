@@ -26,7 +26,9 @@ from app.services.intake_questionnaire import load_questionnaire
 from app.services.intake_replay import intake_field_names, query_form
 from app.services.org_policy import load_org_policy
 from app.services.scenario_runner import ScenarioNotFoundError, list_scenarios, run_scenario
-from app.services.walkthrough import SUBMISSION_COMPLETE_ATTR, carried_walk_step
+from app.services.walkthrough import (
+    SUBMISSION_COMPLETE_ATTR, carried_walk_step, known_step_id, page_matches, step_by_id,
+)
 from app.services.sandbox_http import issue_sandbox
 from app.services.workflow_service import DISPOSITIONS, WorkflowInputError, register_intake
 
@@ -103,6 +105,16 @@ def scenario(scenario_id):
         result = run_scenario(scenario_id)
     except ScenarioNotFoundError:
         abort(404)
+    # Opening the card completes a waiting stop that lists this page.
+    # Intake does. Custom vendor and trust center do not, so they still
+    # wait for the form. The form and a missing scenario leave the flag unset.
+    active = known_step_id(request.args.get("walk"))
+    if active:
+        step = step_by_id(active)
+        if step.get("await_submission") and page_matches(
+            step, "try_demo.scenario", {"scenario_id": scenario_id},
+        ):
+            setattr(g, SUBMISSION_COMPLETE_ATTR, True)
     return _render_result(result)
 
 

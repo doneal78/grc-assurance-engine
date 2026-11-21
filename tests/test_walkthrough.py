@@ -59,7 +59,7 @@ def test_stops_are_unique_ordered_and_point_at_real_endpoints(app):
     ]
     assert len({item["step_id"] for item in ordered}) == len(ordered)
     assert [item["number"] for item in ordered] == list(range(1, 14))
-    assert WALKTHROUGH_VERSION == "1.2.6"
+    assert WALKTHROUGH_VERSION == "1.2.7"
     endpoints = {rule.endpoint for rule in app.url_map.iter_rules()}
     scenario_ids = {item["scenario_id"] for item in list_scenarios()}
     for step in ordered:
@@ -148,7 +148,10 @@ def test_step_matching_and_carried_ids_reject_unknown_values():
     assert page_matches(trust, "try_demo.assess", {})
     assert page_matches(intake, "try_demo.index", {})
     assert page_matches(intake, "try_demo.assess", {})
+    assert page_matches(intake, "try_demo.scenario", {"scenario_id": "evidence-supported"})
+    assert page_matches(intake, "try_demo.scenario", {"scenario_id": "high-risk-ai"})
     assert not page_matches(custom, "try_demo.scenario", {"scenario_id": "evidence-supported"})
+    assert not page_matches(trust, "try_demo.scenario", {"scenario_id": "evidence-supported"})
     imported = step_by_id("import")
     assert page_matches(imported, "try_demo.import_form", {})
     assert page_matches(imported, "try_demo.import_preview", {})
@@ -164,6 +167,9 @@ def test_step_matching_and_carried_ids_reject_unknown_values():
     assert carried_walk_step("<script>") is None
     assert progress_step_id("evidence", "try_demo.scenario", {"scenario_id": "evidence-supported"}) == "evidence"
     assert progress_step_id("evidence", "try_demo.index", {}) is None
+    assert progress_step_id("intake", "try_demo.scenario", {"scenario_id": "evidence-supported"}) == "intake"
+    assert progress_step_id("custom", "try_demo.scenario", {"scenario_id": "evidence-supported"}) is None
+    assert progress_step_id("trust", "try_demo.scenario", {"scenario_id": "high-risk-ai"}) is None
     assert progress_step_id("nope", "try_demo.index", {}) is None
     for step_id in ("intake", "custom", "trust", "import"):
         step = step_by_id(step_id)
@@ -212,7 +218,7 @@ def test_index_lists_every_stop_and_links_into_the_live_pages(client):
     response = client.get("/walkthrough/")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert "VERSION 1.2.6" in body
+    assert "VERSION 1.2.7" in body
     assert "13 stops" in body
     assert "Start at intake" in body
     assert 'href="/try/?walk=intake"' in body
@@ -300,6 +306,8 @@ def test_unknown_or_mismatched_walk_does_not_move_progress_or_echo_the_value(cli
     assert "This note is on another page" in body
     assert "CC-001 is verified" not in body
     assert 'href="/try/scenario/evidence-supported?walk=evidence"' in body
+    assert "Back to this step" in body
+    assert "Go to this step" not in body
     assert "walk_step" not in mismatch.headers.get("Set-Cookie", "")
     assert "Run assessment" in body
 
@@ -330,16 +338,20 @@ def test_ready_made_cards_keep_the_active_stop_or_the_scenario_stop(client):
     opened = client.get("/try/scenario/evidence-supported?walk=intake")
     opened_body = opened.get_data(as_text=True)
     assert 'data-step="intake"' in opened_body
-    assert "This note is on another page" in opened_body
-    assert "Run assessment on this page before Next." in opened_body
-    assert "walk=custom" not in opened_body
-    assert 'href="/try/?walk=intake"' in opened_body
-    assert "walk_step" not in opened.headers.get("Set-Cookie", "")
+    assert "This note is on another page" not in opened_body
+    assert "Run assessment on this page before Next." not in opened_body
+    assert "These cards are finished questionnaires." in opened_body
+    assert opened_body.count('class="button-link walk-next"') == 2
+    assert 'href="/try/?walk=custom#intake"' in opened_body
+    assert "Next · Your own vendor" in opened_body
+    assert "walk_step=intake" in opened.headers.get("Set-Cookie", "")
 
     parked = client.get("/try/import?walk=custom")
     parked_body = parked.get_data(as_text=True)
     assert 'data-step="custom"' in parked_body
     assert "Run assessment on this page before Next." in parked_body
+    assert "Back to this step" in parked_body
+    assert "Go to this step" not in parked_body
     assert parked_body.count('class="button-link walk-next"') == 1
     assert 'href="/try/?walk=custom#intake"' in parked_body
     assert "walk=trust" not in parked_body
@@ -377,6 +389,84 @@ def test_ready_made_cards_keep_the_active_stop_or_the_scenario_stop(client):
     assert "walk=" not in free_demo
     assert 'href="/demo/evidence-supported"' in free_home
     assert "walk=" not in free_home
+
+
+def test_intake_card_unlocks_next_and_other_holds_stay(client):
+    """A ready-made card completes intake. Custom, trust, save, and import still wait.
+
+    Next on that result opens the custom-vendor stop. The form holds Next
+    again on a later visit. An off-page button says Back to this step, and
+    a stop that cannot open yet keeps its blocked label.
+    """
+    register_before = client.get("/risks").get_data(as_text=True)
+    for item in list_scenarios():
+        opened = client.get(f"/try/scenario/{item['scenario_id']}?walk=intake")
+        assert opened.status_code == 200, item["scenario_id"]
+        body = opened.get_data(as_text=True)
+        assert 'data-step="intake"' in body
+        assert "This note is on another page" not in body
+        assert "Run assessment on this page before Next." not in body
+        assert body.count('class="button-link walk-next"') == 2
+        assert 'href="/try/?walk=custom#intake"' in body
+        assert "Next · Your own vendor" in body
+        assert "Back to this step" not in body
+        assert "Go to this step" not in body
+        assert "walk_step=intake" in opened.headers.get("Set-Cookie", "")
+        assert "NOT SAVED" in body
+    assert client.get("/risks").get_data(as_text=True) == register_before
+
+    returned = client.get("/try/?walk=intake")
+    returned_body = returned.get_data(as_text=True)
+    assert "Run assessment on this page before Next." in returned_body
+    assert returned_body.count('class="button-link walk-next"') == 0
+    assert "walk=custom" not in returned_body
+
+    followed = client.get("/try/?walk=custom")
+    followed_body = followed.get_data(as_text=True)
+    assert 'data-step="custom"' in followed_body
+    assert "Run assessment on this page before Next." in followed_body
+    assert followed_body.count('class="button-link walk-next"') == 0
+    assert "walk=trust" not in followed_body
+
+    for step_id, back_href, following in (
+        ("custom", "/try/?walk=custom#intake", "trust"),
+        ("trust", "/try/?walk=trust#trust-center", "evidence"),
+    ):
+        held = client.get(f"/try/scenario/high-risk-ai?walk={step_id}")
+        held_body = held.get_data(as_text=True)
+        assert f'data-step="{step_id}"' in held_body
+        assert "This note is on another page" in held_body
+        assert "Run assessment on this page before Next." in held_body
+        assert "Back to this step" in held_body
+        assert "Go to this step" not in held_body
+        assert held_body.count('class="button-link walk-next"') == 1
+        assert f'href="{back_href}"' in held_body
+        assert f"walk={following}" not in held_body
+        assert "walk_step" not in held.headers.get("Set-Cookie", "")
+
+    imported = client.get("/try/scenario/evidence-supported?walk=import")
+    imported_body = imported.get_data(as_text=True)
+    assert "Confirm the file on this page before Next." in imported_body
+    assert "Back to this step" in imported_body
+    assert 'href="/try/import?walk=import"' in imported_body
+    assert "walk=dashboard" not in imported_body
+    assert imported_body.count('class="button-link walk-next"') == 1
+
+    saved = client.get("/try/scenario/prohibited-ai-decisions?walk=save")
+    saved_body = saved.get_data(as_text=True)
+    assert "Add to risk register continues the guide" in saved_body
+    assert "Back to this step" in saved_body
+    assert 'href="/demo/prohibited-ai-decisions?walk=save"' in saved_body
+    assert "walk=decide" not in saved_body
+
+    blocked = client.get("/try/?walk=decide")
+    blocked_body = blocked.get_data(as_text=True)
+    assert "This note is on another page" in blocked_body
+    assert "Save the eligibility case first." in blocked_body
+    assert "Record a decision on this page before Next." in blocked_body
+    assert "Back to this step" not in blocked_body
+    assert "Go to this step" not in blocked_body
+    assert 'href="/demo/prohibited-ai-decisions?walk=save"' in blocked_body
 
 
 def test_cookie_remembers_the_last_opened_stop_until_reset(client):

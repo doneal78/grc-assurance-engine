@@ -46,8 +46,9 @@ def build_coach(step_id, endpoint, view_args, saved_risk, submission_complete=Fa
 
     ``submission_complete`` is true when this stop's awaited action has
     succeeded. The form, a validation error, and a file that is not yet
-    confirmed pass false and withhold Next. A stop that is not waiting
-    still offers Next on its own page.
+    confirmed pass false and withhold Next. A ready-made scenario card
+    completes intake. It does not complete custom vendor or trust center.
+    A stop that is not waiting still offers Next on its own page.
     """
     step = step_by_id(step_id)
     on_page = page_matches(step, endpoint, view_args)
@@ -120,7 +121,9 @@ def scenario_card_href(scenario_id, surface_endpoint):
 
     A free-form page has no walk query and keeps the plain scenario address.
     A stop that is waiting on its own page keeps that stop on the card.
-    Any other known stop links to the guide page for that scenario.
+    Intake then treats the opened card as its completed assessment. Custom
+    vendor and trust center still wait for the form. Any other known stop
+    links to the guide page for that scenario.
     """
     active_id = known_step_id(request.args.get(WALK_QUERY))
     on_active = False
